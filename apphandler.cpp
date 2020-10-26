@@ -94,6 +94,9 @@ static constexpr uint8_t oemCmdEnd = 255;
 static constexpr uint8_t invalidParamSelectorStart = 8;
 static constexpr uint8_t invalidParamSelectorEnd = 191;
 
+#define IPMI_SEND_MSG_TRACK_REQUEST 0x01
+#define IPMI_SEND_MSG_GET_TRACKING(val) ((val >> 6) & 0x3)
+
 /**
  * @brief Returns the Version info from primary s/w object
  *
@@ -1665,6 +1668,135 @@ ipmi::RspType<std::vector<uint8_t>>
     return ipmi::responseSuccess(readBuf);
 }
 
+// return value is the IPMB formatted message
+ipmi::RspType<std::vector<uint8_t>>
+      ipmiAppSendMessage(uint8_t chanNum, std::vector<uint8_t> data)
+{
+  sd_bus* bus;
+  int rc;
+  sd_bus_message *request = NULL;
+  uint8_t netFn, lun, cmd;
+  int ipmb_rc;
+  uint8_t recv_netfn, recv_lun, recv_cmd, recv_cc;
+  sd_bus_error error = SD_BUS_ERROR_NULL;
+  sd_bus_message* reply = NULL;
+  const void *rspData;
+  size_t rspDataLen;
+  bool success = false;
+  uint8_t *buf;
+  std::vector<uint8_t> ipmbData;
+
+  static const char *destination = "xyz.openbmc_project.Ipmi.Channel.Ipmb";
+  static const char *objectPath = "/xyz/openbmc_project/Ipmi/Channel/Ipmb";
+  static const char *interface = "org.openbmc.Ipmb";
+  static const char *method = "sendRequest";
+
+  static const char SD_BUS_TYPE_4_BYTES[] = {
+    SD_BUS_TYPE_BYTE, SD_BUS_TYPE_BYTE, SD_BUS_TYPE_BYTE, SD_BUS_TYPE_BYTE, 0
+  };
+  static const char SD_BUS_TYPE_5_BYTES[] = {
+    SD_BUS_TYPE_INT32, SD_BUS_TYPE_BYTE, SD_BUS_TYPE_BYTE,
+    SD_BUS_TYPE_BYTE, SD_BUS_TYPE_BYTE, 0
+  };
+  static const char SD_BUS_TYPE_IPMI_RESPONSE[] = {
+    SD_BUS_TYPE_INT32, SD_BUS_TYPE_BYTE, SD_BUS_TYPE_BYTE,
+    SD_BUS_TYPE_BYTE, SD_BUS_TYPE_BYTE,
+    SD_BUS_TYPE_ARRAY, SD_BUS_TYPE_BYTE, 0
+  };
+
+  // Only tracked requests are supported
+  if (IPMI_SEND_MSG_GET_TRACKING(chanNum) != IPMI_SEND_MSG_TRACK_REQUEST) {
+    log<level::ERR>("Only tracked requests are supported");
+    return ipmi::responseInvalidFieldRequest();
+  }
+
+  rc = sd_bus_default_system(&bus);
+  if (rc < 0) {
+    log<level::ERR>("Can't connect to session bus");
+    return ipmi::responseUnspecifiedError();
+  }
+
+  // Forward the data to IPMB
+  rc = sd_bus_message_new_method_call(bus, &request, destination,
+	                                    objectPath, interface,
+					    method);
+  if (rc < 0) {
+    log<level::ERR>("Failed to create message");
+    return ipmi::responseUnspecifiedError();
+  }
+
+  netFn = data[1] >> 2;
+  lun = data[1] & 0x3;
+  cmd = data[5];
+
+  /* pack the header: channel, netfn, lun, cmd */
+  rc = sd_bus_message_append(request, SD_BUS_TYPE_4_BYTES, 0, netFn,
+                             lun, cmd);
+  if (rc < 0) {
+    log<level::ERR>("ipmiAppSendMessage failed to append parameters");
+    goto out_free_request;
+  }
+
+  /* pack the variable length data */
+  rc = sd_bus_message_append_array(request, SD_BUS_TYPE_BYTE,
+                                   &data[6], data.size() - 7);
+  if (rc < 0) {
+    log<level::ERR>("ipmiAppSendMessage failed to append data body");
+    goto out_free_request;
+  }
+
+
+  rc = sd_bus_call(bus, request, 0, &error, &reply);
+  if (rc < 0) {
+    log<level::ERR>("ipmiAppSendMessage failed to send dbus message");
+    goto out_free_request;
+  }
+
+  /* unpack the response; check that it has the expected types */
+  rc = sd_bus_message_enter_container(reply, SD_BUS_TYPE_STRUCT,
+                                      SD_BUS_TYPE_IPMI_RESPONSE);
+  if (rc < 0) {
+    log<level::ERR>("ipmiAppSendMessage failed to parse reply");
+    goto out_free_reply;
+  }
+
+  /* read the header: return code, netfn, lun, cmd and cc */
+  rc = sd_bus_message_read(reply, SD_BUS_TYPE_5_BYTES, &ipmb_rc, &recv_netfn,
+                           &recv_lun, &recv_cmd, &recv_cc);
+  if ((rc < 0) || (ipmb_rc != 0)) {
+    log<level::ERR>("ipmiAppSendMessage failed to read reply");
+    goto out_free_reply;
+  }
+
+  /* read the variable length data */
+  rc = sd_bus_message_read_array(reply, SD_BUS_TYPE_BYTE,
+                                 &rspData, &rspDataLen);
+  if (rc < 0) {
+    log<level::ERR>("ipmiAppSendMessage failed to read reply data");
+    goto out_free_reply;
+  }
+
+  rc = sd_bus_message_exit_container(reply);
+  if (rc < 0) {
+    goto out_free_reply;
+  }
+
+  buf = (uint8_t *) rspData;
+  ipmbData.insert(ipmbData.begin(), buf, buf + rspDataLen);
+  success = true;
+
+out_free_reply:
+  /* message unref will free resources owned by the message */
+  sd_bus_message_unref(reply);
+out_free_request:
+  sd_bus_message_unref(request);
+
+  if (success == true)
+    return ipmi::responseSuccess(ipmbData);
+  else
+    return ipmi::responseUnspecifiedError();
+}
+
 void register_netfn_app_functions()
 {
     // <Get Device ID>
@@ -1749,5 +1881,9 @@ void register_netfn_app_functions()
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnApp,
                           ipmi::app::cmdSetSystemInfoParameters,
                           ipmi::Privilege::Admin, ipmiAppSetSystemInfo);
+    // <Set Message>
+    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnApp,
+                          ipmi::app::cmdSendMessage,
+                          ipmi::Privilege::User, ipmiAppSendMessage);
     return;
 }
