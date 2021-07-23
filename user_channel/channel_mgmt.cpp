@@ -352,7 +352,7 @@ ChannelConfig::ChannelConfig() : bus(ipmid_get_sd_bus_connection())
 
 bool ChannelConfig::isValidChannel(const uint8_t chNum)
 {
-    if (chNum > maxIpmiChannels)
+    if (chNum >= maxIpmiChannels)
     {
         log<level::DEBUG>("Invalid channel ID - Out of range");
         return false;
@@ -909,7 +909,7 @@ int ChannelConfig::loadChannelConfig()
 
     // Collect the list of NIC interfaces connected to the BMC. Use this
     // information to only add IPMI channels that have active NIC interfaces.
-    struct ifaddrs *ifaddr, *ifa;
+    struct ifaddrs *ifaddr = nullptr, *ifa = nullptr;
     if (int err = getifaddrs(&ifaddr); err < 0)
     {
         log<level::DEBUG>("Unable to acquire network interfaces");
@@ -1022,7 +1022,7 @@ int ChannelConfig::readChannelVolatileData()
         {
             std::string chKey = it.key();
             uint8_t chNum = std::stoi(chKey, nullptr, 10);
-            if ((chNum < 0) || (chNum > maxIpmiChannels))
+            if (chNum >= maxIpmiChannels)
             {
                 log<level::DEBUG>(
                     "Invalid channel access entry in config file");
@@ -1090,7 +1090,7 @@ int ChannelConfig::readChannelPersistData()
         {
             std::string chKey = it.key();
             uint8_t chNum = std::stoi(chKey, nullptr, 10);
-            if ((chNum < 0) || (chNum > maxIpmiChannels))
+            if (chNum >= maxIpmiChannels)
             {
                 log<level::DEBUG>(
                     "Invalid channel access entry in config file");

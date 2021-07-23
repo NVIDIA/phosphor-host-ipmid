@@ -43,8 +43,16 @@
 
 namespace ipmi
 {
+
+using phosphor::logging::entry;
+using phosphor::logging::level;
+using phosphor::logging::log;
+
 static constexpr int sensorMapUpdatePeriod = 10;
 static constexpr int sensorMapSdrUpdatePeriod = 60;
+
+// BMC I2C address is generally at 0x20
+static constexpr uint8_t bmcI2CAddr = 0x20;
 
 constexpr size_t maxSDRTotalSize =
     76; // Largest SDR Record Size (type 01) + SDR Overheader Size
@@ -268,15 +276,14 @@ static bool getSensorMap(ipmi::Context::ptr ctx, std::string sensorConnection,
 
 namespace sensor
 {
-// Calculate VR Mode from input IPMI discrete event bytes
-static std::optional<std::string>
-    calculateVRMode(uint15_t assertOffset,
-                    const ipmi::DbusInterfaceMap::mapped_type& VRObject)
+// Read VR profiles from sensor(daemon) interface
+static std::optional<std::vector<std::string>>
+    getSupportedVrProfiles(const ipmi::DbusInterfaceMap::mapped_type& object)
 {
     // get VR mode profiles from Supported Interface
-    auto supportedProperty = VRObject.find("Supported");
-    if (supportedProperty == VRObject.end() ||
-        VRObject.find("Selected") == VRObject.end())
+    auto supportedProperty = object.find("Supported");
+    if (supportedProperty == object.end() ||
+        object.find("Selected") == object.end())
     {
         phosphor::logging::log<phosphor::logging::level::ERR>(
             "Missing the required Supported and Selected properties");
@@ -290,6 +297,20 @@ static std::optional<std::string>
     {
         phosphor::logging::log<phosphor::logging::level::ERR>(
             "property is not array of string");
+        return std::nullopt;
+    }
+    return *profilesPtr;
+}
+
+// Calculate VR Mode from input IPMI discrete event bytes
+static std::optional<std::string>
+    calculateVRMode(uint15_t assertOffset,
+                    const ipmi::DbusInterfaceMap::mapped_type& VRObject)
+{
+    // get VR mode profiles from Supported Interface
+    auto profiles = getSupportedVrProfiles(VRObject);
+    if (!profiles)
+    {
         return std::nullopt;
     }
 
@@ -313,14 +334,14 @@ static std::optional<std::string>
         index++;
     }
 
-    if (index >= profilesPtr->size())
+    if (index >= profiles->size())
     {
         phosphor::logging::log<phosphor::logging::level::ERR>(
             "profile index out of boundary");
         return std::nullopt;
     }
 
-    return profilesPtr->at(index);
+    return profiles->at(index);
 }
 
 // Calculate sensor value from IPMI reading byte
@@ -359,6 +380,102 @@ static std::optional<double>
     return value;
 }
 
+// Extract file name from sensor path as the sensors SDR ID. Simplify the name
+// if it is too long.
+std::string parseSdrIdFromPath(const std::string& path)
+{
+    std::string name;
+    size_t nameStart = path.rfind("/");
+    if (nameStart != std::string::npos)
+    {
+        name = path.substr(nameStart + 1, std::string::npos - nameStart);
+    }
+
+    std::replace(name.begin(), name.end(), '_', ' ');
+    if (name.size() > FULL_RECORD_ID_STR_MAX_LENGTH)
+    {
+        // try to not truncate by replacing common words
+        constexpr std::array<std::pair<const char*, const char*>, 2>
+            replaceWords = {std::make_pair("Output", "Out"),
+                            std::make_pair("Input", "In")};
+        for (const auto& [find, replace] : replaceWords)
+        {
+            boost::replace_all(name, find, replace);
+        }
+
+        name.resize(FULL_RECORD_ID_STR_MAX_LENGTH);
+    }
+    return name;
+}
+
+bool getVrEventStatus(ipmi::Context::ptr ctx, const std::string& connection,
+                      const std::string& path,
+                      const ipmi::DbusInterfaceMap::mapped_type& object,
+                      std::bitset<16>& assertions)
+{
+    auto profiles = sensor::getSupportedVrProfiles(object);
+    if (!profiles)
+    {
+        return false;
+    }
+    ipmi::Value modeVariant;
+
+    auto ec = getDbusProperty(ctx, connection, path, sensor::vrInterface,
+                              "Selected", modeVariant);
+    if (ec)
+    {
+        log<level::ERR>("Failed to get property",
+                        entry("PROPERTY=%s", "Selected"),
+                        entry("PATH=%s", path.c_str()),
+                        entry("INTERFACE=%s", sensor::sensorInterface),
+                        entry("WHAT=%s", ec.message().c_str()));
+        return false;
+    }
+
+    auto mode = std::get_if<std::string>(&modeVariant);
+    if (mode == nullptr)
+    {
+        log<level::ERR>("property is not a string",
+                        entry("PROPERTY=%s", "Selected"),
+                        entry("PATH=%s", path.c_str()),
+                        entry("INTERFACE=%s", sensor::sensorInterface));
+        return false;
+    }
+
+    auto itr = std::find(profiles->begin(), profiles->end(), *mode);
+    if (itr == profiles->end())
+    {
+        using namespace phosphor::logging;
+        log<level::ERR>("VR mode doesn't match any of its profiles",
+                        entry("PATH=%s", path.c_str()));
+        return false;
+    }
+    std::size_t index =
+        static_cast<std::size_t>(std::distance(profiles->begin(), itr));
+
+    // map index to reponse event assertion bit.
+    if (index < 8)
+    {
+        assertions.set(1u << index);
+    }
+    else if (index < 15)
+    {
+        assertions.set(1u << (index - 8));
+    }
+    else
+    {
+        log<level::ERR>("VR profile index reaches max assertion bit",
+                        entry("PATH=%s", path.c_str()),
+                        entry("INDEX=%uz", index));
+        return false;
+    }
+    if constexpr (debug)
+    {
+        std::cerr << "VR sensor " << sensor::parseSdrIdFromPath(path)
+                  << " mode is: [" << index << "] " << *mode << std::endl;
+    }
+    return true;
+}
 } // namespace sensor
 
 ipmi::RspType<> ipmiSenPlatformEvent(uint8_t generatorID, uint8_t evmRev,
@@ -379,22 +496,30 @@ ipmi::RspType<> ipmiSetSensorReading(ipmi::Context::ptr ctx,
 {
     std::string connection;
     std::string path;
-    ipmi::Cc status = getSensorConnection(ctx, sensorNumber, connection, path);
+    std::vector<std::string> interfaces;
+
+    ipmi::Cc status =
+        getSensorConnection(ctx, sensorNumber, connection, path, &interfaces);
     if (status)
     {
         return ipmi::response(status);
     }
 
-    DbusInterfaceMap sensorMap;
-    if (!getSensorMap(ctx, connection, path, sensorMap))
-    {
-        return ipmi::responseResponseError();
-    }
-
     // we can tell the sensor type by its interface type
-    auto sensorObject = sensorMap.find(sensor::sensorInterface);
-    if (sensorObject != sensorMap.end())
+    if (std::find(interfaces.begin(), interfaces.end(),
+                  sensor::sensorInterface) != interfaces.end())
     {
+        DbusInterfaceMap sensorMap;
+        if (!getSensorMap(ctx, connection, path, sensorMap))
+        {
+            return ipmi::responseResponseError();
+        }
+        auto sensorObject = sensorMap.find(sensor::sensorInterface);
+        if (sensorObject != sensorMap.end())
+        {
+            return ipmi::responseResponseError();
+        }
+
         auto value =
             sensor::calculateValue(reading, sensorMap, sensorObject->second);
         if (!value)
@@ -431,9 +556,20 @@ ipmi::RspType<> ipmiSetSensorReading(ipmi::Context::ptr ctx,
         return ipmi::responseSuccess();
     }
 
-    sensorObject = sensorMap.find(sensor::vrInterface);
-    if (sensorObject != sensorMap.end())
+    if (std::find(interfaces.begin(), interfaces.end(), sensor::vrInterface) !=
+        interfaces.end())
     {
+        DbusInterfaceMap sensorMap;
+        if (!getSensorMap(ctx, connection, path, sensorMap))
+        {
+            return ipmi::responseResponseError();
+        }
+        auto sensorObject = sensorMap.find(sensor::vrInterface);
+        if (sensorObject != sensorMap.end())
+        {
+            return ipmi::responseResponseError();
+        }
+
         // VR sensors are treated as a special case and we will not check the
         // write permission for VR sensors, since they always deemed writable
         // and permission table are not applied to VR sensors.
@@ -1070,13 +1206,32 @@ ipmi::RspType<uint8_t,         // sensorEventStatus
             phosphor::logging::entry("SENSOR=%s", path.c_str()));
         return ipmi::responseResponseError();
     }
+
+    uint8_t sensorEventStatus =
+        static_cast<uint8_t>(IPMISensorEventEnableByte2::sensorScanningEnable);
+    std::bitset<16> assertions = 0;
+    std::bitset<16> deassertions = 0;
+
+    // handle VR typed sensor
+    auto vrInterface = sensorMap.find(sensor::vrInterface);
+    if (vrInterface != sensorMap.end())
+    {
+        if (!sensor::getVrEventStatus(ctx, connection, path,
+                                      vrInterface->second, assertions))
+        {
+            return ipmi::responseResponseError();
+        }
+
+        // both Event Message and Sensor Scanning are disable for VR.
+        sensorEventStatus = 0;
+        return ipmi::responseSuccess(sensorEventStatus, assertions,
+                                     deassertions);
+    }
+
     auto warningInterface =
         sensorMap.find("xyz.openbmc_project.Sensor.Threshold.Warning");
     auto criticalInterface =
         sensorMap.find("xyz.openbmc_project.Sensor.Threshold.Critical");
-
-    uint8_t sensorEventStatus =
-        static_cast<uint8_t>(IPMISensorEventEnableByte2::sensorScanningEnable);
 
     std::optional<bool> criticalDeassertHigh =
         thresholdDeassertMap[path]["CriticalAlarmHigh"];
@@ -1086,9 +1241,6 @@ ipmi::RspType<uint8_t,         // sensorEventStatus
         thresholdDeassertMap[path]["WarningAlarmHigh"];
     std::optional<bool> warningDeassertLow =
         thresholdDeassertMap[path]["WarningAlarmLow"];
-
-    std::bitset<16> assertions = 0;
-    std::bitset<16> deassertions = 0;
 
     if (criticalDeassertHigh && !*criticalDeassertHigh)
     {
@@ -1179,105 +1331,41 @@ ipmi::RspType<uint8_t,         // sensorEventStatus
     return ipmi::responseSuccess(sensorEventStatus, assertions, deassertions);
 }
 
-static int getSensorDataRecord(ipmi::Context::ptr ctx,
-                               std::vector<uint8_t>& recordData,
-                               uint16_t recordID)
+// Construct a type 1 SDR for threshold sensor.
+void constructSensorSdrHeaderKey(uint16_t sensorNum, uint16_t recordID,
+                                 get_sdr::SensorDataFullRecord& record)
 {
-    auto& sensorTree = getSensorTree();
-    size_t fruCount = 0;
-    ipmi::Cc ret = ipmi::storage::getFruSdrCount(ctx, fruCount);
-    if (ret != ipmi::ccSuccess)
-    {
-        phosphor::logging::log<phosphor::logging::level::ERR>(
-            "getSensorDataRecord: getFruSdrCount error");
-        return GENERAL_ERROR;
-    }
-
-    size_t lastRecord =
-        sensorTree.size() + fruCount + ipmi::storage::type12Count - 1;
-    if (recordID == lastRecordIndex)
-    {
-        recordID = lastRecord;
-    }
-    if (recordID > lastRecord)
-    {
-        phosphor::logging::log<phosphor::logging::level::ERR>(
-            "getSensorDataRecord: recordID > lastRecord error");
-        return GENERAL_ERROR;
-    }
-
-    if (recordID >= sensorTree.size())
-    {
-        size_t fruIndex = recordID - sensorTree.size();
-        if (fruIndex >= fruCount)
-        {
-            // handle type 12 hardcoded records
-            size_t type12Index = fruIndex - fruCount;
-            if (type12Index >= ipmi::storage::type12Count)
-            {
-                phosphor::logging::log<phosphor::logging::level::ERR>(
-                    "getSensorDataRecord: type12Index error");
-                return GENERAL_ERROR;
-            }
-            recordData = ipmi::storage::getType12SDRs(type12Index, recordID);
-        }
-        else
-        {
-            // handle fru records
-            get_sdr::SensorDataFruRecord data;
-            ret = ipmi::storage::getFruSdrs(ctx, fruIndex, data);
-            if (ret != IPMI_CC_OK)
-            {
-                return GENERAL_ERROR;
-            }
-            data.header.record_id_msb = recordID >> 8;
-            data.header.record_id_lsb = recordID & 0xFF;
-            recordData.insert(recordData.end(),
-                              reinterpret_cast<uint8_t*>(&data),
-                              reinterpret_cast<uint8_t*>(&data) + sizeof(data));
-        }
-
-        return 0;
-    }
-
-    std::string connection;
-    std::string path;
-    auto status = getSensorConnection(ctx, recordID, connection, path);
-    if (status)
-    {
-        phosphor::logging::log<phosphor::logging::level::ERR>(
-            "getSensorDataRecord: getSensorConnection error");
-        return GENERAL_ERROR;
-    }
-    DbusInterfaceMap sensorMap;
-    if (!getSensorMap(ctx, connection, path, sensorMap, sensorMapUpdatePeriod))
-    {
-        phosphor::logging::log<phosphor::logging::level::ERR>(
-            "getSensorDataRecord: getSensorMap error");
-        return GENERAL_ERROR;
-    }
-    uint16_t sensorNum = getSensorNumberFromPath(path);
-    if (sensorNum == invalidSensorNumber)
-    {
-        phosphor::logging::log<phosphor::logging::level::ERR>(
-            "getSensorDataRecord: invalidSensorNumber");
-        return GENERAL_ERROR;
-    }
-    uint8_t sensornumber = static_cast<uint8_t>(sensorNum);
-    uint8_t lun = static_cast<uint8_t>(sensorNum >> 8);
-
-    get_sdr::SensorDataFullRecord record = {0};
-
     get_sdr::header::set_record_id(
         recordID, reinterpret_cast<get_sdr::SensorDataRecordHeader*>(&record));
+
+    uint8_t sensornumber = static_cast<uint8_t>(sensorNum);
+    uint8_t lun = static_cast<uint8_t>(sensorNum >> 8);
 
     record.header.sdr_version = ipmiSdrVersion;
     record.header.record_type = get_sdr::SENSOR_DATA_FULL_RECORD;
     record.header.record_length = sizeof(get_sdr::SensorDataFullRecord) -
                                   sizeof(get_sdr::SensorDataRecordHeader);
-    record.key.owner_id = 0x20;
+    record.key.owner_id = bmcI2CAddr;
     record.key.owner_lun = lun;
     record.key.sensor_number = sensornumber;
+}
+bool constructSensorSdr(ipmi::Context::ptr ctx, uint16_t sensorNum,
+                        uint16_t recordID, const std::string& service,
+                        const std::string& path,
+                        get_sdr::SensorDataFullRecord& record)
+{
+    uint8_t sensornumber = static_cast<uint8_t>(sensorNum);
+    constructSensorSdrHeaderKey(sensorNum, recordID, record);
+
+    DbusInterfaceMap sensorMap;
+    if (!getSensorMap(ctx, service, path, sensorMap, sensorMapSdrUpdatePeriod))
+    {
+        phosphor::logging::log<phosphor::logging::level::ERR>(
+            "Failed to update sensor map for threshold sensor",
+            phosphor::logging::entry("SERVICE=%s", service.c_str()),
+            phosphor::logging::entry("PATH=%s", path.c_str()));
+        return false;
+    }
 
     record.body.sensor_capabilities = 0x68; // auto rearm - todo hysteresis
     record.body.sensor_type = getSensorTypeFromPath(path);
@@ -1297,7 +1385,7 @@ static int getSensorDataRecord(ipmi::Context::ptr ctx,
     {
         phosphor::logging::log<phosphor::logging::level::ERR>(
             "getSensorDataRecord: sensorObject error");
-        return GENERAL_ERROR;
+        return false;
     }
 
     uint8_t entityId = 0;
@@ -1337,7 +1425,7 @@ static int getSensorDataRecord(ipmi::Context::ptr ctx,
     {
         phosphor::logging::log<phosphor::logging::level::ERR>(
             "getSensorDataRecord: getSensorAttributes error");
-        return GENERAL_ERROR;
+        return false;
     }
 
     // The record.body is a struct SensorDataFullRecordBody
@@ -1391,27 +1479,7 @@ static int getSensorDataRecord(ipmi::Context::ptr ctx,
     // Original comment said "todo fill out rest of units"
 
     // populate sensor name from path
-    std::string name;
-    size_t nameStart = path.rfind("/");
-    if (nameStart != std::string::npos)
-    {
-        name = path.substr(nameStart + 1, std::string::npos - nameStart);
-    }
-
-    std::replace(name.begin(), name.end(), '_', ' ');
-    if (name.size() > FULL_RECORD_ID_STR_MAX_LENGTH)
-    {
-        // try to not truncate by replacing common words
-        constexpr std::array<std::pair<const char*, const char*>, 2>
-            replaceWords = {std::make_pair("Output", "Out"),
-                            std::make_pair("Input", "In")};
-        for (const auto& [find, replace] : replaceWords)
-        {
-            boost::replace_all(name, find, replace);
-        }
-
-        name.resize(FULL_RECORD_ID_STR_MAX_LENGTH);
-    }
+    auto name = sensor::parseSdrIdFromPath(path);
     record.body.id_string_info = name.size();
     std::strncpy(record.body.id_string, name.c_str(),
                  sizeof(record.body.id_string));
@@ -1428,7 +1496,7 @@ static int getSensorDataRecord(ipmi::Context::ptr ctx,
     {
         phosphor::logging::log<phosphor::logging::level::ERR>(
             "getSensorDataRecord: getIPMIThresholds error");
-        return GENERAL_ERROR;
+        return false;
     }
 
     if (thresholdData.criticalHigh)
@@ -1483,8 +1551,205 @@ static int getSensorDataRecord(ipmi::Context::ptr ctx,
     // everything that is readable is setable
     record.body.discrete_reading_setting_mask[1] =
         record.body.discrete_reading_setting_mask[0];
-    recordData.insert(recordData.end(), reinterpret_cast<uint8_t*>(&record),
-                      reinterpret_cast<uint8_t*>(&record) + sizeof(record));
+    return true;
+}
+
+// Construct type 3 SDR header and key (for VR and other discrete sensors)
+void constructEventSdrHeaderKey(uint16_t sensorNum, uint16_t recordID,
+                                get_sdr::SensorDataEventRecord& record)
+{
+    uint8_t sensornumber = static_cast<uint8_t>(sensorNum);
+    uint8_t lun = static_cast<uint8_t>(sensorNum >> 8);
+
+    get_sdr::header::set_record_id(
+        recordID, reinterpret_cast<get_sdr::SensorDataRecordHeader*>(&record));
+
+    record.header.sdr_version = ipmiSdrVersion;
+    record.header.record_type = get_sdr::SENSOR_DATA_EVENT_RECORD;
+    record.header.record_length = sizeof(get_sdr::SensorDataEventRecord) -
+                                  sizeof(get_sdr::SensorDataRecordHeader);
+    record.key.owner_id = bmcI2CAddr;
+    record.key.owner_lun = lun;
+    record.key.sensor_number = sensornumber;
+
+    record.body.entity_id = 0x00;
+    record.body.entity_instance = 0x01;
+}
+
+// Construct a type 3 SDR for VR typed sensor(daemon).
+bool constructVrSdr(ipmi::Context::ptr ctx, uint16_t sensorNum,
+                    uint16_t recordID, const std::string& service,
+                    const std::string& path,
+                    get_sdr::SensorDataEventRecord& record)
+{
+    uint8_t sensornumber = static_cast<uint8_t>(sensorNum);
+    constructEventSdrHeaderKey(sensorNum, recordID, record);
+
+    DbusInterfaceMap sensorMap;
+    if (!getSensorMap(ctx, service, path, sensorMap, sensorMapSdrUpdatePeriod))
+    {
+        phosphor::logging::log<phosphor::logging::level::ERR>(
+            "Failed to update sensor map for VR sensor",
+            phosphor::logging::entry("SERVICE=%s", service.c_str()),
+            phosphor::logging::entry("PATH=%s", path.c_str()));
+        return false;
+    }
+    // follow the association chain to get the parent board's entityid and
+    // entityInstance
+    updateIpmiFromAssociation(path, sensorMap, record.body.entity_id,
+                              record.body.entity_instance);
+
+    // Sensor type is hardcoded as a module/board type instead of parsing from
+    // sensor path. This is because VR control is allocated in an independent
+    // path(/xyz/openbmc_project/vr/profile/...) which is not categorized by
+    // types.
+    static constexpr const uint8_t module_board_type = 0x15;
+    record.body.sensor_type = module_board_type;
+    record.body.event_reading_type = 0x00;
+
+    record.body.sensor_record_sharing_1 = 0x00;
+    record.body.sensor_record_sharing_2 = 0x00;
+
+    // populate sensor name from path
+    auto name = sensor::parseSdrIdFromPath(path);
+    int nameSize = std::min(name.size(), sizeof(record.body.id_string));
+    record.body.id_string_info = nameSize;
+    std::memset(record.body.id_string, 0x00, sizeof(record.body.id_string));
+    std::memcpy(record.body.id_string, name.c_str(), nameSize);
+
+    // Remember the sensor name, as determined for this sensor number
+    details::sdrStatsTable.updateName(sensornumber, name);
+
+    return true;
+}
+
+static int
+    getSensorDataRecord(ipmi::Context::ptr ctx,
+                        std::vector<uint8_t>& recordData, uint16_t recordID,
+                        uint8_t readBytes = std::numeric_limits<uint8_t>::max())
+{
+    size_t fruCount = 0;
+    ipmi::Cc ret = ipmi::storage::getFruSdrCount(ctx, fruCount);
+    if (ret != ipmi::ccSuccess)
+    {
+        phosphor::logging::log<phosphor::logging::level::ERR>(
+            "getSensorDataRecord: getFruSdrCount error");
+        return GENERAL_ERROR;
+    }
+
+    auto& sensorTree = getSensorTree();
+    size_t lastRecord =
+        sensorTree.size() + fruCount + ipmi::storage::type12Count + -1;
+    if (recordID == lastRecordIndex)
+    {
+        recordID = lastRecord;
+    }
+    if (recordID > lastRecord)
+    {
+        phosphor::logging::log<phosphor::logging::level::ERR>(
+            "getSensorDataRecord: recordID > lastRecord error");
+        return GENERAL_ERROR;
+    }
+
+    if (recordID >= sensorTree.size())
+    {
+        size_t fruIndex = recordID - sensorTree.size();
+
+        if (fruIndex >= fruCount)
+        {
+            // handle type 12 hardcoded records
+            size_t type12Index = fruIndex - fruCount;
+            if (type12Index >= ipmi::storage::type12Count)
+            {
+                phosphor::logging::log<phosphor::logging::level::ERR>(
+                    "getSensorDataRecord: type12Index error");
+                return GENERAL_ERROR;
+            }
+            recordData = ipmi::storage::getType12SDRs(type12Index, recordID);
+        }
+        else
+        {
+            // handle fru records
+            get_sdr::SensorDataFruRecord data;
+            ret = ipmi::storage::getFruSdrs(ctx, fruIndex, data);
+            if (ret != IPMI_CC_OK)
+            {
+                return GENERAL_ERROR;
+            }
+            data.header.record_id_msb = recordID >> 8;
+            data.header.record_id_lsb = recordID & 0xFF;
+            recordData.insert(recordData.end(), (uint8_t*)&data,
+                              ((uint8_t*)&data) + sizeof(data));
+        }
+
+        return 0;
+    }
+
+    std::string connection;
+    std::string path;
+    std::vector<std::string> interfaces;
+
+    auto status =
+        getSensorConnection(ctx, recordID, connection, path, &interfaces);
+    if (status)
+    {
+        phosphor::logging::log<phosphor::logging::level::ERR>(
+            "getSensorDataRecord: getSensorConnection error");
+        return GENERAL_ERROR;
+    }
+    uint16_t sensorNum = getSensorNumberFromPath(path);
+    if (sensorNum == invalidSensorNumber)
+    {
+        phosphor::logging::log<phosphor::logging::level::ERR>(
+            "getSensorDataRecord: invalidSensorNumber");
+        return GENERAL_ERROR;
+    }
+
+    // Construct full record (SDR type 1) for the threshold sensors
+    if (std::find(interfaces.begin(), interfaces.end(),
+                  sensor::sensorInterface) != interfaces.end())
+    {
+        get_sdr::SensorDataFullRecord record = {0};
+
+        // If the request doesn't read SDR body, construct only header and key
+        // part to avoid additional DBus transaction.
+        if (readBytes <= sizeof(record.header) + sizeof(record.key))
+        {
+            constructSensorSdrHeaderKey(sensorNum, recordID, record);
+        }
+        else if (!constructSensorSdr(ctx, sensorNum, recordID, connection, path,
+                                     record))
+        {
+            return GENERAL_ERROR;
+        }
+
+        recordData.insert(recordData.end(), (uint8_t*)&record,
+                          ((uint8_t*)&record) + sizeof(record));
+
+        return 0;
+    }
+
+    // Contruct SDR type 3 record for VR sensor (daemon)
+    if (std::find(interfaces.begin(), interfaces.end(), sensor::vrInterface) !=
+        interfaces.end())
+    {
+        get_sdr::SensorDataEventRecord record = {0};
+
+        // If the request doesn't read SDR body, construct only header and key
+        // part to avoid additional DBus transaction.
+        if (readBytes <= sizeof(record.header) + sizeof(record.key))
+        {
+            constructEventSdrHeaderKey(sensorNum, recordID, record);
+        }
+        else if (!constructVrSdr(ctx, sensorNum, recordID, connection, path,
+                                 record))
+        {
+            return GENERAL_ERROR;
+        }
+        recordData.insert(recordData.end(), (uint8_t*)&record,
+                          ((uint8_t*)&record) + sizeof(record));
+    }
+
     return 0;
 }
 
@@ -1715,7 +1980,7 @@ ipmi::RspType<uint16_t,            // next record ID
     }
 
     std::vector<uint8_t> record;
-    if (getSensorDataRecord(ctx, record, recordID))
+    if (getSensorDataRecord(ctx, record, recordID, offset + bytesToRead))
     {
         phosphor::logging::log<phosphor::logging::level::ERR>(
             "ipmiStorageGetSDR: fail to get SDR");
