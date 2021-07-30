@@ -231,6 +231,11 @@ bool getSensorNumMap(std::shared_ptr<SensorNumMap>& sensorNumMap);
 
 bool getSensorSubtree(SensorSubTree& subtree);
 
+#ifdef FEATURE_HYBRID_SENSORS
+ipmi::sensor::IdInfoMap::const_iterator
+    findStaticSensor(const std::string& path);
+#endif
+
 struct CmpStr
 {
     bool operator()(const char* a, const char* b) const
@@ -238,6 +243,9 @@ struct CmpStr
         return std::strcmp(a, b) < 0;
     }
 };
+
+static constexpr size_t sensorTypeCodes = 0;
+static constexpr size_t sensorEventTypeCodes = 1;
 
 enum class SensorTypeCodes : uint8_t
 {
@@ -247,15 +255,42 @@ enum class SensorTypeCodes : uint8_t
     current = 0x3,
     fan = 0x4,
     other = 0xB,
+    memory = 0x0c,
+    power_unit = 0x09,
+    buttons = 0x14,
+    watchdog2 = 0x23,
 };
 
-const static boost::container::flat_map<const char*, SensorTypeCodes, CmpStr>
-    sensorTypes{{{"temperature", SensorTypeCodes::temperature},
-                 {"voltage", SensorTypeCodes::voltage},
-                 {"current", SensorTypeCodes::current},
-                 {"fan_tach", SensorTypeCodes::fan},
-                 {"fan_pwm", SensorTypeCodes::fan},
-                 {"power", SensorTypeCodes::other}}};
+enum class SensorEventTypeCodes : uint8_t
+{
+    unspecified = 0x00,
+    threshold = 0x01,
+    sensorSpecified = 0x6f
+};
+
+const static boost::container::flat_map<
+    const char*, std::pair<SensorTypeCodes, SensorEventTypeCodes>, CmpStr>
+    sensorTypes{
+        {{"temperature", std::make_pair(SensorTypeCodes::temperature,
+                                        SensorEventTypeCodes::threshold)},
+         {"voltage", std::make_pair(SensorTypeCodes::voltage,
+                                    SensorEventTypeCodes::threshold)},
+         {"current", std::make_pair(SensorTypeCodes::current,
+                                    SensorEventTypeCodes::threshold)},
+         {"fan_tach", std::make_pair(SensorTypeCodes::fan,
+                                     SensorEventTypeCodes::threshold)},
+         {"fan_pwm", std::make_pair(SensorTypeCodes::fan,
+                                    SensorEventTypeCodes::threshold)},
+         {"power", std::make_pair(SensorTypeCodes::other,
+                                  SensorEventTypeCodes::threshold)},
+         {"memory", std::make_pair(SensorTypeCodes::memory,
+                                   SensorEventTypeCodes::sensorSpecified)},
+         {"state", std::make_pair(SensorTypeCodes::power_unit,
+                                  SensorEventTypeCodes::sensorSpecified)},
+         {"buttons", std::make_pair(SensorTypeCodes::buttons,
+                                    SensorEventTypeCodes::sensorSpecified)},
+         {"watchdog", std::make_pair(SensorTypeCodes::watchdog2,
+                                     SensorEventTypeCodes::sensorSpecified)}}};
 
 std::string getSensorTypeStringFromPath(const std::string& path);
 
