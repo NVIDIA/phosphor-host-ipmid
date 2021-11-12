@@ -318,7 +318,7 @@ void deleteObjectIfExists(sdbusplus::bus::bus& bus, const std::string& service,
                                        ipmi::DELETE_INTERFACE, "Delete");
         bus.call_noreply(req);
     }
-    catch (const sdbusplus::exception::SdBusError& e)
+    catch (const sdbusplus::exception::exception& e)
     {
         if (strcmp(e.name(),
                    "xyz.openbmc_project.Common.Error.InternalFailure") != 0 &&
@@ -514,7 +514,7 @@ void getLanIPv6Address(message::Payload& ret, uint8_t channel, uint8_t set,
     if (ifaddr)
     {
         source = originToSourceType(ifaddr->origin);
-        enabled = true;
+        enabled = (origins == originsV6Static);
         addr = ifaddr->address;
         prefix = ifaddr->prefix;
         status = IPv6AddressStatus::Active;
@@ -1109,7 +1109,23 @@ RspType<> setLan(Context::ptr ctx, uint4_t channelBits, uint4_t reserved1,
             copyInto(ip, ipbytes);
             if (enabled)
             {
-                channelCall<reconfigureIfAddr6>(channel, set, ip, prefix);
+                try
+                {
+                    channelCall<reconfigureIfAddr6>(channel, set, ip, prefix);
+                }
+                catch (const sdbusplus::exception::exception& e)
+                {
+                    if (std::string_view err{
+                            "xyz.openbmc_project.Common.Error.InvalidArgument"};
+                        err == e.name())
+                    {
+                        return responseInvalidFieldRequest();
+                    }
+                    else
+                    {
+                        throw;
+                    }
+                }
             }
             else
             {

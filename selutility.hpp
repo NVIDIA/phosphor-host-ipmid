@@ -2,8 +2,11 @@
 
 #include <chrono>
 #include <cstdint>
+#include <iomanip>
+#include <iostream>
 #include <ipmid/types.hpp>
 #include <sdbusplus/server.hpp>
+#include <sstream>
 
 namespace ipmi
 {
@@ -18,6 +21,10 @@ static constexpr auto mapperIntf = "xyz.openbmc_project.ObjectMapper";
 static constexpr auto logBasePath = "/xyz/openbmc_project/logging/entry";
 static constexpr auto logEntryIntf = "xyz.openbmc_project.Logging.Entry";
 static constexpr auto logDeleteIntf = "xyz.openbmc_project.Object.Delete";
+
+static constexpr auto logObj = "/xyz/openbmc_project/logging";
+static constexpr auto logIntf = "xyz.openbmc_project.Collection.DeleteAll";
+static constexpr auto logDeleteAllMethod = "DeleteAll";
 
 static constexpr auto propIntf = "org.freedesktop.DBus.Properties";
 
@@ -167,6 +174,17 @@ std::chrono::seconds getEntryTimeStamp(const std::string& objPath);
  */
 void readLoggingObjectPaths(ObjectPaths& paths);
 
+template <typename T>
+std::string toHexStr(const T& data)
+{
+    std::stringstream stream;
+    stream << std::hex << std::uppercase << std::setfill('0');
+    for (const auto& v : data)
+    {
+        stream << std::setw(2) << static_cast<int>(v);
+    }
+    return stream.str();
+}
 namespace internal
 {
 

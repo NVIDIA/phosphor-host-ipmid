@@ -117,7 +117,7 @@ std::string getActiveSoftwareVersionInfo(ipmi::Context::ptr ctx)
         objectTree =
             ipmi::getAllDbusObjects(*ctx->bus, softwareRoot, redundancyIntf);
     }
-    catch (sdbusplus::exception::SdBusError& e)
+    catch (const sdbusplus::exception::exception& e)
     {
         log<level::ERR>("Failed to fetch redundancy object from dbus",
                         entry("INTERFACE=%s", redundancyIntf),
@@ -736,7 +736,7 @@ static std::array<uint8_t, uuidBinaryLength> rfc4122ToIpmi(std::string rfc4122)
         {
             b = std::stoul(v, &err, 16);
         }
-        catch (std::exception& e)
+        catch (const std::exception& e)
         {
             elog<InvalidArgument>(Argument::ARGUMENT_NAME("rfc4122"),
                                   Argument::ARGUMENT_VALUE(rfc4122.c_str()));
@@ -863,7 +863,7 @@ uint8_t setSessionState(std::shared_ptr<sdbusplus::asio::connection>& busp,
             return ipmi::ccSuccess;
         }
     }
-    catch (std::exception& e)
+    catch (const std::exception& e)
     {
         log<level::ERR>("Failed in getting session state property",
                         entry("service=%s", service.c_str()),
@@ -929,7 +929,7 @@ ipmi::RspType<> ipmiAppCloseSession(uint32_t reqSessionId,
             }
         }
     }
-    catch (sdbusplus::exception::SdBusError& e)
+    catch (const sdbusplus::exception::exception& e)
     {
         log<level::ERR>("Failed to fetch object from dbus",
                         entry("INTERFACE=%s", session::sessionIntf),
@@ -1488,7 +1488,7 @@ static bool populateI2CMasterWRWhitelist()
     {
         data = nlohmann::json::parse(jsonFile, nullptr, false);
     }
-    catch (nlohmann::json::parse_error& e)
+    catch (const nlohmann::json::parse_error& e)
     {
         log<level::ERR>("Corrupted i2c white list config file",
                         entry("FILE_NAME: %s", i2cMasterWRWhitelistFile),
@@ -1559,7 +1559,7 @@ static bool populateI2CMasterWRWhitelist()
             return false;
         }
     }
-    catch (std::exception& e)
+    catch (const std::exception& e)
     {
         log<level::ERR>("I2C master write read whitelist unexpected exception",
                         entry("ERROR=%s", e.what()));
@@ -1634,6 +1634,10 @@ ipmi::RspType<std::vector<uint8_t>>
                         bool reserved, uint7_t slaveAddr, uint8_t readCount,
                         std::vector<uint8_t> writeData)
 {
+    if (reserved)
+    {
+        return ipmi::responseInvalidFieldRequest();
+    }
     if (readCount > maxIPMIWriteReadSize)
     {
         log<level::ERR>("Master write read command: Read count exceeds limit");

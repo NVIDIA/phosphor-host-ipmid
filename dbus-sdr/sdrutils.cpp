@@ -73,7 +73,7 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
             auto mapperReply = dbus->call(mapperCall);
             mapperReply.read(sensorTreePartial);
         }
-        catch (sdbusplus::exception_t& e)
+        catch (const sdbusplus::exception_t& e)
         {
             phosphor::logging::log<phosphor::logging::level::ERR>(
                 "fail to update subtree",
@@ -93,6 +93,7 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
     // Add sensors to SensorTree
     static constexpr const std::array sensorInterfaces = {
         "xyz.openbmc_project.Sensor.Value",
+        "xyz.openbmc_project.Sensor.ValueMutability",
         "xyz.openbmc_project.Sensor.Threshold.Warning",
         "xyz.openbmc_project.Sensor.Threshold.Critical"};
     static constexpr const std::array vrInterfaces = {
@@ -139,6 +140,7 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
     sensorUpdatedIndex++;
     // The SDR is being regenerated, wipe the old stats
     sdrStatsTable.wipeTable();
+    sdrWriteTable.wipeTable();
     return sensorUpdatedIndex;
 }
 
@@ -264,7 +266,7 @@ uint16_t getSensorNumberFromPath(const std::string& path)
     {
         return sensorNumMapPtr->right.at(path);
     }
-    catch (std::out_of_range& e)
+    catch (const std::out_of_range& e)
     {
         phosphor::logging::log<phosphor::logging::level::ERR>(e.what());
         return invalidSensorNumber;
@@ -298,7 +300,7 @@ std::string getPathFromSensorNumber(uint16_t sensorNum)
     {
         return sensorNumMapPtr->left.at(sensorNum);
     }
-    catch (std::out_of_range& e)
+    catch (const std::out_of_range& e)
     {
         phosphor::logging::log<phosphor::logging::level::ERR>(e.what());
         return std::string();

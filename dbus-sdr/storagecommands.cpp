@@ -103,6 +103,7 @@ constexpr static const char* entityManagerServiceName =
     "xyz.openbmc_project.EntityManager";
 constexpr static const size_t writeTimeoutSeconds = 10;
 constexpr static const char* chassisTypeRackMount = "23";
+constexpr static const char* chassisTypeMainServer = "17";
 
 // event direction is bit[7] of eventType where 1b = Deassertion event
 constexpr static const uint8_t deassertionEvent = 0x80;
@@ -141,7 +142,7 @@ bool writeFru()
     {
         sdbusplus::message::message writeFruResp = dbus->call(writeFru);
     }
-    catch (sdbusplus::exception_t&)
+    catch (const sdbusplus::exception_t&)
     {
         // todo: log sel?
         phosphor::logging::log<phosphor::logging::level::ERR>(
@@ -194,7 +195,8 @@ void recalculateHashes()
         }
 
         uint8_t fruHash = 0;
-        if (chassisType.compare(chassisTypeRackMount) != 0)
+        if (chassisType.compare(chassisTypeRackMount) != 0 &&
+            chassisType.compare(chassisTypeMainServer) != 0)
         {
             fruHash = hasher(fru.first.str);
             // can't be 0xFF based on spec, and 0 is reserved for baseboard
@@ -250,11 +252,6 @@ ipmi::Cc getFru(ipmi::Context::ptr ctx, uint8_t devId)
     {
         return ipmi::ccSuccess;
     }
-
-    // Set devId to 1 if devId is 0.
-    // 0 is reserved for baseboard and set to 1 in recalculateHashes().
-    if (!devId)
-        devId = 1;
 
     auto deviceFind = deviceHashes.find(devId);
     if (deviceFind == deviceHashes.end())
@@ -318,7 +315,7 @@ void startMatch(void)
                                 {
                                     message.read(path, object);
                                 }
-                                catch (sdbusplus::exception_t&)
+                                catch (const sdbusplus::exception_t&)
                                 {
                                     return;
                                 }
@@ -344,7 +341,7 @@ void startMatch(void)
                                 {
                                     message.read(path, interfaces);
                                 }
-                                catch (sdbusplus::exception_t&)
+                                catch (const sdbusplus::exception_t&)
                                 {
                                     return;
                                 }
@@ -603,6 +600,7 @@ ipmi_ret_t getFruSdrs(ipmi::Context::ptr ctx, size_t index,
     {
         return IPMI_CC_RESPONSE_ERROR;
     }
+    std::string name;
 
 #ifdef USING_ENTITY_MANAGER_DECORATORS
 
@@ -625,9 +623,9 @@ ipmi_ret_t getFruSdrs(ipmi::Context::ptr ctx, size_t index,
 
     auto entity = std::find_if(
         entities.begin(), entities.end(),
-        [bus, address, &entityData](ManagedEntry& entry) {
+        [bus, address, &entityData, &name](ManagedEntry& entry) {
             auto findFruDevice = entry.second.find(
-                "xyz.openbmc_project.Inventory.Decorator.FruDevice");
+                "xyz.openbmc_project.Inventory.Decorator.I2CDevice");
             if (findFruDevice == entry.second.end())
             {
                 return false;
@@ -647,6 +645,12 @@ ipmi_ret_t getFruSdrs(ipmi::Context::ptr ctx, size_t index,
                 (std::get<uint64_t>(findAddress->second) != address))
             {
                 return false;
+            }
+
+            auto fruName = findFruDevice->second.find("Name");
+            if (fruName != findFruDevice->second.end())
+            {
+                name = std::get<std::string>(fruName->second);
             }
 
             // At this point we found the device entry and should return
@@ -672,18 +676,7 @@ ipmi_ret_t getFruSdrs(ipmi::Context::ptr ctx, size_t index,
 
 #endif
 
-    std::string name;
-    auto findProductName = fruData->find("BOARD_PRODUCT_NAME");
-    auto findBoardName = fruData->find("PRODUCT_PRODUCT_NAME");
-    if (findProductName != fruData->end())
-    {
-        name = std::get<std::string>(findProductName->second);
-    }
-    else if (findBoardName != fruData->end())
-    {
-        name = std::get<std::string>(findBoardName->second);
-    }
-    else
+    if (name.empty())
     {
         name = "UNKNOWN";
     }
@@ -843,12 +836,12 @@ static int fromHexStr(const std::string& hexStr, std::vector<uint8_t>& data)
             data.push_back(static_cast<uint8_t>(
                 std::stoul(hexStr.substr(i, 2), nullptr, 16)));
         }
-        catch (std::invalid_argument& e)
+        catch (const std::invalid_argument& e)
         {
             phosphor::logging::log<phosphor::logging::level::ERR>(e.what());
             return -1;
         }
-        catch (std::out_of_range& e)
+        catch (const std::out_of_range& e)
         {
             phosphor::logging::log<phosphor::logging::level::ERR>(e.what());
             return -1;
@@ -1158,7 +1151,7 @@ ipmi::RspType<uint8_t> ipmiStorageClearSEL(ipmi::Context::ptr ctx,
     {
         sdbusplus::message::message reloadResponse = dbus->call(rsyslogReload);
     }
-    catch (sdbusplus::exception_t& e)
+    catch (const sdbusplus::exception_t& e)
     {
         phosphor::logging::log<phosphor::logging::level::ERR>(e.what());
     }
@@ -1246,7 +1239,7 @@ void registerStorageFunctions()
     startMatch();
 
     // <Get FRU Inventory Area Info>
-    ipmi::registerHandler(ipmi::prioOemBase, ipmi::netFnStorage,
+    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
                           ipmi::storage::cmdGetFruInventoryAreaInfo,
                           ipmi::Privilege::User, ipmiStorageGetFruInvAreaInfo);
     // <READ FRU Data>

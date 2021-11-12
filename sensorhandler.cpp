@@ -350,6 +350,10 @@ ipmi::RspType<> ipmiSetSensorReading(uint8_t sensorNumber, uint8_t operation,
     log<level::DEBUG>("IPMI SET_SENSOR",
                       entry("SENSOR_NUM=0x%02x", sensorNumber));
 
+    if (sensorNumber == 0xFF)
+    {
+        return ipmi::responseInvalidFieldRequest();
+    }
     ipmi::sensor::SetSensorReadingReq cmdData;
 
     cmdData.number = sensorNumber;
@@ -383,7 +387,7 @@ ipmi::RspType<> ipmiSetSensorReading(uint8_t sensorNumber, uint8_t operation,
         auto ipmiRC = iter->second.updateFunc(cmdData, iter->second);
         return ipmi::response(ipmiRC);
     }
-    catch (InternalFailure& e)
+    catch (const InternalFailure& e)
     {
         log<level::ERR>("Set sensor failed",
                         entry("SENSOR_NUM=%d", sensorNumber));
@@ -1090,7 +1094,7 @@ ipmi_ret_t ipmicmdPlatformEvent(ipmi_netfn_t netfn, ipmi_cmd_t cmd,
     {
         dbus.call(writeSEL);
     }
-    catch (sdbusplus::exception_t& e)
+    catch (const sdbusplus::exception_t& e)
     {
         phosphor::logging::log<phosphor::logging::level::ERR>(e.what());
         return IPMI_CC_UNSPECIFIED_ERROR;
@@ -1100,15 +1104,10 @@ ipmi_ret_t ipmicmdPlatformEvent(ipmi_netfn_t netfn, ipmi_cmd_t cmd,
 
 void register_netfn_sen_functions()
 {
-    // <Platform Event Message>
-    ipmi_register_callback(NETFUN_SENSOR, IPMI_CMD_PLATFORM_EVENT, nullptr,
-                           ipmicmdPlatformEvent, PRIVILEGE_OPERATOR);
+    // Handlers with dbus-sdr handler implementation.
+    // Do not register the hander if it dynamic sensors stack is used.
 
-    // <Get Sensor Type>
-    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnSensor,
-                          ipmi::sensor_event::cmdGetSensorType,
-                          ipmi::Privilege::User, ipmiGetSensorType);
-
+#ifndef FEATURE_DYNAMIC_SENSORS
     // <Set Sensor Reading and Event Status>
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnSensor,
                           ipmi::sensor_event::cmdSetSensorReadingAndEvtSts,
@@ -1128,14 +1127,26 @@ void register_netfn_sen_functions()
                           ipmi::sensor_event::cmdGetDeviceSdrInfo,
                           ipmi::Privilege::User, ipmiSensorGetDeviceSdrInfo);
 
-    // <Get Device SDR>
-    ipmi_register_callback(NETFUN_SENSOR, IPMI_CMD_GET_DEVICE_SDR, nullptr,
-                           ipmi_sen_get_sdr, PRIVILEGE_USER);
-
     // <Get Sensor Thresholds>
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnSensor,
                           ipmi::sensor_event::cmdGetSensorThreshold,
                           ipmi::Privilege::User, ipmiSensorGetSensorThresholds);
 
+#endif
+
+    // Common Handers used by both implementation.
+
+    // <Platform Event Message>
+    ipmi_register_callback(NETFUN_SENSOR, IPMI_CMD_PLATFORM_EVENT, nullptr,
+                           ipmicmdPlatformEvent, PRIVILEGE_OPERATOR);
+
+    // <Get Sensor Type>
+    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnSensor,
+                          ipmi::sensor_event::cmdGetSensorType,
+                          ipmi::Privilege::User, ipmiGetSensorType);
+
+    // <Get Device SDR>
+    ipmi_register_callback(NETFUN_SENSOR, IPMI_CMD_GET_DEVICE_SDR, nullptr,
+                           ipmi_sen_get_sdr, PRIVILEGE_USER);
     return;
 }
