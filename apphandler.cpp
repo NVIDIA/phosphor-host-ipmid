@@ -1250,6 +1250,7 @@ static std::string sysInfoReadSystemName()
 
 static constexpr uint8_t paramRevision = 0x11;
 static constexpr size_t configParameterLength = 16;
+static constexpr size_t configParameter0Length = 1;
 
 static constexpr size_t smallChunkSize = 14;
 static constexpr size_t fullChunkSize = 16;
@@ -1381,6 +1382,11 @@ ipmi::RspType<> ipmiAppSetSystemInfo(uint8_t paramSelector, uint8_t data1,
 
     if (paramSelector == 0)
     {
+        if (configData.size() != configParameter0Length)
+        {
+            return ipmi::responseReqDataLenInvalid();
+        }
+
         // attempt to set the 'set in progress' value (in parameter #0)
         // when not in the set complete state.
         if ((transferStatus != setComplete) && (data1 == setInProgress))
