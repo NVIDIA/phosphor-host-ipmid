@@ -515,7 +515,7 @@ ipmi::RspType<> ipmiSetUserPayloadAccess(
     }
     if (getChannelSessionSupport(chNum) == EChannelSessSupported::none)
     {
-        return ipmi::response(ccActionNotSupportedForChannel);
+        return ipmi::responseInvalidFieldRequest();
     }
     if (!ipmiUserIsValidUserId(static_cast<uint8_t>(userId)))
     {
@@ -600,7 +600,7 @@ ipmi::RspType<bool, // stdPayload0ipmiReserved
     }
     if (getChannelSessionSupport(chNum) == EChannelSessSupported::none)
     {
-        return ipmi::response(ccActionNotSupportedForChannel);
+        return ipmi::responseInvalidFieldRequest();
     }
     if (!ipmiUserIsValidUserId(static_cast<uint8_t>(userId)))
     {
