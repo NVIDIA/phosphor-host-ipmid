@@ -116,11 +116,6 @@ static constexpr const char* resetButtonIntf =
 static constexpr const char* resetButtonPath =
     "/xyz/openbmc_project/Chassis/Buttons/Reset0";
 
-// Host state manager dbus settings
-constexpr auto HOST_STATE_MANAGER_ROOT = "/xyz/openbmc_project/state/host0";
-constexpr auto HOST_STATE_MANAGER_IFACE = "xyz.openbmc_project.State.Host";
-constexpr auto DBUS_PROPERTY_IFACE = "org.freedesktop.DBus.Properties";
-
 // Phosphor Host State manager
 namespace State = sdbusplus::xyz::openbmc_project::State::server;
 
@@ -818,62 +813,14 @@ ipmi::RspType<> ipmiSetChassisCap(bool intrusion, bool fpLockout,
 }
 
 //------------------------------------------
-// Updates host RestartCause dbus property
-//------------------------------------------
-static void updateRestartCause(State::Host::RestartCause resCause)
-{
-    // OpenBMC Host State RestartCause dbus property
-    constexpr auto PROPERTY = "RestartCause";
-
-    // sd_bus error
-    int rc = 0;
-    char* busname = NULL;
-
-    // SD Bus error report mechanism.
-    sd_bus_error bus_error = SD_BUS_ERROR_NULL;
-
-    // Gets a hook onto either a SYSTEM or SESSION bus
-    sd_bus* bus_type = ipmid_get_sd_bus_connection();
-    rc = mapper_get_service(bus_type, HOST_STATE_MANAGER_ROOT, &busname);
-    if (rc < 0)
-    {
-        log<level::ERR>(
-            "Failed to get bus name on restartcause update",
-            entry("ERRNO=0x%X, OBJPATH=%s", -rc, HOST_STATE_MANAGER_ROOT));
-        return;
-    }
-
-    // Convert to string equivalent of the passed in restartcause enum.
-    auto request = State::convertForMessage(resCause);
-
-    rc = sd_bus_call_method(bus_type,                // On the system bus
-                            busname,                 // Service to contact
-                            HOST_STATE_MANAGER_ROOT, // Object path
-                            DBUS_PROPERTY_IFACE,     // Interface name
-                            "Set",                   // Method to be called
-                            &bus_error,              // object to return error
-                            nullptr,                 // Response buffer if any
-                            "ssv",                   // Takes 3 arguments
-                            HOST_STATE_MANAGER_IFACE, PROPERTY, "s",
-                            request.c_str());
-    if (rc < 0)
-    {
-        log<level::ERR>("Failed to update host restartcause",
-                        entry("ERRNO=0x%X, REQUEST=%s", -rc, request.c_str()));
-    }
-
-    sd_bus_error_free(&bus_error);
-    free(busname);
-
-    return;
-}
-
-//------------------------------------------
 // Calls into Host State Manager Dbus object
 //------------------------------------------
 int initiate_state_transition(State::Host::Transition transition)
 {
-    // OpenBMC Host State Manager transition dbus property
+    // OpenBMC Host State Manager dbus framework
+    constexpr auto HOST_STATE_MANAGER_ROOT = "/xyz/openbmc_project/state/host0";
+    constexpr auto HOST_STATE_MANAGER_IFACE = "xyz.openbmc_project.State.Host";
+    constexpr auto DBUS_PROPERTY_IFACE = "org.freedesktop.DBus.Properties";
     constexpr auto PROPERTY = "RequestedHostTransition";
 
     // sd_bus error
@@ -1012,12 +959,6 @@ std::optional<uint2_t> getPowerRestorePolicy()
 std::optional<bool> getPowerStatus()
 {
     bool powerGood = false;
-
-    // trigger BF power sense if there was out of band BF power cycle
-    // which should take care of populating the interface properties
-    auto rc = system("/usr/bin/bmc_bf_power_sense");
-    std::cout <<"Return code"<<rc;
-
     std::shared_ptr<sdbusplus::asio::connection> busp = getSdBus();
     try
     {
@@ -1315,9 +1256,9 @@ static IpmiRestartCause
 static std::optional<uint4_t> getRestartCause(ipmi::Context::ptr ctx)
 {
     constexpr const char* restartCausePath =
-        "/xyz/openbmc_project/state/host0";
+        "/xyz/openbmc_project/control/host0/restart_cause";
     constexpr const char* restartCauseIntf =
-        "xyz.openbmc_project.State.Host";
+        "xyz.openbmc_project.Control.Host.RestartCause";
 
     std::string service;
     boost::system::error_code ec =
@@ -1444,7 +1385,6 @@ ipmi::RspType<> ipmiChassisControl(uint8_t chassisControl)
     {
         case CMD_POWER_ON:
             rc = initiate_state_transition(State::Host::Transition::On);
-            updateRestartCause(State::Host::RestartCause::RemoteCommand);
             break;
         case CMD_POWER_OFF:
             // This path would be hit in 2 conditions.
@@ -1497,7 +1437,6 @@ ipmi::RspType<> ipmiChassisControl(uint8_t chassisControl)
             indicate_no_softoff_needed();
 
             rc = initiate_state_transition(State::Host::Transition::Reboot);
-            updateRestartCause(State::Host::RestartCause::RemoteCommand);
             break;
 
         case CMD_SOFT_OFF_VIA_OVER_TEMP:
