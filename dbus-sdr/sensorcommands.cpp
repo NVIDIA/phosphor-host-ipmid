@@ -38,6 +38,7 @@
 #include <sdbusplus/bus.hpp>
 #include <stdexcept>
 #include <string>
+#include <user_channel/channel_layer.hpp>
 #include <utility>
 #include <variant>
 
@@ -53,6 +54,9 @@ extern const IdInfoMap sensors;
 } // namespace ipmi
 #endif
 
+constexpr std::array<const char*, 7> suffixes = {
+    "_Output_Voltage", "_Input_Voltage", "_Output_Current", "_Input_Current",
+    "_Output_Power",   "_Input_Power",   "_Temperature"};
 namespace ipmi
 {
 
@@ -74,6 +78,17 @@ static uint16_t sdrReservationID;
 static uint32_t sdrLastAdd = noTimestamp;
 static uint32_t sdrLastRemove = noTimestamp;
 static constexpr size_t lastRecordIndex = 0xFFFF;
+
+// The IPMI spec defines four Logical Units (LUN), each capable of supporting
+// 255 sensors. The 256 values assigned to LUN 2 are special and are not used
+// for general purpose sensors. Each LUN reserves location 0xFF. The maximum
+// number of IPMI sensors are LUN 0 + LUN 1 + LUN 2, less the reserved
+// location.
+static constexpr size_t maxIPMISensors = ((3 * 256) - (3 * 1));
+
+static constexpr size_t lun0MaxSensorNum = 0xfe;
+static constexpr size_t lun1MaxSensorNum = 0x1fe;
+static constexpr size_t lun3MaxSensorNum = 0x3fe;
 static constexpr int GENERAL_ERROR = -1;
 
 static boost::container::flat_map<std::string, ObjectValueTree> SensorCache;
@@ -416,20 +431,23 @@ std::string parseSdrIdFromPath(const std::string& path)
         name = path.substr(nameStart + 1, std::string::npos - nameStart);
     }
 
-    std::replace(name.begin(), name.end(), '_', ' ');
     if (name.size() > FULL_RECORD_ID_STR_MAX_LENGTH)
     {
         // try to not truncate by replacing common words
-        constexpr std::array<std::pair<const char*, const char*>, 2>
-            replaceWords = {std::make_pair("Output", "Out"),
-                            std::make_pair("Input", "In")};
-        for (const auto& [find, replace] : replaceWords)
+        for (const auto& suffix : suffixes)
         {
-            boost::replace_all(name, find, replace);
+            if (boost::ends_with(name, suffix))
+            {
+                boost::replace_all(name, suffix, "");
+                break;
+            }
         }
-
-        name.resize(FULL_RECORD_ID_STR_MAX_LENGTH);
+        if (name.size() > FULL_RECORD_ID_STR_MAX_LENGTH)
+        {
+            name.resize(FULL_RECORD_ID_STR_MAX_LENGTH);
+        }
     }
+    std::replace(name.begin(), name.end(), '_', ' ');
     return name;
 }
 
@@ -503,12 +521,61 @@ bool getVrEventStatus(ipmi::Context::ptr ctx, const std::string& connection,
 }
 } // namespace sensor
 
-ipmi::RspType<> ipmiSenPlatformEvent(uint8_t generatorID, uint8_t evmRev,
-                                     uint8_t sensorType, uint8_t sensorNum,
-                                     uint8_t eventType, uint8_t eventData1,
-                                     std::optional<uint8_t> eventData2,
-                                     std::optional<uint8_t> eventData3)
+ipmi::RspType<> ipmiSenPlatformEvent(ipmi::Context::ptr ctx,
+                                     ipmi::message::Payload& p)
 {
+    constexpr const uint8_t validEnvmRev = 0x04;
+    constexpr const uint8_t lastSensorType = 0x2C;
+    constexpr const uint8_t oemReserved = 0xC0;
+
+    uint8_t generatorID = 0;
+    uint8_t evmRev = 0;
+    uint8_t sensorType = 0;
+    uint8_t sensorNum = 0;
+    uint8_t eventType = 0;
+    uint8_t eventData1 = 0;
+    std::optional<uint8_t> eventData2 = 0;
+    std::optional<uint8_t> eventData3 = 0;
+    ipmi::ChannelInfo chInfo;
+
+    if (ipmi::getChannelInfo(ctx->channel, chInfo) != ipmi::ccSuccess)
+    {
+        phosphor::logging::log<phosphor::logging::level::ERR>(
+            "Failed to get Channel Info",
+            phosphor::logging::entry("CHANNEL=%d", ctx->channel));
+        return ipmi::responseUnspecifiedError();
+    }
+
+    if (static_cast<ipmi::EChannelMediumType>(chInfo.mediumType) ==
+        ipmi::EChannelMediumType::systemInterface)
+    {
+
+        p.unpack(generatorID, evmRev, sensorType, sensorNum, eventType,
+                 eventData1, eventData2, eventData3);
+    }
+    else
+    {
+
+        p.unpack(evmRev, sensorType, sensorNum, eventType, eventData1,
+                 eventData2, eventData3);
+        generatorID = ctx->rqSA;
+    }
+
+    if (!p.fullyUnpacked())
+    {
+        return ipmi::responseReqDataLenInvalid();
+    }
+
+    // Check for valid evmRev and Sensor Type(per Table 42 of spec)
+    if (evmRev != validEnvmRev)
+    {
+        return ipmi::responseInvalidFieldRequest();
+    }
+    if ((sensorType > lastSensorType) && (sensorType < oemReserved))
+    {
+        return ipmi::responseInvalidFieldRequest();
+    }
+
     return ipmi::responseSuccess();
 }
 
@@ -639,6 +706,11 @@ ipmi::RspType<uint8_t, uint8_t, uint8_t, std::optional<uint8_t>>
 {
     std::string connection;
     std::string path;
+
+    if (sensnum == reservedSensorNumber)
+    {
+        return ipmi::responseInvalidFieldRequest();
+    }
 
     auto status = getSensorConnection(ctx, sensnum, connection, path);
     if (status)
@@ -865,7 +937,7 @@ ipmi::RspType<> ipmiSenSetSensorThresholds(
     uint8_t upperNonCritical, uint8_t upperCritical,
     uint8_t upperNonRecoverable)
 {
-    if (reserved)
+    if (sensorNum == reservedSensorNumber || reserved)
     {
         return ipmi::responseInvalidFieldRequest();
     }
@@ -1087,6 +1159,11 @@ ipmi::RspType<uint8_t, // readable
     std::string connection;
     std::string path;
 
+    if (sensorNumber == reservedSensorNumber)
+    {
+        return ipmi::responseInvalidFieldRequest();
+    }
+
     auto status = getSensorConnection(ctx, sensorNumber, connection, path);
     if (status)
     {
@@ -1174,6 +1251,11 @@ ipmi::RspType<uint8_t, // enabled
     uint8_t assertionEnabledMsb = 0;
     uint8_t deassertionEnabledLsb = 0;
     uint8_t deassertionEnabledMsb = 0;
+
+    if (sensorNum == reservedSensorNumber)
+    {
+        return ipmi::responseInvalidFieldRequest();
+    }
 
     auto status = getSensorConnection(ctx, sensorNum, connection, path);
     if (status)
@@ -1800,6 +1882,11 @@ bool constructVrSdr(ipmi::Context::ptr ctx, uint16_t sensorNum,
     return true;
 }
 
+static inline uint16_t getNumberOfSensors()
+{
+    return std::min(getSensorTree().size(), maxIPMISensors);
+}
+
 static int
     getSensorDataRecord(ipmi::Context::ptr ctx,
                         std::vector<uint8_t>& recordData, uint16_t recordID,
@@ -1814,9 +1901,8 @@ static int
         return GENERAL_ERROR;
     }
 
-    auto& sensorTree = getSensorTree();
     size_t lastRecord =
-        sensorTree.size() + fruCount + ipmi::storage::type12Count + -1;
+        getNumberOfSensors() + fruCount + ipmi::storage::type12Count - 1;
     if (recordID == lastRecordIndex)
     {
         recordID = lastRecord;
@@ -1828,9 +1914,9 @@ static int
         return GENERAL_ERROR;
     }
 
-    if (recordID >= sensorTree.size())
+    if (recordID >= getNumberOfSensors())
     {
-        size_t fruIndex = recordID - sensorTree.size();
+        size_t fruIndex = recordID - getNumberOfSensors();
 
         if (fruIndex >= fruCount)
         {
@@ -1862,12 +1948,34 @@ static int
         return 0;
     }
 
+    // Perform a incremental scan of the SDR Record ID's and translate the
+    // first 765 SDR records (i.e. maxIPMISensors) into IPMI Sensor
+    // Numbers. The IPMI sensor numbers are not linear, and have a reserved
+    // gap at 0xff. This code creates 254 sensors per LUN, excepting LUN 2
+    // which has special meaning.
     std::string connection;
     std::string path;
     std::vector<std::string> interfaces;
+    uint16_t sensNumFromRecID{recordID};
+    if ((recordID > lun0MaxSensorNum) && (recordID < lun1MaxSensorNum))
+    {
+        // LUN 0 has one reserved sensor number. Compensate here by adding one
+        // to the record ID
+        sensNumFromRecID = recordID + 1;
+        ctx->lun = 1;
+    }
+    else if ((recordID >= lun1MaxSensorNum) && (recordID < maxIPMISensors))
+    {
+        // LUN 0, 1 have a reserved sensor number. Compensate here by adding 2
+        // to the record ID. Skip all 256 sensors in LUN 2, as it has special
+        // rules governing its use.
+        sensNumFromRecID = recordID + (maxSensorsPerLUN + 1) + 2;
+        ctx->lun = 3;
+    }
 
     auto status =
-        getSensorConnection(ctx, recordID, connection, path, &interfaces);
+        getSensorConnection(ctx, static_cast<uint8_t>(sensNumFromRecID),
+                            connection, path, &interfaces);
     if (status)
     {
         phosphor::logging::log<phosphor::logging::level::ERR>(
@@ -1875,10 +1983,23 @@ static int
         return GENERAL_ERROR;
     }
     uint16_t sensorNum = getSensorNumberFromPath(path);
-    if (sensorNum == invalidSensorNumber)
+    // Return an error on LUN 2 assingments, and any sensor number beyond the
+    // range of LUN 3
+    if (((sensorNum > lun1MaxSensorNum) && (sensorNum <= maxIPMISensors)) ||
+        (sensorNum > lun3MaxSensorNum))
     {
         phosphor::logging::log<phosphor::logging::level::ERR>(
             "getSensorDataRecord: invalidSensorNumber");
+        return GENERAL_ERROR;
+    }
+    uint8_t sensornumber = static_cast<uint8_t>(sensorNum);
+    uint8_t lun = static_cast<uint8_t>(sensorNum >> 8);
+
+    if ((sensornumber != static_cast<uint8_t>(sensNumFromRecID)) &&
+        (lun != ctx->lun))
+    {
+        phosphor::logging::log<phosphor::logging::level::ERR>(
+            "getSensorDataRecord: sensor record mismatch");
         return GENERAL_ERROR;
     }
 
@@ -1983,7 +2104,7 @@ static ipmi::RspType<uint8_t, // respcount
     {
         return ipmi::responseResponseError();
     }
-    uint16_t numSensors = sensorTree.size();
+    uint16_t numSensors = getNumberOfSensors();
     if (count.value_or(0) == getSdrCount)
     {
         // Count the number of Type 1 SDR entries assigned to the LUN
@@ -2089,7 +2210,7 @@ ipmi::RspType<uint8_t,  // sdr version
     }
 
     uint16_t recordCount =
-        sensorTree.size() + fruCount + ipmi::storage::type12Count;
+        getNumberOfSensors() + fruCount + ipmi::storage::type12Count;
 
     uint8_t operationSupport = static_cast<uint8_t>(
         SdrRepositoryInfoOps::overflow); // write not supported
@@ -2172,7 +2293,7 @@ ipmi::RspType<uint16_t,            // next record ID
 
     auto& sensorTree = getSensorTree();
     size_t lastRecord =
-        sensorTree.size() + fruCount + ipmi::storage::type12Count - 1;
+        getNumberOfSensors() + fruCount + ipmi::storage::type12Count - 1;
     uint16_t nextRecordId = lastRecord > recordID ? recordID + 1 : 0XFFFF;
 
     if (!getSensorSubtree(sensorTree) && sensorTree.empty())
