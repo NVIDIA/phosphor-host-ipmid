@@ -853,11 +853,6 @@ void register_netfn_storage_functions()
                           ipmi::storage::cmdGetSelTime, ipmi::Privilege::User,
                           ipmiStorageGetSelTime);
 
-    // <Set SEL Time>
-    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
-                          ipmi::storage::cmdSetSelTime,
-                          ipmi::Privilege::Operator, ipmiStorageSetSelTime);
-
     // <Get SEL Entry>
     ipmi_register_callback(NETFUN_STORAGE, IPMI_CMD_GET_SEL_ENTRY, NULL,
                            getSELEntry, PRIVILEGE_USER);
@@ -909,6 +904,10 @@ void register_netfn_storage_functions()
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
                           ipmi::storage::cmdReserveSel, ipmi::Privilege::User,
                           ipmiStorageReserveSel);
+    // <Set SEL Time>
+    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
+                          ipmi::storage::cmdSetSelTime,
+                          ipmi::Privilege::Operator, ipmiStorageSetSelTime);
 
     ipmi::fru::registerCallbackHandler();
     return;
