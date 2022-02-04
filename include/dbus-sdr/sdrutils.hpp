@@ -55,6 +55,12 @@ static constexpr uint16_t lun3Sensor0 = 0x300;
 static constexpr uint16_t invalidSensorNumber = 0xFFFF;
 static constexpr uint8_t reservedSensorNumber = 0xFF;
 
+static constexpr uint8_t sysEntityInstance = 0x01;
+static constexpr uint8_t eidReserved = 0x00;
+static constexpr uint8_t powerSupplyEntityId = 0x0a;
+static constexpr uint8_t powerSupplySensorType = 0x08;
+static constexpr uint8_t sensorSpecificEvent = 0x6f;
+
 namespace details
 {
 // Enable/disable the logging of stats instrumentation
@@ -353,6 +359,8 @@ uint16_t getSensorNumberFromPath(const std::string& path);
 uint8_t getSensorEventTypeFromPath(const std::string& path);
 
 std::string getPathFromSensorNumber(uint16_t sensorNum);
+
+uint8_t getEntityInstanceFromName(const std::string& path);
 
 namespace ipmi
 {

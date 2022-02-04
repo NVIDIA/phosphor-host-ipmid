@@ -98,9 +98,10 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
         "xyz.openbmc_project.Sensor.Threshold.Critical"};
     static constexpr const std::array vrInterfaces = {
         "xyz.openbmc_project.Control.VoltageRegulatorMode"};
+    static constexpr const std::array powerSupplyInterfaces = {
+        "xyz.openbmc_project.Inventory.Item.PowerSupply"};
 
-    bool sensorRez =
-        lbdUpdateSensorTree("/xyz/openbmc_project/sensors", sensorInterfaces);
+    lbdUpdateSensorTree("/xyz/openbmc_project/sensors", sensorInterfaces);
 
 #ifdef FEATURE_HYBRID_SENSORS
 
@@ -127,14 +128,11 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
 
 #endif
 
-    // Error if searching for sensors failed.
-    if (!sensorRez)
-    {
-        return sensorUpdatedIndex;
-    }
-
     // Add VR control as optional search path.
     (void)lbdUpdateSensorTree("/xyz/openbmc_project/vr", vrInterfaces);
+    // Add Power Supply sensors
+    (void)lbdUpdateSensorTree("/xyz/openbmc_project/inventory/system/chassis",
+                              powerSupplyInterfaces);
 
     subtree = sensorTreePtr;
     sensorUpdatedIndex++;
@@ -305,6 +303,32 @@ std::string getPathFromSensorNumber(uint16_t sensorNum)
         phosphor::logging::log<phosphor::logging::level::ERR>(e.what());
         return std::string();
     }
+}
+
+/**
+ * @brief Gets entityInstance from sensor name
+ *
+ * @param name - sensor name
+ * @return entityInstance - returns entity instance
+ */
+uint8_t getEntityInstanceFromName(const std::string& name)
+{
+    uint8_t entityInstance = 0x01;
+
+    std::size_t instanceLast = name.size();
+
+    std::size_t instanceFirst = name.find_last_not_of("0123456789");
+    if (instanceFirst == std::string::npos)
+    {
+        return entityInstance;
+    }
+    instanceFirst++;
+    if (instanceFirst != instanceLast)
+    {
+        entityInstance = std::stoi(name.substr(instanceFirst, instanceLast));
+    }
+
+    return entityInstance;
 }
 
 namespace ipmi

@@ -58,6 +58,9 @@ enum class IPMISensorReadingByte3 : uint8_t
     lowerNonRecoverable = (1 << 2),
     lowerCritical = (1 << 1),
     lowerNonCritical = (1 << 0),
+    presenceDetected = (1 << 0),
+    failureDetected = (1 << 1),
+    inputLost = (1 << 3),
 };
 
 enum class IPMISensorEventEnableByte2 : uint8_t
@@ -99,6 +102,16 @@ enum class IPMIGetSensorEventEnableThresholds : uint8_t
     upperCriticalGoingHigh = 9,
     upperNonRecoverableGoingLow = 10,
     upperNonRecoverableGoingHigh = 11,
+};
+
+/**
+ * @enum power_supply sensor event enable bit mask
+ */
+enum class IPMISensorEventEnablePower : uint8_t
+{
+    presenceDetected = (1 << 0),
+    failureDetected = (1 << 1),
+    inputLost = (1 << 3),
 };
 
 enum class IPMINetfnSensorCmds : ipmi_cmd_t

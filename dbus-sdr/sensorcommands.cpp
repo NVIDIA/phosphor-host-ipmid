@@ -186,6 +186,8 @@ namespace sensor
 {
 static constexpr const char* vrInterface =
     "xyz.openbmc_project.Control.VoltageRegulatorMode";
+static constexpr const char* powerInterface =
+    "xyz.openbmc_project.Inventory.Item.PowerSupply";
 static constexpr const char* sensorInterface =
     "xyz.openbmc_project.Sensor.Value";
 } // namespace sensor
@@ -531,6 +533,66 @@ bool getVrEventStatus(ipmi::Context::ptr ctx, const std::string& connection,
     }
     return true;
 }
+
+/**
+ * @brief Gets assertion status for power type sensor
+ *
+ * @param sensorMap - map of dbus interface
+ * @param assertions - assertion status
+ * @return bool - true if valid, false otherwise
+ */
+bool getPowerStatus(const ipmi::DbusInterfaceMap& sensorMap,
+                    uint8_t& assertions)
+{
+    auto presenceObject = sensorMap.find("xyz.openbmc_project.Inventory.Item");
+    if (presenceObject != sensorMap.end())
+    {
+        auto present = presenceObject->second.find("Present");
+        if (present != presenceObject->second.end())
+        {
+            if (std::get<bool>(present->second))
+            {
+                assertions |= static_cast<uint8_t>(
+                    IPMISensorReadingByte3::presenceDetected);
+            }
+        }
+    }
+
+    auto functionalObject =
+        sensorMap.find("xyz.openbmc_project.State.Decorator.OperationalStatus");
+    if (functionalObject != sensorMap.end())
+    {
+        auto functional = functionalObject->second.find("Functional");
+        if (functional != functionalObject->second.end())
+        {
+            if (!std::get<bool>(functional->second))
+            {
+                assertions |= static_cast<uint8_t>(
+                    IPMISensorReadingByte3::failureDetected);
+            }
+        }
+    }
+
+    auto powerObject =
+        sensorMap.find("xyz.openbmc_project.State.Decorator.PowerState");
+    if (powerObject != sensorMap.end())
+    {
+        auto power = powerObject->second.find("PowerState");
+        if (power != powerObject->second.end())
+        {
+            if (std::get<std::string>(power->second) ==
+                "xyz.openbmc_project."
+                "State.Decorator.PowerState.State.Off")
+            {
+                assertions |=
+                    static_cast<uint8_t>(IPMISensorReadingByte3::inputLost);
+            }
+        }
+    }
+
+    return true;
+}
+
 } // namespace sensor
 
 ipmi::RspType<> ipmiSenPlatformEvent(ipmi::Context::ptr ctx,
@@ -782,6 +844,27 @@ ipmi::RspType<uint8_t, uint8_t, uint8_t, std::optional<uint8_t>>
     {
         return ipmi::responseResponseError();
     }
+
+    // handle Power_supply typed sensor
+    auto powerInterface = sensorMap.find(sensor::powerInterface);
+    if (powerInterface != sensorMap.end())
+    {
+        uint8_t assertions = 0;
+
+        if (!sensor::getPowerStatus(sensorMap, assertions))
+        {
+            return ipmi::responseResponseError();
+        }
+
+        uint8_t value = 0;
+        uint8_t operation = 0;
+        operation |=
+            static_cast<uint8_t>(IPMISensorReadingByte2::sensorScanningEnable);
+
+        return ipmi::responseSuccess(value, operation, assertions,
+                                     std::nullopt);
+    }
+
     auto sensorObject = sensorMap.find(sensor::sensorInterface);
 
     if (sensorObject == sensorMap.end() ||
@@ -1318,6 +1401,43 @@ ipmi::RspType<uint8_t, // enabled
         return ipmi::responseResponseError();
     }
 
+    // handle Power_supply typed sensor
+    auto powerInterface = sensorMap.find(sensor::powerInterface);
+    if (powerInterface != sensorMap.end())
+    {
+        enabled = static_cast<uint8_t>(
+            IPMISensorEventEnableByte2::sensorScanningEnable);
+        if (sensorMap.find("xyz.openbmc_project.Inventory.Item") !=
+            sensorMap.end())
+        {
+            assertionEnabledLsb |= static_cast<uint8_t>(
+                IPMISensorEventEnablePower::presenceDetected);
+            deassertionEnabledLsb |= static_cast<uint8_t>(
+                IPMISensorEventEnablePower::presenceDetected);
+        }
+        if (sensorMap.find(
+                "xyz.openbmc_project.State.Decorator.OperationalStatus") !=
+            sensorMap.end())
+        {
+            assertionEnabledLsb |= static_cast<uint8_t>(
+                IPMISensorEventEnablePower::failureDetected);
+            deassertionEnabledLsb |= static_cast<uint8_t>(
+                IPMISensorEventEnablePower::failureDetected);
+        }
+        if (sensorMap.find("xyz.openbmc_project.State.Decorator.PowerState") !=
+            sensorMap.end())
+        {
+            assertionEnabledLsb |=
+                static_cast<uint8_t>(IPMISensorEventEnablePower::inputLost);
+            deassertionEnabledLsb |=
+                static_cast<uint8_t>(IPMISensorEventEnablePower::inputLost);
+        }
+
+        return ipmi::responseSuccess(enabled, assertionEnabledLsb,
+                                     assertionEnabledMsb, deassertionEnabledLsb,
+                                     deassertionEnabledMsb);
+    }
+
     auto warningInterface =
         sensorMap.find("xyz.openbmc_project.Sensor.Threshold.Warning");
     auto criticalInterface =
@@ -1837,6 +1957,113 @@ void constructStaticSensorSdr(ipmi::Context::ptr ctx, uint16_t sensorNum,
 }
 #endif
 
+/**
+ * @brief Constructs the SDRinfo header for compact sdr
+ *
+ * @param sensorNum - unique number identifying sensor
+ * @param recordID - SDR record ID
+ * @param record - compactrecord data struct reference
+ */
+void constructCompactSdrHeaderKey(uint16_t sensorNum, uint16_t recordID,
+                                  get_sdr::SensorDataCompactRecord& record)
+{
+    uint8_t sensorNumber = static_cast<uint8_t>(sensorNum);
+    uint8_t lun = static_cast<uint8_t>(sensorNum >> 8);
+
+    get_sdr::header::set_record_id(
+        recordID, reinterpret_cast<get_sdr::SensorDataRecordHeader*>(&record));
+
+    record.header.sdr_version = ipmiSdrVersion;
+    record.header.record_type = get_sdr::SENSOR_DATA_COMPACT_RECORD;
+    record.header.record_length = sizeof(get_sdr::SensorDataCompactRecord) -
+                                  sizeof(get_sdr::SensorDataRecordHeader);
+    record.key.owner_id = bmcI2CAddr;
+    record.key.owner_lun = lun;
+    record.key.sensor_number = sensorNumber;
+
+    record.body.entity_id = eidReserved;
+    record.body.entity_instance = sysEntityInstance;
+}
+
+/**
+ * @brief Constructs the SDRinfo for power type sensor
+ *
+ * @param ctx - IPMI context pointer
+ * @param sensorNum - unique number identifying sensor
+ * @param recordID - SDR record ID
+ * @param service - sensor d-bus service
+ * @param path - sensor dbus object path
+ * @param record - compactrecord data struct reference
+ * @return bool - true if valid, false otherwise
+ */
+bool constructPowerSdr(ipmi::Context::ptr ctx, uint16_t sensorNum,
+                       uint16_t recordID, const std::string& service,
+                       const std::string& path,
+                       get_sdr::SensorDataCompactRecord& record)
+{
+    uint8_t sensorNumber = static_cast<uint8_t>(sensorNum);
+    constructCompactSdrHeaderKey(sensorNum, recordID, record);
+
+    DbusInterfaceMap sensorMap;
+    if (!getSensorMap(ctx, service, path, sensorMap, sensorMapSdrUpdatePeriod))
+    {
+        phosphor::logging::log<phosphor::logging::level::ERR>(
+            "Failed to update sensor map for Power sensor",
+            phosphor::logging::entry("SERVICE=%s", service.c_str()),
+            phosphor::logging::entry("PATH=%s", path.c_str()));
+        return false;
+    }
+
+    record.body.entity_id = powerSupplyEntityId;
+    record.body.sensor_type = powerSupplySensorType;
+    record.body.event_reading_type = sensorSpecificEvent;
+    if (sensorMap.find("xyz.openbmc_project.Inventory.Item") != sensorMap.end())
+    {
+        record.body.supported_assertions[0] |=
+            static_cast<uint8_t>(IPMISensorEventEnablePower::presenceDetected);
+        record.body.supported_deassertions[0] |=
+            static_cast<uint8_t>(IPMISensorEventEnablePower::presenceDetected);
+        record.body.discrete_reading_setting_mask[0] |=
+            static_cast<uint8_t>(IPMISensorEventEnablePower::presenceDetected);
+    }
+    if (sensorMap.find(
+            "xyz.openbmc_project.State.Decorator.OperationalStatus") !=
+        sensorMap.end())
+    {
+        record.body.supported_assertions[0] |=
+            static_cast<uint8_t>(IPMISensorEventEnablePower::failureDetected);
+        record.body.supported_deassertions[0] |=
+            static_cast<uint8_t>(IPMISensorEventEnablePower::failureDetected);
+        record.body.discrete_reading_setting_mask[0] |=
+            static_cast<uint8_t>(IPMISensorEventEnablePower::failureDetected);
+    }
+    if (sensorMap.find("xyz.openbmc_project.State.Decorator.PowerState") !=
+        sensorMap.end())
+    {
+        record.body.supported_assertions[0] |=
+            static_cast<uint8_t>(IPMISensorEventEnablePower::inputLost);
+        record.body.supported_deassertions[0] |=
+            static_cast<uint8_t>(IPMISensorEventEnablePower::inputLost);
+        record.body.discrete_reading_setting_mask[0] |=
+            static_cast<uint8_t>(IPMISensorEventEnablePower::inputLost);
+    }
+
+    // populate sensor name from path
+    auto name = sensor::parseSdrIdFromPath(path);
+    record.body.entity_instance = getEntityInstanceFromName(name);
+    // determine minimum length of the sensor name string
+    // either sizeof name or 16 bytes as per IPMI spec
+    int nameSize = std::min(name.size(), sizeof(record.body.id_string));
+    record.body.id_string_info = nameSize;
+    std::strncpy(record.body.id_string, name.c_str(),
+                 nameSize);
+
+    // Remember the sensor name, as determined for this sensor number
+    details::sdrStatsTable.updateName(sensorNumber, name);
+
+    return true;
+}
+
 // Construct type 3 SDR header and key (for VR and other discrete sensors)
 void constructEventSdrHeaderKey(uint16_t sensorNum, uint16_t recordID,
                                 get_sdr::SensorDataEventRecord& record)
@@ -2091,6 +2318,27 @@ static int
         }
         else if (!constructVrSdr(ctx, sensorNum, recordID, connection, path,
                                  record))
+        {
+            return GENERAL_ERROR;
+        }
+        recordData.insert(recordData.end(), (uint8_t*)&record,
+                          ((uint8_t*)&record) + sizeof(record));
+    }
+
+    // Contruct SDR type 2 record for Power sensor
+    if (std::find(interfaces.begin(), interfaces.end(),
+                  sensor::powerInterface) != interfaces.end())
+    {
+        get_sdr::SensorDataCompactRecord record = {0};
+
+        // If the request doesn't read SDR body, construct only header and key
+        // part to avoid additional DBus transaction.
+        if (readBytes <= sizeof(record.header) + sizeof(record.key))
+        {
+            constructCompactSdrHeaderKey(sensorNum, recordID, record);
+        }
+        else if (!constructPowerSdr(ctx, sensorNum, recordID, connection, path,
+                                    record))
         {
             return GENERAL_ERROR;
         }

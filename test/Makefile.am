@@ -110,3 +110,26 @@ sensorcommands_unittest_LDFLAGS = \
 sensorcommands_unittest_SOURCES = %reldir%/dbus-sdr/sensorcommands_unittest.cpp
 sensorcommands_unittest_LDADD = $(top_builddir)/dbus-sdr/sensorutils.o
 check_PROGRAMS += %reldir%/sensorcommands_unittest
+
+# Build/add sdrutil_unittest to test suite
+sdrutils_unittest_CPPFLAGS = \
+    -Igtest \
+    $(GTEST_CPPFLAGS) \
+    $(AM_CPPFLAGS)
+sdrutils_unittest_CXXFLAGS = \
+    $(PTHREAD_CFLAGS) \
+    $(CODE_COVERAGE_CXXFLAGS) \
+    $(CODE_COVERAGE_CFLAGS)
+sdrutils_unittest_LDFLAGS = \
+    -lgtest_main \
+    -lgtest \
+    -lsdbusplus \
+    -lsystemd \
+    -pthread \
+    $(OESDK_TESTCASE_FLAGS) \
+    $(CODE_COVERAGE_LDFLAGS)
+sdrutils_unittest_SOURCES = %reldir%/dbus-sdr/sdrutils_unittest.cpp
+sdrutils_unittest_LDADD = $(top_builddir)/dbus-sdr/sdrutils.o \
+                          $(top_builddir)/libipmid/sdbus-asio.o
+check_PROGRAMS += %reldir%/sdrutils_unittest
+
