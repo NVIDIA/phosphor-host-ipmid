@@ -2414,7 +2414,8 @@ void registerSensorFunctions()
     // <Get Device SDR Info>
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnSensor,
                           ipmi::sensor_event::cmdGetDeviceSdrInfo,
-                          ipmi::Privilege::User, ipmiSensorGetDeviceSdrInfo);
+                          ipmi::Privilege::sysIface,
+                          ipmiSensorGetDeviceSdrInfo);
 
     // <Get SDR Allocation Info>
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
@@ -2425,7 +2426,7 @@ void registerSensorFunctions()
     // <Reserve SDR Repo>
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnSensor,
                           ipmi::sensor_event::cmdReserveDeviceSdrRepository,
-                          ipmi::Privilege::User, ipmiStorageReserveSDR);
+                          ipmi::Privilege::sysIface, ipmiStorageReserveSDR);
 
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
                           ipmi::storage::cmdReserveSdrRepository,
@@ -2434,7 +2435,7 @@ void registerSensorFunctions()
     // <Get Sdr>
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnSensor,
                           ipmi::sensor_event::cmdGetDeviceSdr,
-                          ipmi::Privilege::User, ipmiStorageGetSDR);
+                          ipmi::Privilege::sysIface, ipmiStorageGetSDR);
 
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
                           ipmi::storage::cmdGetSdr, ipmi::Privilege::User,

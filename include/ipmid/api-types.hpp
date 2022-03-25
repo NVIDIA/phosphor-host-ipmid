@@ -69,6 +69,7 @@ enum class Privilege : uint8_t
     Operator,
     Admin,
     Oem,
+    sysIface = 0xff,
 };
 
 // IPMI Net Function number as specified by IPMI V2.0 spec.
