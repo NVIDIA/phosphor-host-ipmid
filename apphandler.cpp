@@ -1250,7 +1250,7 @@ static std::string sysInfoReadSystemName()
 
 static constexpr uint8_t paramRevision = 0x11;
 static constexpr size_t configParameterLength = 16;
-static constexpr size_t configParameter0Length = 1;
+static constexpr size_t configParameter0Length = 0;
 
 static constexpr size_t smallChunkSize = 14;
 static constexpr size_t fullChunkSize = 16;
@@ -1331,12 +1331,12 @@ ipmi::RspType<uint8_t,                // Parameter revision
     // Parameters other than Set In Progress are assumed to be strings.
     std::tuple<bool, std::string> ret =
         sysInfoParamStore->lookup(paramSelector);
+    std::string& paramString = std::get<1>(ret);
     bool found = std::get<0>(ret);
     if (!found)
     {
-        return ipmi::responseSensorInvalid();
+        paramString = "";
     }
-    std::string& paramString = std::get<1>(ret);
     std::vector<uint8_t> configData;
     size_t count = 0;
     if (setSelector == 0)
