@@ -679,7 +679,20 @@ ipmi_ret_t getFruSdrs(ipmi::Context::ptr ctx, size_t index,
 
     if (name.empty())
     {
-        name = "UNKNOWN";
+        auto findProductName = fruData->find("BOARD_PRODUCT_NAME");
+        auto findBoardName = fruData->find("PRODUCT_PRODUCT_NAME");
+        if (findProductName != fruData->end())
+        {
+            name = std::get<std::string>(findProductName->second);
+        }
+        else if (findBoardName != fruData->end())
+        {
+            name = std::get<std::string>(findBoardName->second);
+        }
+        else
+        {
+            name = "UNKNOWN";
+        }
     }
     if (name.size() > maxFruSdrNameSize)
     {
