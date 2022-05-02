@@ -945,6 +945,9 @@ RspType<> setLan(Context::ptr ctx, uint4_t channelBits, uint4_t reserved1,
                     return responseSuccess();
                 }
                 case IPSrc::Unspecified:
+                {
+                    return responseInvalidFieldRequest();
+                }
                 case IPSrc::Static:
                 {
                     channelCall<setDHCPv4Property>(
