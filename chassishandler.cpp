@@ -123,6 +123,12 @@ static constexpr const char* resetButtonIntf =
 static constexpr const char* resetButtonPath =
     "/xyz/openbmc_project/Chassis/Buttons/Reset0";
 
+// OpenBMC Host State Manager dbus framework
+constexpr auto hostStatePath = "/xyz/openbmc_project/state/host0";
+constexpr auto hostStateIntf = "xyz.openbmc_project.State.Host";
+constexpr auto IPMICommand =
+    "xyz.openbmc_project.State.Host.LastPowerOnCause.IPMICommand";
+
 // Phosphor Host State manager
 namespace State = sdbusplus::xyz::openbmc_project::State::server;
 
@@ -835,10 +841,6 @@ ipmi::RspType<> ipmiSetChassisCap(bool intrusion, bool fpLockout,
 int initiateHostStateTransition(ipmi::Context::ptr& ctx,
                                 State::Host::Transition transition)
 {
-    // OpenBMC Host State Manager dbus framework
-    constexpr auto hostStatePath = "/xyz/openbmc_project/state/host0";
-    constexpr auto hostStateIntf = "xyz.openbmc_project.State.Host";
-
     // Convert to string equivalent of the passed in transition enum.
     auto request = State::convertForMessage(transition);
 
@@ -861,6 +863,20 @@ int initiateHostStateTransition(ipmi::Context::ptr& ctx,
     log<level::INFO>(
         "Transition request initiated successfully",
         entry("USERID=%d, REQUEST=%s", ctx->userId, request.c_str()));
+
+    if (transition == State::Host::Transition::On ||
+        transition == State::Host::Transition::ForceWarmReboot ||
+        transition == State::Host::Transition::Reboot)
+    {
+        ec = ipmi::setDbusProperty(ctx, service, hostStatePath, hostStateIntf,
+                                   "LastPowerOnCause", IPMICommand);
+        if (ec)
+        {
+            log<level::ERR>("Failed to set LastPowerOnCause",
+                            entry("EXCEPTION=%s, REQUEST=%s",
+                                  ec.message().c_str(), request.c_str()));
+        }
+    }
     return 0;
 }
 
@@ -1064,6 +1080,22 @@ bool getACFailStatus()
     }
     return acFail;
 }
+
+bool isLastPowerOnViaIPMI()
+{
+
+    std::shared_ptr<sdbusplus::asio::connection> bus = getSdBus();
+    auto service = ipmi::getService(*bus, hostStateIntf, hostStatePath);
+    ipmi::Value PowerCause = ipmi::getDbusProperty(
+        *bus, service, hostStatePath, hostStateIntf, "LastPowerOnCause");
+
+    if (std::get<std::string>(PowerCause) == IPMICommand)
+    {
+        return true;
+    }
+
+    return false;
+}
 } // namespace power_policy
 
 static std::optional<bool> getButtonEnabled(const std::string& buttonPath,
@@ -1193,7 +1225,7 @@ ipmi::RspType<bool,    // Power is on
     constexpr bool powerDownOverload = false;
     constexpr bool powerDownInterlock = false;
     constexpr bool powerDownPowerFault = false;
-    constexpr bool powerStatusIPMI = false;
+    bool powerStatusIPMI = power_policy::isLastPowerOnViaIPMI();
     constexpr bool chassisIntrusionActive = false;
     constexpr bool frontPanelLockoutActive = false;
     constexpr bool driveFault = false;
