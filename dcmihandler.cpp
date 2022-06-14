@@ -52,6 +52,10 @@ constexpr auto DHCP_OPT12_ENABLED = "SendHostNameEnabled";
 constexpr auto SENSOR_VALUE_INTF = "xyz.openbmc_project.Sensor.Value";
 constexpr auto SENSOR_VALUE_PROP = "Value";
 
+constexpr auto controlPowerModeIntf = "xyz.openbmc_project.Control.Power.Mode";
+constexpr auto controlPowerCapIntf =  "xyz.openbmc_project.Control.Power.Cap";
+constexpr auto control = "/xyz/openbmc_project/control/";
+
 using namespace phosphor::logging;
 
 namespace dcmi
@@ -371,7 +375,19 @@ ipmi_ret_t setPowerLimit(ipmi_netfn_t netfn, ipmi_cmd_t cmd,
         reinterpret_cast<const dcmi::SetPowerLimitRequest*>(request);
 
     sdbusplus::bus::bus sdbus{ipmid_get_sd_bus_connection()};
+    try
+    {
+        auto objectTree =ipmi::getDbusObject(sdbus,controlPowerModeIntf,control,"");
 
+        ipmi::setDbusProperty(sdbus, objectTree.second, objectTree.first,
+                                      controlPowerCapIntf,
+                                      "PowerCap", (uint32_t)requestData->powerLimit);
+    }
+    catch (sdbusplus::exception_t& e)
+    {
+        *data_len = 0;
+        return IPMI_CC_UNSPECIFIED_ERROR;
+    }
     // Only process the power limit requested in watts.
     try
     {
@@ -403,9 +419,36 @@ ipmi_ret_t applyPowerLimit(ipmi_netfn_t netfn, ipmi_cmd_t cmd,
 
     auto requestData =
         reinterpret_cast<const dcmi::ApplyPowerLimitRequest*>(request);
+    bool activate = static_cast<bool>(requestData->powerLimitAction);
 
     sdbusplus::bus::bus sdbus{ipmid_get_sd_bus_connection()};
 
+    try
+    {
+        auto objectTree =ipmi::getDbusObject(sdbus,controlPowerModeIntf,control,"");
+  
+        if(activate)
+        {
+            ipmi::setDbusProperty(
+                            sdbus,  objectTree.second, objectTree.first,
+                            controlPowerModeIntf, "PowerMode",
+                            std::string("xyz.openbmc_project.Control.Power."
+                                        "Mode.PowerMode.PowerSaving"));
+        }
+        else
+        {
+            ipmi::setDbusProperty(
+                            sdbus,  objectTree.second, objectTree.first,
+                            controlPowerModeIntf, "PowerMode",
+                            std::string("xyz.openbmc_project.Control.Power."
+                                        "Mode.PowerMode.MaximumPerformance"));
+        }
+    }
+    catch (const sdbusplus::exception_t& e)
+    {
+        *data_len = 0;
+        return IPMI_CC_UNSPECIFIED_ERROR;
+    }
     try
     {
         dcmi::setPcapEnable(sdbus,
