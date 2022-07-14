@@ -60,6 +60,7 @@ static constexpr auto gDCMIPowerMgmtCapability = "PowerManagement";
 static constexpr auto gDCMIPowerMgmtSupported = 0x1;
 static constexpr auto gMaxSELEntriesMask = 0xFFF;
 static constexpr auto gByteBitSize = 8;
+constexpr auto networkdService = "systemd-networkd.service";
 
 namespace assettag
 {
@@ -92,6 +93,13 @@ struct Response
 #endif
     uint8_t instance; //!< Entity instance number
 } __attribute__((packed));
+
+/** @brief Restart the systemd unit
+*  @param[in] unit - systemd unit name which needs to be
+*                    restarted.
+*/
+void restartSystemdUnit(const std::string& unit);
+
 
 using ResponseList = std::vector<Response>;
 using Value = uint8_t;

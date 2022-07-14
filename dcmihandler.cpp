@@ -258,9 +258,16 @@ bool getDHCPEnabled()
         ipmi::getDbusObject(bus, ethernetIntf, networkRoot, ethdevice);
     auto service = ipmi::getService(bus, ethernetIntf, ethernetObj.first);
     auto value = ipmi::getDbusProperty(bus, service, ethernetObj.first,
-                                       ethernetIntf, "DHCPEnabled");
-
-    return std::get<bool>(value);
+   		    ethernetIntf, "DHCPEnabled");
+    auto enumValue = std::get<std::string>(value);
+    if (enumValue == "xyz.openbmc_project.Network.EthernetInterface.DHCPConf.none")
+    {
+	    return false;
+    }
+    else
+    {
+	    return true;
+    }	
 }
 
 bool getDHCPOption(std::string prop)
@@ -299,7 +306,24 @@ Json parseJSONConfig(const std::string& configFile)
 
     return data;
 }
+void restartSystemdUnit(const std::string& unit)
+{
+    sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
 
+    try
+    {
+        auto method = bus.new_method_call(systemBusName, systemPath,
+                                          systemIntf, "RestartUnit");
+        method.append(unit.c_str(), "replace");
+        bus.call_noreply(method);
+    }
+    catch (const sdbusplus::exception::SdBusError& ex)
+    {
+        log<level::ERR>("Failed to restart nslcd service",
+                        entry("ERR=%s", ex.what()));
+        elog<InternalFailure>();
+    }
+}
 } // namespace dcmi
 
 ipmi_ret_t getPowerLimit(ipmi_netfn_t netfn, ipmi_cmd_t cmd,
@@ -1095,11 +1119,7 @@ ipmi_ret_t setDCMIConfParams(ipmi_netfn_t netfn, ipmi_cmd_t cmd,
                 if ((requestData->data[0] & DCMI_ACTIVATE_DHCP_MASK) &&
                     dcmi::getDHCPEnabled())
                 {
-                    // When these conditions are met we have to trigger DHCP
-                    // protocol restart using the latest parameter settings, but
-                    // as per n/w manager design, each time when we update n/w
-                    // parameters, n/w service is restarted. So we no need to
-                    // take any action in this case.
+                     dcmi::restartSystemdUnit(dcmi::networkdService);
                 }
                 break;
 
