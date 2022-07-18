@@ -2610,6 +2610,112 @@ ipmi::RspType<uint16_t,            // next record ID
 
     return ipmi::responseSuccess(nextRecordId, recordData);
 }
+namespace dcmi
+{
+
+/** @brief implements the DCMI Get Sensor Info Command
+ *  @param
+ *   - sensorType - Type of the sensor
+ *   - entityId - Entity ID
+ *   - entityInstance - Entity Instance (0 means all instances)
+ *   - instanceStart - Instance start (used if instance is 0) 
+ *
+ *  @returns completion code plus response data
+ *   - numInstances - No of instances for requested id
+ *   - numRecords - No of record ids in the response
+ *   - sensors - SDR Record ID corresponding to the Entity IDs 
+ */
+ ipmi::RspType<uint8_t, // No of instances for requested id
+	      uint8_t,  // No of record ids in the response
+	      std::vector<uint16_t> // SDR Record ID corresponding to the Entity IDs 
+              >
+getSensorInfo(ipmi::Context::ptr ctx,int8_t sensorType, uint8_t entityId,
+		uint8_t entityInstance,uint8_t instanceStart)
+{
+    auto match = dcmi::validEntityId.find(entityId);
+    if (match == dcmi::validEntityId.end())
+    {
+        log<level::ERR>("Unknown Entity ID",
+                        entry("ENTITY_ID=%d", entityId));
+
+        return ipmi::responseInvalidFieldRequest(); 
+    }
+
+    if (sensorType != dcmi::temperatureSensorType)
+    {
+        log<level::ERR>("Invalid sensor type",
+                        entry("SENSOR_TYPE=%d", sensorType));
+
+        return ipmi::responseInvalidFieldRequest();
+    }
+    auto& sensorTree = getSensorTree();
+    if (!getSensorSubtree(sensorTree) && sensorTree.empty())
+    {
+         return ipmi::responseUnspecifiedError();
+    }
+
+    std::vector<uint16_t> sensorRec{};
+    uint8_t numInstances = 0,numRecords = 0;
+
+    for (const auto& sensor : sensorTree)
+    {
+        auto sensorTypeValue = getSensorTypeFromPath(sensor.first);
+        if (sensorTypeValue != dcmi::temperatureSensorType)
+        {
+            continue;
+        }
+        auto connection = sensor.second.begin()->first;
+        auto interfaces = sensor.second.begin()->second;
+    
+        DbusInterfaceMap sensorMap;
+        if (!getSensorMap(ctx, connection, sensor.first, sensorMap,sensorMapSdrUpdatePeriod))
+        {
+                phosphor::logging::log<phosphor::logging::level::ERR>(
+                "Failed to update sensor map for threshold sensor",
+                phosphor::logging::entry("SERVICE=%s", connection.c_str()),
+                phosphor::logging::entry("PATH=%s", sensor.first.c_str()));
+                continue;
+        }
+        uint8_t entityIdValue = 0;
+        uint8_t entityInstanceValue = 0;
+
+        updateIpmiFromAssociation(sensor.first, sensorMap, entityIdValue, entityInstanceValue);
+        if (!entityInstance)
+        {
+            if(entityIdValue == match->first || entityIdValue == match->second)
+            {
+                auto recordId = getSensorNumberFromPath(sensor.first);
+                if(recordId != invalidSensorNumber)
+                {
+                    numInstances++;
+                    if (numInstances <= maxRecords)
+                    {
+                        sensorRec.push_back(recordId);
+                    }
+                }
+            }
+        }
+        else
+        {
+            if(entityIdValue == match->first || entityIdValue == match->second)
+            {
+               if(entityInstance == entityInstanceValue)
+               {
+                    auto recordId = getSensorNumberFromPath(sensor.first);
+                    if((recordId != invalidSensorNumber) && sensorRec.empty())
+                    {
+                        sensorRec.push_back(recordId);
+                    }
+               }
+               numInstances++;
+            }
+        }
+    }
+    numRecords = sensorRec.size();
+    return ipmi::responseSuccess(numInstances,numRecords,sensorRec);
+}
+} // namespace dcmi
+
 /* end storage commands */
 
 void registerSensorFunctions()
@@ -2688,5 +2794,9 @@ void registerSensorFunctions()
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
                           ipmi::storage::cmdGetSdr, ipmi::Privilege::User,
                           ipmiStorageGetSDR);
+      // <Get DCMI Sensor Info>
+    ipmi::registerGroupHandler(ipmi::prioOpenBmcBase, ipmi::dcmi::groupExtIpmi, ipmi::dcmi::cmdGetSensorInfo,
+                               ipmi::Privilege::User,
+                               ipmi::dcmi::getSensorInfo);
 }
 } // namespace ipmi
