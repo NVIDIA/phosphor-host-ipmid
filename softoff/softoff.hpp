@@ -34,7 +34,7 @@ class SoftPowerOff
     SoftPowerOff(sdbusplus::bus::bus& bus, sd_event* event,
                  const char* objPath) :
         sdbusplus::server::object::object<Base::SoftPowerOff>(bus, objPath,
-                                                              false),
+                                                              SoftPowerOff::action::defer_emit),
         bus(bus), timer(event),
         hostControlSignal(
             bus,
