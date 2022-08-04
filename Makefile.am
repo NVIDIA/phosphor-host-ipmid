@@ -108,6 +108,7 @@ libipmi20_la_SOURCES = \
 	globalhandler.cpp \
 	groupext.cpp \
 	selutility.cpp \
+	commonselutility.cpp \
 	ipmi_fru_info_area.cpp \
 	read_fru_data.cpp \
 	sensordatahandler.cpp \
@@ -172,10 +173,18 @@ if FEATURE_HYBRID_SENSORS
 libdynamiccmds_la_LIBADD += libipmi20.la
 endif
 libdynamiccmds_la_SOURCES = \
-	dbus-sdr/sensorcommands.cpp \
-	dbus-sdr/storagecommands.cpp \
-	dbus-sdr/sdrutils.cpp \
-	dbus-sdr/sensorutils.cpp
+        dbus-sdr/sensorcommands.cpp \
+        dbus-sdr/sdrutils.cpp \
+        dbus-sdr/sensorutils.cpp \
+	dbus-sdr/frucommands.cpp \
+        commonselutility.cpp
+if DBUS_LOGGER_LOGGING_SERVICE
+libdynamiccmds_la_SOURCES += \
+	dbus-sdr/dbus_selcommands.cpp 
+else
+libdynamiccmds_la_SOURCES += \
+        dbus-sdr/file_selcommands.cpp
+endif
 libdynamiccmds_la_LDFLAGS = \
 	$(PHOSPHOR_LOGGING_LIBS) \
 	$(libmapper_LIBS) \
