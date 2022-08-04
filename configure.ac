@@ -325,6 +325,29 @@ AC_ARG_VAR(MAX_SEL_ENTRIES, [max sel entries])
 AS_IF([test "x$MAX_SEL_ENTRIES" == "x"], [MAX_SEL_ENTRIES=4096])
 AC_DEFINE_UNQUOTED([MAX_SEL_ENTRIES], [$MAX_SEL_ENTRIES], [max sel entries])
 
+# Dbus Sel Logger is disabled by default; offer a way to enable it.
+# Dbus-logger will enable dbus logging feature for dynamic sensors
+# this can be done by 'enable-dbus-logger' flag to set from phosphor-
+# ipmi-host_%bbappend. When enabled, the dbus_selcommands.cpp and
+# dbus_selutility.cpp files contents will be compiled and added to
+# the project.
+AC_ARG_ENABLE([dbus-logger],
+    [ --enable-dbus-logger    Enable/Disable dbus sel logger feature],
+    [case "${enableval}" in
+      yes) dbus_logger=true ;;
+      no) dbus_logger=false ;;
+      *) AC_MSG_ERROR([bad value ${enableval} for --enable-dbus-logger]) ;;
+      esac],[dbus_logger=false]
+      )
+AM_CONDITIONAL([DBUS_LOGGER_LOGGING_SERVICE], [test x$dbus_logger = xtrue])
+
+AS_IF([test x$dbus_logger = xtrue],
+    AC_MSG_NOTICE([Enabling sel logger])
+    [cpp_flags="$cpp_flags -DDBUS_LOGGER_LOGGING_SERVICE"]
+    AC_SUBST([CPPFLAGS], [$cpp_flags]),
+    AC_MSG_WARN([Disabling sel logger feature])
+)
+
 # Create configured output
 AC_CONFIG_FILES([
     Makefile
