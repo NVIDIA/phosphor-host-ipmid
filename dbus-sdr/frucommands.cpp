@@ -46,7 +46,6 @@ int get()
 } // namespace erase_time
 } // namespace dynamic_sensors::ipmi::sel
 
->>>>>>> origin/master:dbus-sdr/storagecommands.cpp
 namespace ipmi
 {
 
@@ -1232,7 +1231,6 @@ std::vector<uint8_t>
     return resp;
 }
 
->>>>>>> origin/master:dbus-sdr/storagecommands.cpp
 std::vector<uint8_t> getType12SDRs(uint16_t index, uint16_t recordId)
 {
     std::vector<uint8_t> resp;
