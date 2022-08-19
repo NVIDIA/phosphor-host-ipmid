@@ -59,8 +59,16 @@ enum class IPMISensorReadingByte3 : uint8_t
     lowerCritical = (1 << 1),
     lowerNonCritical = (1 << 0),
     presenceDetected = (1 << 0),
+    procPresenceDetected = (1 << 7),
+    drivePresenceDetected = (1 << 0),
+    driveFault = (1 << 1),
+    drivePredictiveFailure = (1 << 2),
     failureDetected = (1 << 1),
     inputLost = (1 << 3),
+    watchdogExpire = (1 << 0),
+    watchdogHardReset = (1 << 1),
+    watchdogPowerOff = (1 << 2),
+    watchdogPowerCycle = (1 << 3),
 };
 
 enum class IPMISensorEventEnableByte2 : uint8_t
@@ -112,6 +120,35 @@ enum class IPMISensorEventEnablePower : uint8_t
     presenceDetected = (1 << 0),
     failureDetected = (1 << 1),
     inputLost = (1 << 3),
+};
+
+/**
+ * @enum processor sensor event enable bit mask
+ */
+enum class IPMISensorEventEnableProc : uint8_t
+{
+    procPresenceDetected = (1 << 7),
+};
+
+/**
+ * @enum power_supply sensor event enable bit mask
+ */
+enum class IPMISensorEventEnableDrive : uint8_t
+{
+    drivePresenceDetected = (1 << 0),
+    driveFault = (1 << 1),
+    drivePredictiveFailure = (1 << 2),
+};
+
+/**
+ * @enum power_supply sensor event enable bit mask
+ */
+enum class IPMISensorEventEnableWatchdog : uint8_t
+{
+    timerExpired = (1 << 0),
+    hardReset = (1 << 1),
+    powerDown = (1 << 2),
+    powerCycle = (1 << 3),
 };
 
 enum class IPMINetfnSensorCmds : ipmi_cmd_t

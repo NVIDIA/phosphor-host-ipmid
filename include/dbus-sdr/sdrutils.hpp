@@ -57,10 +57,6 @@ static constexpr uint8_t reservedSensorNumber = 0xFF;
 
 static constexpr uint8_t sysEntityInstance = 0x01;
 static constexpr uint8_t eidReserved = 0x00;
-static constexpr uint8_t powerSupplyEntityId = 0x0a;
-static constexpr uint8_t powerSupplySensorType = 0x08;
-static constexpr uint8_t sensorSpecificEvent = 0x6f;
-
 namespace details
 {
 // Enable/disable the logging of stats instrumentation
@@ -312,9 +308,13 @@ enum class SensorTypeCodes : uint8_t
     voltage = 0x2,
     current = 0x3,
     fan = 0x4,
+    processor = 0x07,
+    power_supply = 0x08,
+    power_unit = 0x09,
     other = 0xB,
     memory = 0x0c,
-    power_unit = 0x09,
+    drive_slot = 0x0D,
+    event_log = 0x10,
     buttons = 0x14,
     watchdog2 = 0x23,
 };
@@ -348,7 +348,16 @@ const static boost::container::flat_map<
          {"buttons", std::make_pair(SensorTypeCodes::buttons,
                                     SensorEventTypeCodes::sensorSpecified)},
          {"watchdog", std::make_pair(SensorTypeCodes::watchdog2,
-                                     SensorEventTypeCodes::sensorSpecified)}}};
+                                     SensorEventTypeCodes::sensorSpecified)},
+         {"drive", std::make_pair(SensorTypeCodes::drive_slot,
+                                  SensorEventTypeCodes::sensorSpecified)},
+         {"cpu", std::make_pair(SensorTypeCodes::processor,
+                                SensorEventTypeCodes::sensorSpecified)},
+         {"motherboard", std::make_pair(SensorTypeCodes::power_supply,
+                                        SensorEventTypeCodes::sensorSpecified)},
+         {"eventlogging",
+          std::make_pair(SensorTypeCodes::event_log,
+                         SensorEventTypeCodes::sensorSpecified)}}};
 
 std::string getSensorTypeStringFromPath(const std::string& path);
 

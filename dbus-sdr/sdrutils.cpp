@@ -98,8 +98,11 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
         "xyz.openbmc_project.Sensor.Threshold.Critical"};
     static constexpr const std::array vrInterfaces = {
         "xyz.openbmc_project.Control.VoltageRegulatorMode"};
-    static constexpr const std::array powerSupplyInterfaces = {
-        "xyz.openbmc_project.Inventory.Item.PowerSupply"};
+    static constexpr const std::array discreteInterfaces = {
+        "xyz.openbmc_project.Inventory.Item.PowerSupply",
+        "xyz.openbmc_project.Inventory.Item.Cpu",
+        "xyz.openbmc_project.Inventory.Item.Drive",
+        "xyz.openbmc_project.Inventory.Item.Watchdog"};
 
     lbdUpdateSensorTree("/xyz/openbmc_project/sensors", sensorInterfaces);
 
@@ -132,7 +135,10 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
     (void)lbdUpdateSensorTree("/xyz/openbmc_project/vr", vrInterfaces);
     // Add Power Supply sensors
     (void)lbdUpdateSensorTree("/xyz/openbmc_project/inventory/system/chassis",
-                              powerSupplyInterfaces);
+                              discreteInterfaces);
+    // Add discrete sensors
+    (void)lbdUpdateSensorTree("/xyz/openbmc_project/sensors/motherboard",
+                              discreteInterfaces);
 
     subtree = sensorTreePtr;
     sensorUpdatedIndex++;
