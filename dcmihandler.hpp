@@ -3,6 +3,7 @@
 #include "nlohmann/json.hpp"
 
 #include <map>
+#include <ipmid/utils.hpp>
 #include <sdbusplus/bus.hpp>
 #include <string>
 #include <vector>
@@ -200,34 +201,20 @@ void writeAssetTag(const std::string& assetTag);
 
 /** @brief Read the current power cap value
  *
- *  @param[in] bus - dbus connection
+ *  @param[in] Context - ctx
  *
  *  @return On success return the power cap value.
  */
-uint32_t getPcap(sdbusplus::bus::bus& bus);
+uint32_t getPcap(ipmi::Context::ptr& ctx);
 
 /** @brief Check if the power capping is enabled
  *
- *  @param[in] bus - dbus connection
+ *  @param[in] Context - ctx
  *
  *  @return true if the powerCap is enabled and false if the powercap
  *          is disabled.
  */
-bool getPcapEnabled(sdbusplus::bus::bus& bus);
-
-/** @struct GetPowerLimitResponse
- *
- *  DCMI payload for Get Power Limit command response.
- */
-struct GetPowerLimitResponse
-{
-    uint16_t reserved;       //!< Reserved.
-    uint8_t exceptionAction; //!< Exception action.
-    uint16_t powerLimit;     //!< Power limit requested in watts.
-    uint32_t correctionTime; //!< Correction time limit in milliseconds.
-    uint16_t reserved1;      //!< Reserved.
-    uint16_t samplingPeriod; //!< Statistics sampling period in seconds.
-} __attribute__((packed));
+bool getPcapEnabled(ipmi::Context::ptr& ctx);
 
 /** @brief Set the power cap value
  *
