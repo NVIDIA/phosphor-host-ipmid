@@ -461,7 +461,7 @@ std::string parseSdrIdFromPath(const std::string& path)
             name.resize(FULL_RECORD_ID_STR_MAX_LENGTH);
         }
     }
-    std::replace(name.begin(), name.end(), '_', ' ');
+
     return name;
 }
 
