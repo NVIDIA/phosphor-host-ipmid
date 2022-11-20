@@ -219,45 +219,36 @@ void setDHCPv4Property(sdbusplus::bus::bus& bus, const ChannelParams& params,
 }
 
 void setDHCPv6Property(sdbusplus::bus::bus& bus, const ChannelParams& params,
-                       const EthernetInterface::DHCPConf requestedDhcp,
-                       const bool defaultMode = true)
+                       const EthernetInterface::DHCPConf requestedDhcp)
 {
     EthernetInterface::DHCPConf currentDhcp = getDHCPProperty(bus, params);
     EthernetInterface::DHCPConf nextDhcp = EthernetInterface::DHCPConf::none;
 
-    if (defaultMode)
+    // When calling setDHCPv6Property, requestedDhcp only has "v6" and
+    // "none".
+    // setDHCPv6Property is only for IPv6 management. It should not modify
+    // IPv4 state.
+    if (requestedDhcp == EthernetInterface::DHCPConf::v6)
     {
-        // When calling setDHCPv6Property, requestedDhcp only has "v6" and
-        // "none".
-        // setDHCPv6Property is only for IPv6 management. It should not modify
-        // IPv4 state.
-        if (requestedDhcp == EthernetInterface::DHCPConf::v6)
-        {
-            if ((currentDhcp == EthernetInterface::DHCPConf::v4) ||
-                (currentDhcp == EthernetInterface::DHCPConf::both))
-                nextDhcp = EthernetInterface::DHCPConf::both;
-            else if ((currentDhcp == EthernetInterface::DHCPConf::v6) ||
-                     (currentDhcp == EthernetInterface::DHCPConf::none))
-                nextDhcp = EthernetInterface::DHCPConf::v6;
-        }
-        else if (requestedDhcp == EthernetInterface::DHCPConf::none)
-        {
-            if ((currentDhcp == EthernetInterface::DHCPConf::v4) ||
-                (currentDhcp == EthernetInterface::DHCPConf::both))
-                nextDhcp = EthernetInterface::DHCPConf::v4;
-            else if ((currentDhcp == EthernetInterface::DHCPConf::v6) ||
-                     (currentDhcp == EthernetInterface::DHCPConf::none))
-                nextDhcp = EthernetInterface::DHCPConf::none;
-        }
-        else // Stay the same.
-        {
-            nextDhcp = currentDhcp;
-        }
+        if ((currentDhcp == EthernetInterface::DHCPConf::v4) ||
+            (currentDhcp == EthernetInterface::DHCPConf::both))
+            nextDhcp = EthernetInterface::DHCPConf::both;
+        else if ((currentDhcp == EthernetInterface::DHCPConf::v6) ||
+                    (currentDhcp == EthernetInterface::DHCPConf::none))
+            nextDhcp = EthernetInterface::DHCPConf::v6;
     }
-    else
+    else if (requestedDhcp == EthernetInterface::DHCPConf::none)
     {
-        // allow the v6 call to set any value
-        nextDhcp = requestedDhcp;
+        if ((currentDhcp == EthernetInterface::DHCPConf::v4) ||
+            (currentDhcp == EthernetInterface::DHCPConf::both))
+            nextDhcp = EthernetInterface::DHCPConf::v4;
+        else if ((currentDhcp == EthernetInterface::DHCPConf::v6) ||
+                    (currentDhcp == EthernetInterface::DHCPConf::none))
+            nextDhcp = EthernetInterface::DHCPConf::none;
+    }
+    else // Stay the same.
+    {
+        nextDhcp = currentDhcp;
     }
 
     std::string newDhcp =
@@ -584,7 +575,7 @@ void deconfigureChannel(sdbusplus::bus::bus& bus, ChannelParams& params)
     }
 
     // Clear out any settings on the lower physical interface
-    setDHCPv6Property(bus, params, EthernetInterface::DHCPConf::none, false);
+    setDHCPv6Property(bus, params, EthernetInterface::DHCPConf::none);
 }
 
 /** @brief Creates a new VLAN on the specified interface
@@ -646,7 +637,7 @@ void reconfigureVLAN(sdbusplus::bus::bus& bus, ChannelParams& params,
     createVLAN(bus, params, vlan);
 
     // Re-establish the saved settings
-    setDHCPv6Property(bus, params, dhcp, false);
+    setDHCPv6Property(bus, params, dhcp);
     if (ifaddr4)
     {
         createIfAddr<AF_INET>(bus, params, ifaddr4->address, ifaddr4->prefix);
@@ -936,12 +927,17 @@ RspType<> setLan(Context::ptr ctx, uint4_t channelBits, uint4_t reserved1,
             {
                 case IPSrc::DHCP:
                 {
-                    // The IPSrc IPMI command is only for IPv4
-                    // management. Modifying IPv6 state is done using
+                    // The IPSrc IPMI command should be only for IPv4
+                    // management.
+                    // Modifying IPv6 state is done using
                     // a completely different Set LAN Configuration
                     // subcommand.
+                    // However different Set LAN Configuration for IPv6
+                    // currently not supported.
                     channelCall<setDHCPv4Property>(
                         channel, EthernetInterface::DHCPConf::v4);
+                     channelCall<setDHCPv6Property>(
+                        channel, EthernetInterface::DHCPConf::v6);
                     return responseSuccess();
                 }
                 case IPSrc::Unspecified:
@@ -950,7 +946,16 @@ RspType<> setLan(Context::ptr ctx, uint4_t channelBits, uint4_t reserved1,
                 }
                 case IPSrc::Static:
                 {
+                    // The IPSrc IPMI command should be only for IPv4
+                    // management.
+                    // Modifying IPv6 state is done using
+                    // a completely different Set LAN Configuration
+                    // subcommand.
+                    // However different Set of LAN Configuration for IPv6
+                    // currently not supported.
                     channelCall<setDHCPv4Property>(
+                        channel, EthernetInterface::DHCPConf::none);
+                     channelCall<setDHCPv6Property>(
                         channel, EthernetInterface::DHCPConf::none);
                     return responseSuccess();
                 }
@@ -1329,8 +1334,9 @@ RspType<message::Payload> getLan(Context::ptr ctx, uint4_t channelBits,
             auto src = IPSrc::Static;
             EthernetInterface::DHCPConf dhcp =
                 channelCall<getDHCPProperty>(channel);
-            if ((dhcp == EthernetInterface::DHCPConf::v4) ||
-                (dhcp == EthernetInterface::DHCPConf::both))
+            if ((dhcp == EthernetInterface::DHCPConf::v4)   ||
+                (dhcp == EthernetInterface::DHCPConf::both) ||
+                (dhcp == EthernetInterface::DHCPConf::v6))
             {
                 src = IPSrc::DHCP;
             }

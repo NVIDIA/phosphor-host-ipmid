@@ -544,13 +544,10 @@ sdbusplus::xyz::openbmc_project::Network::server::EthernetInterface::DHCPConf
  *  @param[in] bus           - The bus object used for lookups
  *  @param[in] params        - The parameters for the channel
  *  @param[in] requestedDhcp - DHCP state to assign (none, v6, both)
- *  @param[in] defaultMode   - True: Use algorithmic assignment
- *                             False: requestedDhcp assigned unconditionally
  */
 void setDHCPv6Property(sdbusplus::bus::bus& bus, const ChannelParams& params,
                        const sdbusplus::xyz::openbmc_project::Network::server::
-                           EthernetInterface::DHCPConf requestedDhcp,
-                       const bool defaultMode);
+                           EthernetInterface::DHCPConf requestedDhcp);
 
 /** @brief Reconfigures the IPv6 address info configured for the interface
  *
