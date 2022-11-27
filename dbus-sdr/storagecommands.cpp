@@ -34,6 +34,7 @@
 #include <stdexcept>
 #include <string_view>
 #include <fstream>
+#include "config.h"
 
 static constexpr bool DEBUG = false;
 
@@ -881,9 +882,19 @@ ipmi::RspType<uint8_t,  // SEL version
     uint32_t eraseTimeStamp = dynamic_sensors::ipmi::sel::erase_time::get();
     constexpr uint8_t operationSupport =
         dynamic_sensors::ipmi::sel::selOperationSupport;
-    constexpr uint16_t freeSpace =
-        0xffff; // Spec indicates that more than 64kB is free
-
+    constexpr uint16_t maxDefineEntries = MAX_SEL_ENTRIES;
+    constexpr uint16_t maxPossibleEntries = 4095;
+    uint16_t freeSpace = 0;
+    // free space max is 2 bytes and spec define above 0xffff as free
+    if (maxDefineEntries > maxPossibleEntries)
+    {
+        freeSpace = 0xffff;
+    }
+    else if (maxDefineEntries > entries)
+    {
+        freeSpace = (maxDefineEntries - entries) * ipmi::sel::selRecordSize;
+    }
+    
     return ipmi::responseSuccess(selVersion, entries, freeSpace, addTimeStamp,
                                  eraseTimeStamp, operationSupport);
 }

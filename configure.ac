@@ -320,6 +320,11 @@ AS_IF([test x$sensors_cache = xtrue],
     AC_MSG_WARN([Disabling sensors cache feature])
 )
 
+# Define from phosphor-logging
+AC_ARG_VAR(MAX_SEL_ENTRIES, [max sel entries])
+AS_IF([test "x$MAX_SEL_ENTRIES" == "x"], [MAX_SEL_ENTRIES=4096])
+AC_DEFINE_UNQUOTED([MAX_SEL_ENTRIES], [$MAX_SEL_ENTRIES], [max sel entries])
+
 # Create configured output
 AC_CONFIG_FILES([
     Makefile
