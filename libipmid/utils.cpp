@@ -677,4 +677,52 @@ ipmi::Cc i2cWriteRead(std::string i2cBus, const uint8_t slaveAddr,
     return ipmi::ccSuccess;
 }
 
+ipmi::Cc i2cReadDataBlock(const std::string i2cBus, const uint8_t slaveAddr,std::vector<uint8_t>& readBuf, const uint8_t i2cReadRegister )
+{
+    
+    if (readBuf.size() > I2C_SMBUS_I2C_BLOCK_DATA ){
+        log<level::ERR>("readBuf size can't be bigger than I2C_SMBUS_I2C_BLOCK_DATA"); 
+        return ipmi::ccUnspecifiedError;
+    }   
+    // Open the i2c device, for low-level combined data write/read
+    int i2cDev = ::open(i2cBus.c_str(), O_RDWR | O_CLOEXEC);
+    if (i2cDev < 0)
+    {
+        log<level::ERR>("Failed to open i2c bus",
+                        phosphor::logging::entry("BUS=%s", i2cBus.c_str()));
+        return ipmi::ccInvalidFieldRequest;
+    }
+    union i2c_smbus_data data_s;
+    data_s.block[0] = I2C_SMBUS_BLOCK_MAX;
+    int rc = ioctl(i2cDev, I2C_SLAVE, slaveAddr);
+    if (rc < 0){
+        ::close(i2cDev);
+        log<level::ERR>("field to set device address"); 
+        return ipmi::ccUnspecifiedError;
+    }   
+        i2c_smbus_ioctl_data data_arg;
+        data_arg.read_write = I2C_SMBUS_READ;
+        data_arg.command = i2cReadRegister;
+        data_arg.size = I2C_SMBUS_I2C_BLOCK_DATA;
+        data_arg.data = &data_s;
+        // Perform the combined write/read
+        int ret = ::ioctl(i2cDev, I2C_SMBUS, &data_arg);
+        
+    ::close(i2cDev);
+    if (ret < 0)
+    {   
+        log<level::ERR>("I2C WR Failed!",
+                        phosphor::logging::entry("RET=%d", ret));
+        return ipmi::ccUnspecifiedError;
+        
+    }
+    for (uint i = 0; i < readBuf.size(); i++  ){
+        // i is limmited to redadBuf.size()
+        readBuf[i] = unsigned(data_s.block[i]);
+    
+    }
+    return ipmi::ccSuccess;
+}
+
+
 } // namespace ipmi

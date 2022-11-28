@@ -449,4 +449,13 @@ void callDbusMethod(sdbusplus::bus::bus& bus, const std::string& service,
 ipmi::Cc i2cWriteRead(std::string i2cBus, const uint8_t slaveAddr,
                       std::vector<uint8_t> writeData,
                       std::vector<uint8_t>& readBuf);
+
+/** @brief Perform the low-level i2c bus read through SMBUS (reads a block of data).
+ *  @param[in] i2cBus - i2c bus device node name, such as /dev/i2c-2.
+ *  @param[in] slaveAddr - i2c device slave address.
+ *  @param[out] readBuf - Data read from the i2c device.
+ *  @param[in] i2cReadRegister - i2c device slave register to read from.
+ */
+ipmi::Cc i2cReadDataBlock(const std::string i2cBus, const uint8_t slaveAddr,std::vector<uint8_t>& readBuf, const uint8_t i2cReadRegister);
+
 } // namespace ipmi
