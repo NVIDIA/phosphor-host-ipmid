@@ -9,6 +9,7 @@
 #include <phosphor-logging/elog-errors.hpp>
 #include <xyz/openbmc_project/Common/error.hpp>
 #include <xyz/openbmc_project/Logging/SEL/error.hpp>
+#include "config.h"
 
 static constexpr auto logObjPath = "/xyz/openbmc_project/logging";
 static constexpr auto logInterface = "xyz.openbmc_project.Logging.Create";
@@ -451,7 +452,7 @@ ipmi::RspType<uint8_t,  // SEL revision.
               >
     ipmiStorageGetSelInfo()
 {
- uint16_t entries = 0;
+    uint16_t entries = 0;
     // Most recent addition timestamp.
     uint32_t addTimeStamp = ipmi::sel::invalidTimeStamp;
 
@@ -480,7 +481,18 @@ ipmi::RspType<uint8_t,  // SEL revision.
     }
 
     constexpr uint8_t selVersion = ipmi::sel::selVersion;
-    constexpr uint16_t freeSpace = 0xFFFF;
+    constexpr uint16_t maxDefineEntries = MAX_SEL_ENTRIES;
+    constexpr uint16_t maxPossibleEntries = 4095;
+    uint16_t freeSpace = 0;
+    // free space max is 2 bytes and spec define above 0xffff as free
+    if (maxDefineEntries > maxPossibleEntries)
+    {
+        freeSpace = 0xffff;
+    }
+    else if (maxDefineEntries > entries)
+    {
+        freeSpace = (maxDefineEntries - entries) * ipmi::sel::selRecordSize;
+    }
     constexpr uint32_t eraseTimeStamp = ipmi::sel::invalidTimeStamp;
     constexpr uint3_t reserved{0};
 
