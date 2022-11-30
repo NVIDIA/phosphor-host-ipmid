@@ -862,12 +862,12 @@ ipmi::RspType<uint8_t,  // SDR version
 
 void register_netfn_storage_functions()
 {
-#ifndef FEATURE_DYNAMIC_SENSORS
     selCacheMapInitialized = false;
     initSELCache();
     // Handlers with dbus-sdr handler implementation.
     // Do not register the hander if it dynamic sensors stack is used.
 
+#ifndef FEATURE_DYNAMIC_SENSORS
     // <Get SEL Info>
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
                           ipmi::storage::cmdGetSelInfo, ipmi::Privilege::User,
@@ -923,7 +923,7 @@ void register_netfn_storage_functions()
 
 #endif
 
-    // Common Handers used by all SEL implementation.
+    // Common Handers used by both implementation.
 
     // <Reserve SEL>
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
