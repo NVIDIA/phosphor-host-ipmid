@@ -2832,7 +2832,7 @@ ipmi::RspType<> ipmiChassisSetSysBootOptions(ipmi::Context::ptr ctx,
                     return ipmi::response(rc);
                 }
             }
-            else if (static_cast<uint8_t>(deviceInstance) & 0x10)
+            else if ((static_cast<uint8_t>(deviceInstance) & 0x10) == 0)
             {
                 rc = setBootInstanceType(ctx,
                                          InstanceType::InstanceTypes::External);
