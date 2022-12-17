@@ -1085,15 +1085,21 @@ bool isLastPowerOnViaIPMI()
 {
 
     std::shared_ptr<sdbusplus::asio::connection> bus = getSdBus();
-    auto service = ipmi::getService(*bus, hostStateIntf, hostStatePath);
-    ipmi::Value PowerCause = ipmi::getDbusProperty(
-        *bus, service, hostStatePath, hostStateIntf, "LastPowerOnCause");
-
-    if (std::get<std::string>(PowerCause) == IPMICommand)
+    try
     {
-        return true;
+        auto service = ipmi::getService(*bus, hostStateIntf, hostStatePath);
+        ipmi::Value PowerCause = ipmi::getDbusProperty(
+        *bus, service, hostStatePath, hostStateIntf, "LastPowerOnCause");
+        if (std::get<std::string>(PowerCause) == IPMICommand)
+        {
+            return true;
+        }
     }
-
+    catch(const std::exception& e)
+    {
+        log<level::ERR>("Fail to get LastPowerOnCause property",
+                        entry("ERROR=%s", e.what()));
+    }
     return false;
 }
 } // namespace power_policy
