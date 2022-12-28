@@ -316,6 +316,7 @@ enum class SensorTypeCodes : uint8_t
     drive_slot = 0x0D,
     event_log = 0x10,
     buttons = 0x14,
+    cable = 0x1B,
     watchdog2 = 0x23,
 };
 
@@ -355,6 +356,8 @@ const static boost::container::flat_map<
                                 SensorEventTypeCodes::sensorSpecified)},
          {"motherboard", std::make_pair(SensorTypeCodes::power_supply,
                                         SensorEventTypeCodes::sensorSpecified)},
+         {"cable", std::make_pair(SensorTypeCodes::cable,
+                                  SensorEventTypeCodes::sensorSpecified)},
          {"eventlogging",
           std::make_pair(SensorTypeCodes::event_log,
                          SensorEventTypeCodes::sensorSpecified)}}};

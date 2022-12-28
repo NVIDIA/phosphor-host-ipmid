@@ -60,6 +60,8 @@ enum class IPMISensorReadingByte3 : uint8_t
     lowerNonCritical = (1 << 0),
     presenceDetected = (1 << 0),
     procPresenceDetected = (1 << 7),
+    cableStatus = (1 << 0),
+    configurationError = (1 << 1),
     drivePresenceDetected = (1 << 0),
     driveFault = (1 << 1),
     drivePredictiveFailure = (1 << 2),
@@ -128,6 +130,15 @@ enum class IPMISensorEventEnablePower : uint8_t
 enum class IPMISensorEventEnableProc : uint8_t
 {
     procPresenceDetected = (1 << 7),
+};
+
+/**
+ * @enum ipmb discrete sensor event enable bit mask
+ */
+enum class IPMISensorEventEnableCable : uint8_t
+{
+    cableStatus = (1 << 0),
+    configurationError = (1 << 1),
 };
 
 /**

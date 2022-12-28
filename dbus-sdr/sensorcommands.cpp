@@ -195,6 +195,9 @@ std::map<const char*, uint8_t> discreteInterfaceMap{
           static_cast<uint8_t>(IPMISensorEventEnablePower::inputLost)},
      {"xyz.openbmc_project.Inventory.Item.Cpu",
       static_cast<uint8_t>(IPMISensorEventEnableProc::procPresenceDetected)},
+     {"xyz.openbmc_project.Inventory.Item.Cable",
+      static_cast<uint8_t>(IPMISensorEventEnableCable::cableStatus) |
+          static_cast<uint8_t>(IPMISensorEventEnableCable::configurationError)},
      {"xyz.openbmc_project.Inventory.Item.Drive",
       static_cast<uint8_t>(IPMISensorEventEnableDrive::drivePresenceDetected) |
           static_cast<uint8_t>(IPMISensorEventEnableDrive::driveFault) |
@@ -564,6 +567,7 @@ uint8_t getDiscreteStatus(const ipmi::DbusInterfaceMap& sensorMap)
     auto cpuInterface = sensorMap.find((++it)->first);
     auto driveInterface = sensorMap.find((++it)->first);
     auto watchdogInterface = sensorMap.find((++it)->first);
+    auto cableInterface = sensorMap.find((++it)->first);
     if (powerInterface != sensorMap.end())
     {
       presentAssertion = static_cast<uint8_t>(
@@ -584,6 +588,13 @@ uint8_t getDiscreteStatus(const ipmi::DbusInterfaceMap& sensorMap)
       functionalAssertion = static_cast<uint8_t>(
                     IPMISensorReadingByte3::drivePredictiveFailure);
       stateAssertion = static_cast<uint8_t>(IPMISensorReadingByte3::driveFault);
+    }
+    else if (cableInterface != sensorMap.end())
+    {
+        presentAssertion =
+            static_cast<uint8_t>(IPMISensorReadingByte3::cableStatus);
+        stateAssertion =
+            static_cast<uint8_t>(IPMISensorReadingByte3::configurationError);
     }
     else if (watchdogInterface != sensorMap.end())
     {
