@@ -89,6 +89,8 @@ namespace ipmi
 namespace storage
 {
 
+void registerStorageFunctions() __attribute__((constructor));
+
 static bool getSELLogFiles(std::vector<std::filesystem::path>& selLogFiles)
 {
     // Loop through the directory looking for ipmi_sel log files
