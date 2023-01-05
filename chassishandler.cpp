@@ -44,6 +44,8 @@
 
 std::unique_ptr<phosphor::Timer> identifyTimer
     __attribute__((init_priority(101)));
+std::unique_ptr<sdbusplus::bus::match_t> matchPtr
+    __attribute__((init_priority(101)));
 
 static ChassisIDState chassisIDState = ChassisIDState::reserved;
 static constexpr uint8_t setParmVersion = 0x01;
@@ -2263,6 +2265,46 @@ static uint8_t transferStatus = setComplete;
 static uint8_t bootFlagValidBitClr = 0;
 static uint5_t bootInitiatorAckData = 0x0;
 
+void initEnabledMatch()
+{
+
+    using namespace sdbusplus::bus::match::rules;
+    std::shared_ptr<sdbusplus::asio::connection> busp = getSdBus();
+
+    std::string path = "/xyz/openbmc_project/control/host0/boot";
+    std::string inf = "xyz.openbmc_project.Object.Enable";
+
+    matchPtr = std::make_unique<sdbusplus::bus::match_t>(
+
+        *busp, sdbusplus::bus::match::rules::propertiesChanged(path, inf),
+        [](sdbusplus::message::message& msg) {
+            std::map<std::string, std::variant<bool>> props;
+            std::string iface;
+            bool enabledValue = false;
+            try
+            {
+                msg.read(iface, props);
+            }
+            catch (const std::exception& e)
+            {
+                phosphor::logging::log<phosphor::logging::level::ERR>(
+                    " propertiesChanged Exception caught in Get "
+                    "matchPtr");
+                return;
+            }
+
+            auto it = props.find("Enabled");
+            if (it != props.end())
+            {
+                enabledValue = std::get<bool>(it->second);
+                if (enabledValue)
+                {
+                    bootInitiatorAckData |= 0x1;
+                }
+            }
+        });
+}
+
 /** @brief implements the Get Chassis system boot option
  *  @param ctx - context pointer
  *  @param bootOptionParameter   - boot option parameter selector
@@ -3071,6 +3113,7 @@ ipmi::RspType<> ipmiSetFrontPanelButtonEnables(
 void register_netfn_chassis_functions()
 {
     createIdentifyTimer();
+    initEnabledMatch();
 
     // Get Chassis Capabilities
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnChassis,
