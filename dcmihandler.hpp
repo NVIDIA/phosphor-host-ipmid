@@ -218,25 +218,10 @@ bool getPcapEnabled(ipmi::Context::ptr& ctx);
 
 /** @brief Set the power cap value
  *
- *  @param[in] bus - dbus connection
+ *  @param[in] Context - ctx
  *  @param[in] powerCap - power cap value
  */
-void setPcap(sdbusplus::bus::bus& bus, const uint32_t powerCap);
-
-/** @struct SetPowerLimitRequest
- *
- *  DCMI payload for Set Power Limit command request.
- */
-struct SetPowerLimitRequest
-{
-    uint16_t reserved;       //!< Reserved
-    uint8_t reserved1;       //!< Reserved
-    uint8_t exceptionAction; //!< Exception action.
-    uint16_t powerLimit;     //!< Power limit requested in watts.
-    uint32_t correctionTime; //!< Correction time limit in milliseconds.
-    uint16_t reserved2;      //!< Reserved.
-    uint16_t samplingPeriod; //!< Statistics sampling period in seconds.
-} __attribute__((packed));
+void setPcap(ipmi::Context::ptr& ctx, uint32_t powerCap);
 
 /** @brief Enable or disable the power capping
  *

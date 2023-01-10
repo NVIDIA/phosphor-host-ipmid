@@ -39,6 +39,8 @@ constexpr auto DCMI_ACTIVATE_DHCP_MASK = 0x01;
 constexpr auto DCMI_ACTIVATE_DHCP_REPLY = 0x00;
 constexpr auto DCMI_SET_CONF_PARAM_REQ_PACKET_MAX_SIZE = 0x04;
 constexpr auto DCMI_SET_CONF_PARAM_REQ_PACKET_MIN_SIZE = 0x03;
+constexpr auto DCMI_SET_PWR_LIMIT_EXCEPTION_ACTION_RESERVED = 0x12;
+constexpr auto DCMI_SET_PWR_LIMIT_EXCEPTION_ACTION_RESERVED1 = 0xFF;
 constexpr auto DHCP_TIMING1 = 0x04;       // 4 sec
 constexpr auto DHCP_TIMING2_UPPER = 0x00; // 2 min
 constexpr auto DHCP_TIMING2_LOWER = 0x78;
@@ -109,19 +111,17 @@ bool getPcapEnabled(ipmi::Context::ptr& ctx)
     return pcapEnabled;
 }
 
-void setPcap(sdbusplus::bus::bus& bus, const uint32_t powerCap)
+void setPcap(ipmi::Context::ptr& ctx, uint32_t powerCap)
 {
-    auto service = ipmi::getService(bus, PCAP_INTERFACE, PCAP_PATH);
+    std::string service;
 
-    auto method = bus.new_method_call(service.c_str(), PCAP_PATH,
-                                      "org.freedesktop.DBus.Properties", "Set");
-
-    method.append(PCAP_INTERFACE, POWER_CAP_PROP);
-    method.append(std::variant<uint32_t>(powerCap));
-
-    auto reply = bus.call(method);
-
-    if (reply.is_method_error())
+    auto ec = ipmi::getService(ctx, PCAP_INTERFACE, PCAP_PATH, service);
+    if (!ec)
+    {
+        ec = ipmi::setDbusProperty(ctx, service, PCAP_PATH, PCAP_INTERFACE,
+                                   POWER_CAP_PROP, powerCap);
+    }
+    if (ec)
     {
         log<level::ERR>("Error in setPcap property");
         elog<InternalFailure>();
@@ -382,50 +382,63 @@ ipmi::RspType<uint16_t, // Reserved.
     }
 }
 
-ipmi_ret_t setPowerLimit(ipmi_netfn_t netfn, ipmi_cmd_t cmd,
-                         ipmi_request_t request, ipmi_response_t response,
-                         ipmi_data_len_t data_len, ipmi_context_t context)
+ipmi::RspType<> setPowerLimit(ipmi::Context::ptr ctx, uint16_t reserved,
+                              uint8_t reserved1, uint8_t exceptionAction,
+                              uint16_t powerLimit, uint32_t correctionTime,
+                              uint16_t reserved2, uint16_t samplingPeriod)
 {
     if (!dcmi::isDCMIPowerMgmtSupported())
     {
-        *data_len = 0;
         log<level::ERR>("DCMI Power management is unsupported!");
-        return IPMI_CC_INVALID;
+        return ipmi::responseInvalidCommand();
     }
 
-    auto requestData =
-        reinterpret_cast<const dcmi::SetPowerLimitRequest*>(request);
+    if ((reserved != 0) || (reserved1 != 0) || (reserved2 != 0))
+    {
+        return ipmi::responseInvalidFieldRequest();
+    }
 
     sdbusplus::bus::bus sdbus{ipmid_get_sd_bus_connection()};
+    if ((exceptionAction >= DCMI_SET_PWR_LIMIT_EXCEPTION_ACTION_RESERVED) &&
+        (exceptionAction <= DCMI_SET_PWR_LIMIT_EXCEPTION_ACTION_RESERVED1))
+    {
+        return ipmi::responseInvalidFieldRequest();
+    }
+    
+     // Only process the power limit requested in watts.
     try
     {
-        auto objectTree =ipmi::getDbusObject(sdbus,controlPowerModeIntf,control,"");
-
-        ipmi::setDbusProperty(sdbus, objectTree.second, objectTree.first,
-                                      controlPowerCapIntf,
-                                      "PowerCap", (uint32_t)requestData->powerLimit);
+        ipmi::DbusObjectInfo objectTree;
+        auto ec = ipmi::getDbusObject(ctx, controlPowerModeIntf, control, "",
+                                      objectTree);
+        if (!ec)
+        {
+            ec = ipmi::setDbusProperty(ctx, objectTree.second, objectTree.first,
+                                       controlPowerCapIntf, POWER_CAP_PROP,
+                                       static_cast<uint32_t>(powerLimit));
+        }
+        if (ec)
+        {
+            return ipmi::responseUnspecifiedError();
+        }
     }
     catch (sdbusplus::exception_t& e)
     {
-        *data_len = 0;
-        return IPMI_CC_UNSPECIFIED_ERROR;
+        return ipmi::responseUnspecifiedError();
     }
     // Only process the power limit requested in watts.
     try
     {
-        dcmi::setPcap(sdbus, requestData->powerLimit);
+        dcmi::setPcap(ctx, powerLimit);
     }
-    catch (const InternalFailure& e)
+    catch (sdbusplus::exception_t& e)
     {
-        *data_len = 0;
-        return IPMI_CC_UNSPECIFIED_ERROR;
+        return ipmi::responseUnspecifiedError();
     }
 
-    log<level::INFO>("Set Power Cap",
-                     entry("POWERCAP=%u", requestData->powerLimit));
+    log<level::INFO>("Set Power Cap", entry("POWERCAP=%u", powerLimit));
 
-    *data_len = 0;
-    return IPMI_CC_OK;
+    return ipmi::responseSuccess();
 }
 
 ipmi_ret_t applyPowerLimit(ipmi_netfn_t netfn, ipmi_cmd_t cmd,
@@ -1451,10 +1464,11 @@ void register_netfn_dcmi_functions()
     ipmi::registerGroupHandler(ipmi::prioOpenBmcBase, ipmi::groupDCMI,
                                ipmi::dcmi::cmdGetPowerLimit,
                                ipmi::Privilege::User, getPowerLimit);
-    // <Set Power Limit>
 
-    ipmi_register_callback(NETFUN_GRPEXT, dcmi::Commands::SET_POWER_LIMIT, NULL,
-                           setPowerLimit, PRIVILEGE_OPERATOR);
+    // <Set Power Limit>
+    ipmi::registerGroupHandler(ipmi::prioOpenBmcBase, ipmi::groupDCMI,
+                               ipmi::dcmi::cmdSetPowerLimit,
+                               ipmi::Privilege::Operator, setPowerLimit);
 
     // <Activate/Deactivate Power Limit>
 
