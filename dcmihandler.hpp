@@ -358,31 +358,4 @@ struct SetConfParamsRequest
     uint8_t data[];      //!< Configuration parameter data.
 } __attribute__((packed));
 
-/** @struct GetConfParamsRequest
- *
- *  DCMI Get DCMI Configuration Parameters Command.
- *  Refer DCMI specification Version 1.1 Section 6.1.3
- */
-struct GetConfParamsRequest
-{
-    uint8_t paramSelect; //!< Parameter selector.
-    uint8_t setSelect;   //!< Set Selector. Selects a given set of parameters
-                         //!< under a given Parameter selector value. 00h if
-                         //!< parameter doesn't use a Set Selector.
-} __attribute__((packed));
-
-/** @struct GetConfParamsResponse
- *
- *  DCMI Get DCMI Configuration Parameters Command response.
- *  Refer DCMI specification Version 1.1 Section 6.1.3
- */
-struct GetConfParamsResponse
-{
-    uint8_t major;         //!< DCMI Spec Conformance - major ver = 01h.
-    uint8_t minor;         //!< DCMI Spec Conformance - minor ver = 05h.
-    uint8_t paramRevision; //!< Parameter Revision = 01h.
-    uint8_t data[];        //!< Parameter data.
-
-} __attribute__((packed));
-
 } // namespace dcmi
