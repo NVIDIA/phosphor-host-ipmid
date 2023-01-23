@@ -307,8 +307,8 @@ Response createFromJson(const Json& config);
  *  @return A tuple, containing a sensor info response and
  *          number of instances.
  */
-std::tuple<Response, NumInstances> read(const std::string& type,
-                                        uint8_t instance, const Json& config);
+std::tuple<ResponseList, NumInstances>
+    read(const std::string& type, uint8_t instance, const Json& config);
 
 /** @brief Read sensor info and fill up DCMI response for the Get
  *         Sensor Info command. This looks at a range of
@@ -333,27 +333,6 @@ std::tuple<ResponseList, NumInstances>
  */
 int64_t getPowerReading(sdbusplus::bus::bus& bus);
 
-/** @struct GetSensorInfoRequest
- *
- *  DCMI payload for Get Sensor Info request
- */
-struct GetSensorInfoRequest
-{
-    uint8_t sensorType;     //!< Type of the sensor
-    uint8_t entityId;       //!< Entity ID
-    uint8_t entityInstance; //!< Entity Instance (0 means all instances)
-    uint8_t instanceStart;  //!< Instance start (used if instance is 0)
-} __attribute__((packed));
-
-/** @struct GetSensorInfoResponseHdr
- *
- *  DCMI header for Get Sensor Info response
- */
-struct GetSensorInfoResponseHdr
-{
-    uint8_t numInstances; //!< No. of instances for requested id
-    uint8_t numRecords;   //!< No. of record ids in the response
-} __attribute__((packed));
 /**
  *  @brief Parameters for DCMI Configuration Parameters
  */

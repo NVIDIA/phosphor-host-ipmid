@@ -1232,10 +1232,10 @@ Response createFromJson(const Json& config)
     return response;
 }
 
-std::tuple<Response, NumInstances> read(const std::string& type,
-                                        uint8_t instance, const Json& config)
+std::tuple<ResponseList, NumInstances>
+    read(const std::string& type, uint8_t instance, const Json& config)
 {
-    Response response{};
+    ResponseList responses{};
 
     if (!instance)
     {
@@ -1255,10 +1255,16 @@ std::tuple<Response, NumInstances> read(const std::string& type,
             continue;
         }
 
-        response = createFromJson(reading);
+        Response response = createFromJson(reading);
+        responses.push_back(response);
 
         // Found the instance we're interested in
         break;
+    }
+
+    if (responses.empty())
+    {
+        return std::make_tuple(responses, 0);
     }
 
     if (numInstances > maxInstances)
@@ -1267,7 +1273,8 @@ std::tuple<Response, NumInstances> read(const std::string& type,
                           entry("NUM_INSTANCES=%d", numInstances));
         numInstances = maxInstances;
     }
-    return std::make_tuple(response, numInstances);
+
+    return std::make_tuple(responses, numInstances);
 }
 
 std::tuple<ResponseList, NumInstances>
@@ -1318,41 +1325,32 @@ std::tuple<ResponseList, NumInstances>
 } // namespace sensor_info
 } // namespace dcmi
 
-ipmi_ret_t getSensorInfo(ipmi_netfn_t netfn, ipmi_cmd_t cmd,
-                         ipmi_request_t request, ipmi_response_t response,
-                         ipmi_data_len_t data_len, ipmi_context_t context)
+ipmi::RspType<uint8_t,              // No of instances for requested id
+              uint8_t,              // No of record ids in the response
+              std::vector<uint16_t> // SDR Record ID corresponding to the Entity
+                                    // IDs
+              >
+    getSensorInfo(ipmi::Context::ptr ctx, int8_t sensorType, uint8_t entityId,
+                  uint8_t entityInstance, uint8_t instanceStart)
 {
-    auto requestData =
-        reinterpret_cast<const dcmi::GetSensorInfoRequest*>(request);
-    auto responseData =
-        reinterpret_cast<dcmi::GetSensorInfoResponseHdr*>(response);
-
-    if (*data_len != sizeof(dcmi::GetSensorInfoRequest))
-    {
-        log<level::ERR>("Malformed request data",
-                        entry("DATA_SIZE=%d", *data_len));
-        return IPMI_CC_REQ_DATA_LEN_INVALID;
-    }
-    *data_len = 0;
-
-    auto it = dcmi::entityIdToName.find(requestData->entityId);
+    auto it = dcmi::entityIdToName.find(entityId);
     if (it == dcmi::entityIdToName.end())
     {
-        log<level::ERR>("Unknown Entity ID",
-                        entry("ENTITY_ID=%d", requestData->entityId));
-        return IPMI_CC_INVALID_FIELD_REQUEST;
+        log<level::ERR>("Unknown Entity ID", entry("ENTITY_ID=%d", entityId));
+        return ipmi::responseInvalidFieldRequest();
     }
 
-    if (requestData->sensorType != dcmi::temperatureSensorType)
+    if (sensorType != dcmi::temperatureSensorType)
     {
         log<level::ERR>("Invalid sensor type",
-                        entry("SENSOR_TYPE=%d", requestData->sensorType));
-        return IPMI_CC_INVALID_FIELD_REQUEST;
+                        entry("SENSOR_TYPE=%d", sensorType));
+        return ipmi::responseInvalidFieldRequest();
     }
 
     dcmi::sensor_info::ResponseList sensors{};
     static dcmi::Json config{};
     static bool parsed = false;
+    uint8_t numRecords = 0, numInstances = 0;
 
     try
     {
@@ -1362,37 +1360,38 @@ ipmi_ret_t getSensorInfo(ipmi_netfn_t netfn, ipmi_cmd_t cmd,
             parsed = true;
         }
 
-        if (!requestData->entityInstance)
+        if (!entityInstance)
         {
             // Read all instances
-            std::tie(sensors, responseData->numInstances) =
-                dcmi::sensor_info::readAll(it->second,
-                                           requestData->instanceStart, config);
+            std::tie(sensors, numInstances) =
+                dcmi::sensor_info::readAll(it->second, instanceStart, config);
         }
         else
         {
             // Read one instance
-            sensors.resize(1);
-            std::tie(sensors[0], responseData->numInstances) =
-                dcmi::sensor_info::read(it->second, requestData->entityInstance,
-                                        config);
+            std::tie(sensors, numInstances) =
+                dcmi::sensor_info::read(it->second, entityInstance, config);
         }
-        responseData->numRecords = sensors.size();
+        numRecords = sensors.size();
     }
     catch (const InternalFailure& e)
     {
-        return IPMI_CC_UNSPECIFIED_ERROR;
+        return ipmi::responseUnspecifiedError();
     }
 
-    size_t payloadSize = sensors.size() * sizeof(dcmi::sensor_info::Response);
-    if (!sensors.empty())
+    if (!numInstances)
     {
-        memcpy(responseData + 1, // copy payload right after the response header
-               sensors.data(), payloadSize);
+        return ipmi::responseUnspecifiedError();
     }
-    *data_len = sizeof(dcmi::GetSensorInfoResponseHdr) + payloadSize;
+    std::vector<uint16_t> sensorRec{};
+    for (size_t i = 0; i < numRecords; i++)
+    {
+        uint16_t senRec = sensors[i].recordIdMsb & 0xFF;
+        senRec = (senRec << 8) | sensors[i].recordIdLsb;
+        sensorRec.push_back(senRec);
+    }
 
-    return IPMI_CC_OK;
+    return ipmi::responseSuccess(numInstances, numRecords, sensorRec);
 }
 
 void register_netfn_dcmi_functions()
@@ -1449,8 +1448,9 @@ void register_netfn_dcmi_functions()
 
 #ifndef FEATURE_DYNAMIC_SENSORS
     // <Get Sensor Info>
-    ipmi_register_callback(NETFUN_GRPEXT, dcmi::Commands::GET_SENSOR_INFO, NULL,
-                           getSensorInfo, PRIVILEGE_USER);
+    ipmi::registerGroupHandler(ipmi::prioOpenBmcBase, ipmi::groupDCMI,
+                               ipmi::dcmi::cmdGetDcmiSensorInfo,
+                               ipmi::Privilege::User, getSensorInfo);
 #endif
 
     // <Get DCMI Configuration Parameters>
