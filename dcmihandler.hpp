@@ -208,27 +208,6 @@ enum class DCMICapParameters
     MANAGEABILITY_ACCESS_ATTRIBUTES = 0x04, //!< Manageability Access Attributes
 };
 
-/** @struct GetDCMICapRequest
- *
- *  DCMI payload for Get capabilities cmd request.
- */
-struct GetDCMICapRequest
-{
-    uint8_t param; //!< Capability parameter selector.
-} __attribute__((packed));
-
-/** @struct GetDCMICapRequest
- *
- *  DCMI payload for Get capabilities cmd response.
- */
-struct GetDCMICapResponse
-{
-    uint8_t major;         //!< DCMI Specification Conformance - major ver
-    uint8_t minor;         //!< DCMI Specification Conformance - minor ver
-    uint8_t paramRevision; //!< Parameter Revision = 02h
-    uint8_t data[];        //!< Capability array
-} __attribute__((packed));
-
 /** @struct DCMICap
  *
  *  DCMI capabilities protocol info.
