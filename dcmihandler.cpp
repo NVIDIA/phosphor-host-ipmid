@@ -128,19 +128,17 @@ void setPcap(ipmi::Context::ptr& ctx, uint32_t powerCap)
     }
 }
 
-void setPcapEnable(sdbusplus::bus::bus& bus, bool enabled)
+void setPcapEnable(ipmi::Context::ptr& ctx, bool enabled)
 {
-    auto service = ipmi::getService(bus, PCAP_INTERFACE, PCAP_PATH);
+    std::string service;
 
-    auto method = bus.new_method_call(service.c_str(), PCAP_PATH,
-                                      "org.freedesktop.DBus.Properties", "Set");
-
-    method.append(PCAP_INTERFACE, POWER_CAP_ENABLE_PROP);
-    method.append(std::variant<bool>(enabled));
-
-    auto reply = bus.call(method);
-
-    if (reply.is_method_error())
+    auto ec = ipmi::getService(ctx, PCAP_INTERFACE, PCAP_PATH, service);
+    if (!ec)
+    {
+        ec = ipmi::setDbusProperty(ctx, service, PCAP_PATH, PCAP_INTERFACE,
+                                   POWER_CAP_ENABLE_PROP, enabled);
+    }
+    if (ec)
     {
         log<level::ERR>("Error in setPcapEnabled property");
         elog<InternalFailure>();
@@ -441,65 +439,72 @@ ipmi::RspType<> setPowerLimit(ipmi::Context::ptr ctx, uint16_t reserved,
     return ipmi::responseSuccess();
 }
 
-ipmi_ret_t applyPowerLimit(ipmi_netfn_t netfn, ipmi_cmd_t cmd,
-                           ipmi_request_t request, ipmi_response_t response,
-                           ipmi_data_len_t data_len, ipmi_context_t context)
+ipmi::RspType<> applyPowerLimit(ipmi::Context::ptr ctx,
+                                uint8_t powerlimitaction, uint16_t reserved)
 {
     if (!dcmi::isDCMIPowerMgmtSupported())
     {
-        *data_len = 0;
         log<level::ERR>("DCMI Power management is unsupported!");
-        return IPMI_CC_INVALID;
+        return ipmi::responseInvalidCommand();
     }
 
-    auto requestData =
-        reinterpret_cast<const dcmi::ApplyPowerLimitRequest*>(request);
-    bool activate = static_cast<bool>(requestData->powerLimitAction);
+    // Reserved bytes must be zero
+    if (reserved != 0)
+    {
+        log<level::ERR>(
+            "DCMI Activate/Deactivate reserved field contents modified");
+        return ipmi::responseInvalidFieldRequest();
+    }
 
-    sdbusplus::bus::bus sdbus{ipmid_get_sd_bus_connection()};
-
+    // To Activate/Deactivate power limit action can be 0 or 1
+    if (powerlimitaction < 0 || powerlimitaction > 1)
+    {
+        log<level::ERR>("DCMI Activate/Deactivate parameter out of range");
+        return ipmi::responseParmOutOfRange();
+    }
     try
     {
-        auto objectTree =ipmi::getDbusObject(sdbus,controlPowerModeIntf,control,"");
-  
-        if(activate)
+        ipmi::DbusObjectInfo objectTree;
+        auto ec = ipmi::getDbusObject(ctx, controlPowerModeIntf, control, "",
+                                      objectTree);
+        if (ec)
+        {
+            return ipmi::responseUnspecifiedError();
+        }
+        if (powerlimitaction)
         {
             ipmi::setDbusProperty(
-                            sdbus,  objectTree.second, objectTree.first,
-                            controlPowerModeIntf, "PowerMode",
-                            std::string("xyz.openbmc_project.Control.Power."
-                                        "Mode.PowerMode.PowerSaving"));
+                ctx, objectTree.second, objectTree.first, controlPowerModeIntf,
+                "PowerMode",
+                std::string("xyz.openbmc_project.Control.Power."
+                            "Mode.PowerMode.PowerSaving"));
         }
         else
         {
             ipmi::setDbusProperty(
-                            sdbus,  objectTree.second, objectTree.first,
-                            controlPowerModeIntf, "PowerMode",
-                            std::string("xyz.openbmc_project.Control.Power."
-                                        "Mode.PowerMode.MaximumPerformance"));
+                ctx, objectTree.second, objectTree.first, controlPowerModeIntf,
+                "PowerMode",
+                std::string("xyz.openbmc_project.Control.Power."
+                            "Mode.PowerMode.MaximumPerformance"));
         }
     }
     catch (const sdbusplus::exception_t& e)
     {
-        *data_len = 0;
-        return IPMI_CC_UNSPECIFIED_ERROR;
+        return ipmi::responseUnspecifiedError();
     }
     try
     {
-        dcmi::setPcapEnable(sdbus,
-                            static_cast<bool>(requestData->powerLimitAction));
+        dcmi::setPcapEnable(ctx, static_cast<bool>(powerlimitaction));
     }
     catch (const InternalFailure& e)
     {
-        *data_len = 0;
-        return IPMI_CC_UNSPECIFIED_ERROR;
+        return ipmi::responseUnspecifiedError();
     }
 
     log<level::INFO>("Set Power Cap Enable",
-                     entry("POWERCAPENABLE=%u", requestData->powerLimitAction));
+                     entry("POWERCAPENABLE=%u", powerlimitaction));
 
-    *data_len = 0;
-    return IPMI_CC_OK;
+    return ipmi::responseSuccess();
 }
 
 ipmi_ret_t getAssetTag(ipmi_netfn_t netfn, ipmi_cmd_t cmd,
@@ -1471,9 +1476,9 @@ void register_netfn_dcmi_functions()
                                ipmi::Privilege::Operator, setPowerLimit);
 
     // <Activate/Deactivate Power Limit>
-
-    ipmi_register_callback(NETFUN_GRPEXT, dcmi::Commands::APPLY_POWER_LIMIT,
-                           NULL, applyPowerLimit, PRIVILEGE_OPERATOR);
+    ipmi::registerGroupHandler(ipmi::prioOpenBmcBase, ipmi::groupDCMI,
+                               ipmi::dcmi::cmdActDeactivatePwrLimit,
+                               ipmi::Privilege::Operator, applyPowerLimit);
 
     // <Get Asset Tag>
 

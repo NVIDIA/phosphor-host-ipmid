@@ -225,20 +225,10 @@ void setPcap(ipmi::Context::ptr& ctx, uint32_t powerCap);
 
 /** @brief Enable or disable the power capping
  *
- *  @param[in] bus - dbus connection
+ *  @param[in] Context - ctx
  *  @param[in] enabled - enable/disable
  */
-void setPcapEnable(sdbusplus::bus::bus& bus, bool enabled);
-
-/** @struct ApplyPowerLimitRequest
- *
- *  DCMI payload for Activate/Deactivate Power Limit command request.
- */
-struct ApplyPowerLimitRequest
-{
-    uint8_t powerLimitAction; //!< Power limit activation
-    uint16_t reserved;        //!< Reserved
-} __attribute__((packed));
+void setPcapEnable(ipmi::Context::ptr& ctx, bool enabled);
 
 /** @struct GetMgmntCtrlIdStrRequest
  *
