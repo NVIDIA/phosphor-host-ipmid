@@ -103,7 +103,10 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
         "xyz.openbmc_project.Inventory.Item.Cpu",
         "xyz.openbmc_project.Inventory.Item.Cable",
         "xyz.openbmc_project.Inventory.Item.Drive",
-        "xyz.openbmc_project.Inventory.Item.Watchdog"};
+        "xyz.openbmc_project.Inventory.Item.Watchdog",
+        "xyz.openbmc_project.Control.PowerSupplyRedundancy",
+        "xyz.openbmc_project.Inventory.Item.SEL",
+        "xyz.openbmc_project.Inventory.Item.GPU"};
 
     lbdUpdateSensorTree("/xyz/openbmc_project/sensors", sensorInterfaces);
 
@@ -139,6 +142,10 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
                               discreteInterfaces);
     // Add discrete sensors
     (void)lbdUpdateSensorTree("/xyz/openbmc_project/sensors/motherboard",
+                              discreteInterfaces);
+    (void)lbdUpdateSensorTree("/xyz/openbmc_project/sensors/power",
+                              discreteInterfaces);
+    (void)lbdUpdateSensorTree("/xyz/openbmc_project/sensors/gpuboard/",
                               discreteInterfaces);
 
     subtree = sensorTreePtr;

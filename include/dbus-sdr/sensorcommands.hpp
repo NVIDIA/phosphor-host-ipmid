@@ -20,6 +20,8 @@
 
 #pragma pack(push, 1)
 
+constexpr auto oemType = "";
+
 struct SensorThresholdResp
 {
     uint8_t readable;
@@ -71,6 +73,17 @@ enum class IPMISensorReadingByte3 : uint8_t
     watchdogHardReset = (1 << 1),
     watchdogPowerOff = (1 << 2),
     watchdogPowerCycle = (1 << 3),
+    fullyRedundant = (1 << 0),
+    redundancyLost = (1 << 1),
+    redundancyDegraded = (1 << 2),
+    sufficientFromRedundant = (1 << 3),
+    sufficientFromInsufficient = (1 << 4),
+    insufficient = (1 << 5),
+    degrardedFromFull = (1 << 6),
+    degradedFromNonRedundant = (1 << 7),
+    selCleared = (1 << 2),
+    selFull = (1 << 4),
+    selAlmostFull = (1 << 5),
 };
 
 enum class IPMISensorEventEnableByte2 : uint8_t
@@ -142,7 +155,7 @@ enum class IPMISensorEventEnableCable : uint8_t
 };
 
 /**
- * @enum power_supply sensor event enable bit mask
+ * @enum drive slot sensor event enable bit mask
  */
 enum class IPMISensorEventEnableDrive : uint8_t
 {
@@ -152,7 +165,7 @@ enum class IPMISensorEventEnableDrive : uint8_t
 };
 
 /**
- * @enum power_supply sensor event enable bit mask
+ * @enum watchdog sensor event enable bit mask
  */
 enum class IPMISensorEventEnableWatchdog : uint8_t
 {
@@ -160,6 +173,56 @@ enum class IPMISensorEventEnableWatchdog : uint8_t
     hardReset = (1 << 1),
     powerDown = (1 << 2),
     powerCycle = (1 << 3),
+};
+
+/**
+ * @enum event logging sensor event enable bit mask
+ * when sel record is cleared 2nd bit will be asseted
+ * when sel record is full 4th bit will be asseted
+ * when sel record is in 75% capacity 5th byte will be asseted
+ */
+enum class IPMISensorEventEnableSEL : uint8_t
+{
+    cleared = (1 << 2),
+    full = (1 << 4),
+    almostFull = (1 << 5),
+};
+
+/**
+ * @enum redundancy sensor event enable bit mask
+ * when full redundancy is gained 0th bit will be asserted
+ * when entered any non-redundant state 1st bit will be asserted
+ * when redundancy still exists, but less than full level,2nd bit
+ *   will get asserted.
+ * when redundancy is lost but unit is functioning with minumum
+ *   resource needed for 'normal' operation 3rd bit asserted
+ * when unit regained minimum resources needed for 'normal' operation
+ *  4th bit asserted
+ * when unit is non-redundant and has insufficient resource to maintain
+ *  normal operation, 5th bit asserted
+ * when Unit has lost some redundant resource but is still in redundant
+ *  state, 6th bit asserted
+ * when unit regained some resources  and is redundant but not fully
+ * redundant , 7th bit aserted
+ */
+enum class IPMISensorEventEnableRedundancy : uint8_t
+{
+    fullyRedundant = (1 << 0),
+    redundancyLost = (1 << 1),
+    redundancyDegraded = (1 << 2),
+    sufficientFromRedundant = (1 << 3),
+    sufficientFromInsufficient = (1 << 4),
+    insufficient = (1 << 5),
+    degrardedFromFull = (1 << 6),
+    degradedFromNonRedundant = (1 << 7),
+};
+
+/**
+ * @enum GPU sensor event enable bit mask
+ */
+enum class IPMISensorEventEnableGPU : uint8_t
+{
+    resetRequired = 0x0f,
 };
 
 enum class IPMINetfnSensorCmds : ipmi_cmd_t

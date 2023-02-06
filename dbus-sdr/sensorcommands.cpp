@@ -188,26 +188,100 @@ static constexpr const char* vrInterface =
     "xyz.openbmc_project.Control.VoltageRegulatorMode";
 static constexpr const char* sensorInterface =
     "xyz.openbmc_project.Sensor.Value";
-std::map<const char*, uint8_t> discreteInterfaceMap{
-    {{"xyz.openbmc_project.Inventory.Item.PowerSupply",
-      static_cast<uint8_t>(IPMISensorEventEnablePower::presenceDetected) |
-          static_cast<uint8_t>(IPMISensorEventEnablePower::failureDetected) |
-          static_cast<uint8_t>(IPMISensorEventEnablePower::inputLost)},
-     {"xyz.openbmc_project.Inventory.Item.Cpu",
-      static_cast<uint8_t>(IPMISensorEventEnableProc::procPresenceDetected)},
-     {"xyz.openbmc_project.Inventory.Item.Cable",
-      static_cast<uint8_t>(IPMISensorEventEnableCable::cableStatus) |
-          static_cast<uint8_t>(IPMISensorEventEnableCable::configurationError)},
-     {"xyz.openbmc_project.Inventory.Item.Drive",
-      static_cast<uint8_t>(IPMISensorEventEnableDrive::drivePresenceDetected) |
-          static_cast<uint8_t>(IPMISensorEventEnableDrive::driveFault) |
-          static_cast<uint8_t>(
-              IPMISensorEventEnableDrive::drivePredictiveFailure)},
-     {"xyz.openbmc_project.Inventory.Item.Watchdog",
-      static_cast<uint8_t>(IPMISensorEventEnableWatchdog::timerExpired) |
-          static_cast<uint8_t>(IPMISensorEventEnableWatchdog::hardReset) |
-          static_cast<uint8_t>(IPMISensorEventEnableWatchdog::powerDown) |
-          static_cast<uint8_t>(IPMISensorEventEnableWatchdog::powerCycle)}}};
+
+std::map<DbusInterface,
+         std::map<DbusInterface,
+                  std::map<DbusProperty,
+                           std::map<std::variant<std::string, bool>, uint8_t>>>>
+    discreteInterfaceMap = {
+        {"xyz.openbmc_project.Inventory.Item.PowerSupply",
+         {{"xyz.openbmc_project.Inventory.Item",
+           {{"Present",
+             {{true, static_cast<uint8_t>(
+                         IPMISensorReadingByte3::presenceDetected)}}}}},
+          {"xyz.openbmc_project.State.Decorator.OperationalStatus",
+           {{"Functional",
+             {{true, static_cast<uint8_t>(
+                         IPMISensorReadingByte3::failureDetected)}}}}},
+          {"xyz.openbmc_project.State.Decorator.PowerState",
+           {{"PowerState",
+             {{"xyz.openbmc_project."
+               "State.Decorator.PowerState.State.Off",
+               static_cast<uint8_t>(IPMISensorReadingByte3::inputLost)}}}}}}},
+        {"xyz.openbmc_project.Inventory.Item.Cpu",
+         {{"xyz.openbmc_project.Inventory.Item",
+           {{"Present",
+             {{true, static_cast<uint8_t>(
+                         IPMISensorReadingByte3::procPresenceDetected)}}}}}}},
+        {"xyz.openbmc_project.Inventory.Item.Cable",
+         {{"xyz.openbmc_project.Inventory.Item.Cable",
+           {{"CableStatus",
+             {{true,
+               static_cast<uint8_t>(IPMISensorReadingByte3::cableStatus)}}},
+            {"ConfigurationError",
+             {{true, static_cast<uint8_t>(
+                         IPMISensorReadingByte3::configurationError)}}}}}}},
+        {"xyz.openbmc_project.Inventory.Item.Drive",
+         {{"xyz.openbmc_project.Inventory.Item",
+           {{"Present",
+             {{true, static_cast<uint8_t>(
+                         IPMISensorReadingByte3::drivePresenceDetected)}}}}},
+          {"xyz.openbmc_project.State.Decorator.OperationalStatus",
+           {{"State",
+             {{"xyz.openbmc_project."
+               "State.Decorator.OperationalStatus.State.Fault",
+               static_cast<uint8_t>(IPMISensorReadingByte3::driveFault)}}},
+            {"Functional",
+             {{true, static_cast<uint8_t>(
+                         IPMISensorReadingByte3::drivePredictiveFailure)}}}}}}},
+        {"xyz.openbmc_project.Inventory.Item.Watchdog",
+         {{"xyz.openbmc_project.Inventory.Item.Watchdog",
+           {{"Status",
+             {{"TimerExpired",
+               static_cast<uint8_t>(IPMISensorReadingByte3::watchdogExpire)},
+              {"HardReset",
+               static_cast<uint8_t>(IPMISensorReadingByte3::watchdogHardReset)},
+              {"PowerOff",
+               static_cast<uint8_t>(IPMISensorReadingByte3::watchdogPowerOff)},
+              {"PowerCycle",
+               static_cast<uint8_t>(
+                   IPMISensorReadingByte3::watchdogPowerCycle)}}}}}}},
+        {"xyz.openbmc_project.Inventory.Item.SEL",
+         {{"xyz.openbmc_project.Inventory.Item.SEL",
+           {{"Status",
+             {{"SELFull",
+               static_cast<uint8_t>(IPMISensorReadingByte3::selFull)},
+              {"SELAlmostFull",
+               static_cast<uint8_t>(IPMISensorReadingByte3::selAlmostFull)},
+              {"LogCleared",
+               static_cast<uint8_t>(IPMISensorReadingByte3::selCleared)}}}}}}},
+        {"xyz.openbmc_project.Control.PowerSupplyRedundancy",
+         {{"xyz.openbmc_project.Control.PowerSupplyRedundancy",
+           {{"Status",
+             {{"fullyRedundant",
+               static_cast<uint8_t>(IPMISensorReadingByte3::fullyRedundant)},
+              {"redundancyDegraded",
+               static_cast<uint8_t>(
+                   IPMISensorReadingByte3::redundancyDegraded)},
+              {"sufficientFromRedundant",
+               static_cast<uint8_t>(
+                   IPMISensorReadingByte3::sufficientFromRedundant)},
+              {"sufficient",
+               static_cast<uint8_t>(
+                   IPMISensorReadingByte3::sufficientFromInsufficient)},
+              {"insufficient",
+               static_cast<uint8_t>(IPMISensorReadingByte3::insufficient)},
+              {"redundancyDegradedFromFull",
+               static_cast<uint8_t>(IPMISensorReadingByte3::degrardedFromFull)},
+              {"redundancyRegained",
+               static_cast<uint8_t>(
+                   IPMISensorReadingByte3::degradedFromNonRedundant)}}},
+            {"RedundancyLost",
+             {{true, static_cast<uint8_t>(
+                         IPMISensorReadingByte3::redundancyLost)}}}}}}},
+        {"xyz.openbmc_project.Inventory.Item.GPU",
+         {{oemType, {{oemType, {{oemType, 0}}}}}}}};
+
 } // namespace sensor
 
 static void getSensorMaxMin(const DbusInterfaceMap& sensorMap, double& max,
@@ -561,124 +635,88 @@ bool getVrEventStatus(ipmi::Context::ptr ctx, const std::string& connection,
  */
 uint8_t getDiscreteStatus(const ipmi::DbusInterfaceMap& sensorMap)
 {
-    uint8_t presentAssertion, functionalAssertion, stateAssertion,
-        powerAssertion, assertions = 0;
-    auto it = sensor::discreteInterfaceMap.begin();
-    auto powerInterface = sensorMap.find(it->first);
-    auto cpuInterface = sensorMap.find((++it)->first);
-    auto driveInterface = sensorMap.find((++it)->first);
-    auto watchdogInterface = sensorMap.find((++it)->first);
-    auto cableInterface = sensorMap.find((++it)->first);
-    if (powerInterface != sensorMap.end())
+    uint8_t assertions = 0;
+
+    for (auto& discreteIfaceMap : sensor::discreteInterfaceMap)
     {
-      presentAssertion = static_cast<uint8_t>(
-                    IPMISensorReadingByte3::presenceDetected);
-      functionalAssertion = static_cast<uint8_t>(
-                    IPMISensorReadingByte3::failureDetected);
-      powerAssertion = static_cast<uint8_t>(IPMISensorReadingByte3::inputLost);
-    }
-    else if (cpuInterface != sensorMap.end())
-    {
-      presentAssertion = static_cast<uint8_t>(
-                    IPMISensorReadingByte3::procPresenceDetected);
-    }
-    else if (driveInterface != sensorMap.end())
-    {
-      presentAssertion = static_cast<uint8_t>(
-                    IPMISensorReadingByte3::drivePresenceDetected);
-      functionalAssertion = static_cast<uint8_t>(
-                    IPMISensorReadingByte3::drivePredictiveFailure);
-      stateAssertion = static_cast<uint8_t>(IPMISensorReadingByte3::driveFault);
-    }
-    else if (cableInterface != sensorMap.end())
-    {
-        presentAssertion =
-            static_cast<uint8_t>(IPMISensorReadingByte3::cableStatus);
-        stateAssertion =
-            static_cast<uint8_t>(IPMISensorReadingByte3::configurationError);
-    }
-    else if (watchdogInterface != sensorMap.end())
-    {
-        auto status = watchdogInterface->second.find("Status");
-        if (status != watchdogInterface->second.end())
+        if (sensorMap.find(discreteIfaceMap.first) != sensorMap.end())
         {
-            std::string watchdogStatus = std::get<std::string>(status->second);
-            if (watchdogStatus == "TimerExpired")
+            for (auto& statusIface : discreteIfaceMap.second)
             {
-                assertions |= static_cast<uint8_t>(
-                    IPMISensorReadingByte3::watchdogExpire);
-            }
-            else if (watchdogStatus == "HardReset")
-            {
-                assertions |= static_cast<uint8_t>(
-                    IPMISensorReadingByte3::watchdogHardReset);
-            }
-            else if (watchdogStatus == "PowerOff")
-            {
-                assertions |= static_cast<uint8_t>(
-                    IPMISensorReadingByte3::watchdogPowerOff);
-            }
-            else if (watchdogStatus == "PowerCycle")
-            {
-                assertions |= static_cast<uint8_t>(
-                    IPMISensorReadingByte3::watchdogPowerCycle);
+                auto statusObject = sensorMap.find(statusIface.first);
+                if (statusObject != sensorMap.end())
+                {
+                    for (auto& dbusProp : statusIface.second)
+                    {
+                        for (auto& typeMap : dbusProp.second)
+                        {
+                            if (std::holds_alternative<bool>(typeMap.first))
+                            {
+                                auto statusProp =
+                                    statusObject->second.find(dbusProp.first);
+                                if (statusProp != statusObject->second.end() &&
+                                    std::get<bool>(statusProp->second) ==
+                                        std::get<bool>((typeMap.first)))
+                                {
+                                    assertions |= (typeMap.second);
+                                }
+                                }
+                                if (std::holds_alternative<std::string>(
+                                        typeMap.first))
+                                {
+                                    auto statusProp = statusObject->second.find(
+                                        dbusProp.first);
+                                    if (statusProp !=
+                                        statusObject->second.end())
+                                    {
+                                        if (std::get<std::string>(
+                                                statusProp->second) ==
+                                            std::get<std::string>(
+                                                typeMap.first))
+                                        {
+                                            assertions |= typeMap.second;
+                                            }
+                                    }
+                                }
+                        }
+                    }
+                }
             }
         }
+    }
+    // OEM Event type.
+    auto gpuInterface =
+        sensorMap.find("xyz.openbmc_project.Inventory.Item.GPU");
+    if (gpuInterface != sensorMap.end())
+    {
+        auto status = gpuInterface->second.find("GPUResetReq");
+        if (status != gpuInterface->second.end())
+        {
+            std::map<std::string, bool> gpuStatus =
+                std::get<std::map<std::string, bool>>(status->second);
 
+            for (const auto& [key, value] : gpuStatus)
+            {
+                uint8_t gpuIndex;
+                std::size_t indexLast = key.size();
+                std::size_t indexFirst = key.find_last_not_of("0123456789");
+                if (indexFirst == std::string::npos)
+                {
+                    return assertions;
+                }
+                indexFirst++;
+                if (indexFirst != indexLast)
+                {
+                    gpuIndex = std::stoi(key.substr(indexFirst, indexLast));
+                }
+                if (value)
+                {
+                    // Assert offset for respective GPU
+                    assertions |= static_cast<uint8_t>(1 << (gpuIndex - 1));
+                }
+            }
+        }
         return assertions;
-    }
-
-    auto presenceObject = sensorMap.find("xyz.openbmc_project.Inventory.Item");
-    if (presenceObject != sensorMap.end())
-    {
-        auto present = presenceObject->second.find("Present");
-        if (present != presenceObject->second.end())
-        {
-            if (std::get<bool>(present->second))
-            {
-                assertions |= presentAssertion;
-            }
-        }
-    }
-
-    auto functionalObject =
-        sensorMap.find("xyz.openbmc_project.State.Decorator.OperationalStatus");
-    if (functionalObject != sensorMap.end())
-    {
-        auto functional = functionalObject->second.find("Functional");
-        auto state = functionalObject->second.find("State");
-        if (functional != functionalObject->second.end())
-        {
-            if (!std::get<bool>(functional->second))
-            {
-                assertions |= functionalAssertion;
-            }
-        }
-        if (state != functionalObject->second.end())
-        {
-            if (std::get<std::string>(state->second) ==
-                "xyz.openbmc_project."
-                "State.Decorator.OperationalStatus.State.Fault")
-            {
-                assertions |= stateAssertion;
-            }
-        }
-    }
-
-    auto powerObject =
-        sensorMap.find("xyz.openbmc_project.State.Decorator.PowerState");
-    if (powerObject != sensorMap.end())
-    {
-        auto power = powerObject->second.find("PowerState");
-        if (power != powerObject->second.end())
-        {
-            if (std::get<std::string>(power->second) ==
-                "xyz.openbmc_project."
-                "State.Decorator.PowerState.State.Off")
-            {
-                assertions |= powerAssertion;
-            }
-        }
     }
 
     return assertions;
@@ -1487,17 +1525,6 @@ ipmi::RspType<uint8_t, // enabled
         return ipmi::responseResponseError();
     }
 
-    for (auto& it : sensor::discreteInterfaceMap)
-    {
-        if (sensorMap.find(it.first) != sensorMap.end())
-        {
-            enabled = static_cast<uint8_t>(
-                IPMISensorEventEnableByte2::sensorScanningEnable);
-            assertionEnabledLsb |= it.second;
-            deassertionEnabledLsb |= it.second;
-        }
-    }
-
     auto warningInterface =
         sensorMap.find("xyz.openbmc_project.Sensor.Threshold.Warning");
     auto criticalInterface =
@@ -2080,16 +2107,6 @@ bool constructDiscreteSdr(ipmi::Context::ptr ctx, uint16_t sensorNum,
 
     record.body.sensor_type = getSensorTypeFromPath(path);
     record.body.event_reading_type = getSensorEventTypeFromPath(path);
-    for (auto& it : sensor::discreteInterfaceMap)
-    {
-        if (sensorMap.find(it.first) != sensorMap.end())
-        {
-            record.body.supported_assertions[0] |= it.second;
-            record.body.supported_deassertions[0] |= it.second;
-            record.body.discrete_reading_setting_mask[0] |= it.second;
-            break;
-        }
-    }
 
     // populate sensor name from path
     auto name = sensor::parseSdrIdFromPath(path);

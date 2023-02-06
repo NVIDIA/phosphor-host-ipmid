@@ -316,6 +316,7 @@ enum class SensorTypeCodes : uint8_t
     drive_slot = 0x0D,
     event_log = 0x10,
     buttons = 0x14,
+    module = 0x15,
     cable = 0x1B,
     watchdog2 = 0x23,
 };
@@ -324,7 +325,9 @@ enum class SensorEventTypeCodes : uint8_t
 {
     unspecified = 0x00,
     threshold = 0x01,
-    sensorSpecified = 0x6f
+    redundancy = 0x0b,
+    sensorSpecified = 0x6f,
+    oem = 0x70,
 };
 
 const static boost::container::flat_map<
@@ -360,7 +363,11 @@ const static boost::container::flat_map<
                                   SensorEventTypeCodes::sensorSpecified)},
          {"eventlogging",
           std::make_pair(SensorTypeCodes::event_log,
-                         SensorEventTypeCodes::sensorSpecified)}}};
+                         SensorEventTypeCodes::sensorSpecified)},
+         {"PSU", std::make_pair(SensorTypeCodes::power_supply,
+                                SensorEventTypeCodes::redundancy)},
+         {"GPU",
+          std::make_pair(SensorTypeCodes::module, SensorEventTypeCodes::oem)}}};
 
 std::string getSensorTypeStringFromPath(const std::string& path);
 
