@@ -32,6 +32,7 @@ constexpr auto logDeleteIntf = "xyz.openbmc_project.Object.Delete";
 
 void registerStorageFunctions() __attribute__((constructor));
 
+constexpr uint8_t firstEntryId = 1;
 constexpr uint8_t eventDataSize = 3;
 using InternalFailure =
     sdbusplus::xyz::openbmc_project::Common::Error::InternalFailure;
@@ -655,7 +656,16 @@ ipmi::RspType<uint16_t // recordID of the Added SEL entry
     else
         return ipmi::responseUnspecifiedError();
 
-    return ipmi::responseSuccess(recordID);
+    if (selCacheMap.empty())
+    {
+        recordID = firstEntryId;
+        return ipmi::responseSuccess(recordID);
+    }
+
+    auto beginIter = selCacheMap.rbegin();
+    recordID = beginIter->first;
+
+    return ipmi::responseSuccess(++recordID);
 }
 
 ipmi::RspType<uint32_t> ipmiStorageGetSELTime()
