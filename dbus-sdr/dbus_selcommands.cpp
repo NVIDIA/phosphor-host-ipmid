@@ -10,7 +10,9 @@
 #include <xyz/openbmc_project/Common/error.hpp>
 #include <xyz/openbmc_project/Logging/SEL/error.hpp>
 #include "config.h"
+#include <fstream>
 
+constexpr auto selEraseTimestamp = "/var/lib/ipmi/sel_erase_time";
 static constexpr auto logObjPath = "/xyz/openbmc_project/logging";
 static constexpr auto logInterface = "xyz.openbmc_project.Logging.Create";
 using ErrLvl = sdbusplus::xyz::openbmc_project::Logging::server::Entry::Level;
@@ -209,6 +211,18 @@ void selAddedCallback(sdbusplus::message::message& m)
     }
 }
 
+void saveEraseTimeStamp()
+{
+   std::filesystem::path path(selEraseTimestamp);
+   std::ofstream eraseTimeFile(path);
+   if (!eraseTimeFile.good())
+   {
+       std::cerr << "Failed to open sel_erase_time file";
+   }
+
+   eraseTimeFile.close();
+}
+
 void selRemovedCallback(sdbusplus::message::message& m)
 {
     sdbusplus::message::object_path objPath;
@@ -224,6 +238,7 @@ void selRemovedCallback(sdbusplus::message::message& m)
     {
         std::string p = objPath;
         selCacheMap.erase(getLoggingId(p));
+	saveEraseTimeStamp();
     }
     catch (const std::invalid_argument& e)
     {
@@ -430,6 +445,27 @@ ipmi::RspType<uint8_t // erase status
         static_cast<uint8_t>(ipmi::sel::eraseComplete));
 }
 
+template <typename TP>
+std::time_t to_time_t(TP tp)
+{
+    using namespace std::chrono;
+    auto sctp = time_point_cast<system_clock::duration>(tp - TP::clock::now()
+              + system_clock::now());
+    return system_clock::to_time_t(sctp);
+}
+
+static int getFileTimestamp(const std::filesystem::path& file)
+{
+      std::error_code ec;
+      std::filesystem::file_time_type ftime = std::filesystem::last_write_time(file,ec);
+      if(ec)
+      {
+         return ::ipmi::sel::invalidTimeStamp;
+      }
+
+      return to_time_t(ftime);
+}
+
 /** @brief implements the get SEL Info command
  *  @returns IPMI completion code plus response data
  *   - selVersion - SEL revision
@@ -456,6 +492,9 @@ ipmi::RspType<uint8_t,  // SEL revision.
     uint16_t entries = 0;
     // Most recent addition timestamp.
     uint32_t addTimeStamp = ipmi::sel::invalidTimeStamp;
+
+    // Most recent delete timestamp
+    uint32_t eraseTimeStamp = getFileTimestamp(selEraseTimestamp);
 
     if (!selCacheMapInitialized)
     {
@@ -494,7 +533,6 @@ ipmi::RspType<uint8_t,  // SEL revision.
     {
         freeSpace = (maxDefineEntries - entries) * ipmi::sel::selRecordSize;
     }
-    constexpr uint32_t eraseTimeStamp = ipmi::sel::invalidTimeStamp;
     constexpr uint3_t reserved{0};
 
     return ipmi::responseSuccess(
