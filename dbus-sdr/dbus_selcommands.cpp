@@ -722,7 +722,6 @@ void registerStorageFunctions()
 {
 
     selCacheMapInitialized = false;
-    initSELCache();
 
     // <Add SEL Entry>
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
