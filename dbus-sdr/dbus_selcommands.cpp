@@ -522,17 +522,7 @@ ipmi::RspType<uint8_t,  // SEL revision.
 
     constexpr uint8_t selVersion = ipmi::sel::selVersion;
     constexpr uint16_t maxDefineEntries = MAX_SEL_ENTRIES;
-    constexpr uint16_t maxPossibleEntries = 4095;
-    uint16_t freeSpace = 0;
-    // free space max is 2 bytes and spec define above 0xffff as free
-    if (maxDefineEntries > maxPossibleEntries)
-    {
-        freeSpace = 0xffff;
-    }
-    else if (maxDefineEntries > entries)
-    {
-        freeSpace = (maxDefineEntries - entries) * ipmi::sel::selRecordSize;
-    }
+    uint16_t freeSpace = (maxDefineEntries - entries) * ipmi::sel::selRecordSize;
     constexpr uint3_t reserved{0};
 
     return ipmi::responseSuccess(
