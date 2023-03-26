@@ -71,6 +71,11 @@ static constexpr uint8_t maxThresholdValueNegativeCase = 127;
 // BMC I2C address is generally at 0x20
 static constexpr uint8_t bmcI2CAddr = 0x20;
 
+static constexpr uint8_t systemSoftwareId = 0x01;
+static constexpr uint8_t noneLunUsed = 0;
+static constexpr uint8_t systemFirmwareEntityId = 0x22;
+static constexpr uint8_t logicalContainerEntity= 0x1;
+
 constexpr size_t maxSDRTotalSize =
     76; // Largest SDR Record Size (type 01) + SDR Overheader Size
 constexpr static const uint32_t noTimestamp = 0xFFFFFFFF;
@@ -189,7 +194,9 @@ static constexpr const char* vrInterface =
     "xyz.openbmc_project.Control.VoltageRegulatorMode";
 static constexpr const char* sensorInterface =
     "xyz.openbmc_project.Sensor.Value";
-
+static constexpr const char* bootProgressInterface =
+    "xyz.openbmc_project.State.Boot.Progress";
+	
 std::map<DbusInterface,
          std::map<DbusInterface,
                   std::map<DbusProperty,
@@ -2135,6 +2142,58 @@ bool constructDiscreteSdr(ipmi::Context::ptr ctx, uint16_t sensorNum,
     return true;
 }
 
+// Construct type 3 SDR header and key for boot progress SDR
+void constructBootProgressHeaderKey(uint16_t sensorNum, uint16_t recordID,
+                                    get_sdr::SensorDataEventRecord& record)
+{
+    get_sdr::header::set_record_id(
+        recordID, reinterpret_cast<get_sdr::SensorDataRecordHeader*>(&record));
+
+    record.header.sdr_version = ipmiSdrVersion;
+    record.header.record_type = get_sdr::SENSOR_DATA_EVENT_RECORD;
+    record.header.record_length = sizeof(get_sdr::SensorDataEventRecord) -
+                                  sizeof(get_sdr::SensorDataRecordHeader);
+    record.key.owner_id = systemSoftwareId;
+    record.key.owner_lun = noneLunUsed;
+    record.key.sensor_number = static_cast<uint8_t>(sensorNum);
+
+    record.body.entity_id = systemFirmwareEntityId;
+    record.body.entity_instance = logicalContainerEntity;
+}
+
+
+/**
+ * @brief Constructs the SDRinfo for boot progress sensor
+ *
+ * @param sensorNum - unique number identifying sensor
+ * @param recordID - SDR record ID
+ * @param path - sensor dbus object path
+ * @param record - compactrecord data struct reference
+ * @return none
+ */
+void constructBootProgressSdr(uint16_t sensorNum,
+                              uint16_t recordID,
+                              const std::string& path,
+                              get_sdr::SensorDataEventRecord& record)
+{
+    uint8_t sensorNumber = static_cast<uint8_t>(sensorNum);
+    constructBootProgressHeaderKey(sensorNum, recordID, record);
+    // populate sensor name from path
+    auto name = sensor::parseSdrIdFromPath(path);
+    record.body.entity_instance = getEntityInstanceFromName(name);
+    // determine minimum length of the sensor name string
+    // either sizeof name or 16 bytes as per IPMI spec
+    int nameSize = std::min(name.size(), sizeof(record.body.id_string));
+    record.body.id_string_info = nameSize;
+    //Accroding to table 42- sensor type code
+    record.body.sensor_type = static_cast<uint8_t>(SensorTypeCodes::systemFirmwareProgress);
+    record.body.event_reading_type = static_cast<uint8_t>(SensorEventTypeCodes::sensorSpecified);
+    std::strncpy(record.body.id_string, name.c_str(), nameSize);
+
+    // Remember the sensor name, as determined for this sensor number
+    details::sdrStatsTable.updateName(sensorNumber, name);
+}
+
 // Construct type 3 SDR header and key (for VR and other discrete sensors)
 void constructEventSdrHeaderKey(uint16_t sensorNum, uint16_t recordID,
                                 get_sdr::SensorDataEventRecord& record)
@@ -2419,7 +2478,28 @@ static int
             break;
         }
     }
+	   
+    if (std::find(interfaces.begin(), interfaces.end(), sensor::bootProgressInterface) !=
+        interfaces.end())
+    {
+        get_sdr::SensorDataEventRecord record = {0};
 
+        // If the request doesn't read SDR body, construct only header and
+        // key part to avoid additional DBus transaction.
+        if (readBytes <= sizeof(record.header) + sizeof(record.key))
+        {
+            constructBootProgressHeaderKey(sensorNum, recordID, record);
+        }
+        else
+        {
+            constructBootProgressSdr(sensorNum, recordID, path, record);
+        }
+        recordData.insert(recordData.end(), (uint8_t*)&record,
+                            ((uint8_t*)&record) + sizeof(record));
+        return 0;
+
+    }
+   
     return 0;
 }
 

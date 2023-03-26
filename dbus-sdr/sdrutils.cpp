@@ -107,6 +107,8 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
         "xyz.openbmc_project.Control.PowerSupplyRedundancy",
         "xyz.openbmc_project.Inventory.Item.SEL",
         "xyz.openbmc_project.Inventory.Item.GPU"};
+	static constexpr const std::array bootProgressInterfaces = {
+        "xyz.openbmc_project.State.Boot.Progress"};
 
     lbdUpdateSensorTree("/xyz/openbmc_project/sensors", sensorInterfaces);
 
@@ -151,6 +153,9 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
                               discreteInterfaces);
     (void)lbdUpdateSensorTree("/xyz/openbmc_project/sensors/drive",
                               discreteInterfaces);
+    // Add boot progress sensor
+    (void)lbdUpdateSensorTree("/xyz/openbmc_project/state",
+                              bootProgressInterfaces);
 
     subtree = sensorTreePtr;
     sensorUpdatedIndex++;

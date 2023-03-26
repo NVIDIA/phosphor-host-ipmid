@@ -319,6 +319,7 @@ enum class SensorTypeCodes : uint8_t
     module = 0x15,
     cable = 0x1B,
     watchdog2 = 0x23,
+    systemFirmwareProgress = 0xF
 };
 
 enum class SensorEventTypeCodes : uint8_t
@@ -367,7 +368,10 @@ const static boost::container::flat_map<
          {"PSU", std::make_pair(SensorTypeCodes::power_supply,
                                 SensorEventTypeCodes::redundancy)},
          {"GPU",
-          std::make_pair(SensorTypeCodes::module, SensorEventTypeCodes::oem)}}};
+          std::make_pair(SensorTypeCodes::module, SensorEventTypeCodes::oem)},
+         {"boot_progress",
+          std::make_pair(SensorTypeCodes::systemFirmwareProgress,
+                         SensorEventTypeCodes::sensorSpecified)}}};
 
 std::string getSensorTypeStringFromPath(const std::string& path);
 
