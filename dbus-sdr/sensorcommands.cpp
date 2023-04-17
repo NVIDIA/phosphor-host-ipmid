@@ -67,6 +67,7 @@ using phosphor::logging::log;
 static constexpr int sensorMapUpdatePeriod = 10;
 static constexpr int sensorMapSdrUpdatePeriod = 60;
 
+static constexpr uint8_t maxThresholdValueNegativeCase = 127;
 // BMC I2C address is generally at 0x20
 static constexpr uint8_t bmcI2CAddr = 0x20;
 
@@ -1192,7 +1193,15 @@ ipmi::RspType<> ipmiSenSetSensorThresholds(
     double max = 0;
     double min = 0;
     getSensorMaxMin(sensorMap, max, min);
-
+    if (min < 0 ){
+        if( upperNonCritical > maxThresholdValueNegativeCase || upperCritical > maxThresholdValueNegativeCase || upperNonRecoverable > maxThresholdValueNegativeCase){
+             
+            phosphor::logging::log<phosphor::logging::level::ERR>(
+            "min is less than 0 , upper threshold must be < 128");
+            return ipmi::responseResponseError();
+        }
+    }
+    
     int16_t mValue = 0;
     int16_t bValue = 0;
     int8_t rExp = 0;
