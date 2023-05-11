@@ -166,7 +166,7 @@ EthernetInterface::DHCPConf getDHCPProperty(sdbusplus::bus::bus& bus,
                                             const ChannelParams& params)
 {
     std::string dhcpstr = std::get<std::string>(getDbusProperty(
-        bus, params.service, params.logicalPath, INTF_ETHERNET, "DHCPEnabled"));
+        bus, params.service, params.ifPath, INTF_ETHERNET, "DHCPEnabled"));
     return EthernetInterface::convertDHCPConfFromString(dhcpstr);
 }
 
