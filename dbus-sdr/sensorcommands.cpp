@@ -698,7 +698,7 @@ uint8_t getDiscreteStatus(const ipmi::DbusInterfaceMap& sensorMap)
 
             for (const auto& [key, value] : gpuStatus)
             {
-                uint8_t gpuIndex;
+                uint8_t gpuIndex = 1;
                 std::size_t indexLast = key.size();
                 std::size_t indexFirst = key.find_last_not_of("0123456789");
                 if (indexFirst == std::string::npos)
