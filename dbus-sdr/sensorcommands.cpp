@@ -231,10 +231,7 @@ std::map<DbusInterface,
            {{"State",
              {{"xyz.openbmc_project."
                "State.Decorator.OperationalStatus.State.Fault",
-               static_cast<uint8_t>(IPMISensorReadingByte3::driveFault)}}},
-            {"Functional",
-             {{true, static_cast<uint8_t>(
-                         IPMISensorReadingByte3::drivePredictiveFailure)}}}}}}},
+               static_cast<uint8_t>(IPMISensorReadingByte3::driveFault)}}}}}}},
         {"xyz.openbmc_project.Inventory.Item.Watchdog",
          {{"xyz.openbmc_project.Inventory.Item.Watchdog",
            {{"Status",
