@@ -2106,6 +2106,8 @@ bool constructDiscreteSdr(ipmi::Context::ptr ctx, uint16_t sensorNum,
             phosphor::logging::entry("PATH=%s", path.c_str()));
         return false;
     }
+    // entity instance 0 as the initialized value is unspecified in spec..
+    record.body.entity_instance = 0; 
     // follow the association chain to get the parent board's entityid and
     // entityInstance
     updateIpmiFromAssociation(path, sensorMap, record.body.entity_id,
@@ -2116,7 +2118,11 @@ bool constructDiscreteSdr(ipmi::Context::ptr ctx, uint16_t sensorNum,
 
     // populate sensor name from path
     auto name = sensor::parseSdrIdFromPath(path);
-    record.body.entity_instance = getEntityInstanceFromName(name);
+    // there is no entity instance assigned in Dbus.
+    if (record.body.entity_instance == 0)
+    {
+        record.body.entity_instance = getEntityInstanceFromName(name);
+    }
     // determine minimum length of the sensor name string
     // either sizeof name or 16 bytes as per IPMI spec
     int nameSize = std::min(name.size(), sizeof(record.body.id_string));
