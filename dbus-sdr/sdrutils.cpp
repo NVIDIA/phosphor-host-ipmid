@@ -140,7 +140,7 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
     // Add VR control as optional search path.
     (void)lbdUpdateSensorTree("/xyz/openbmc_project/vr", vrInterfaces);
     // Add Power Supply sensors
-    (void)lbdUpdateSensorTree("/xyz/openbmc_project/inventory/system/chassis",
+    (void)lbdUpdateSensorTree("/xyz/openbmc_project/sensors/system/chassis",
                               discreteInterfaces);
     // Add discrete sensors
     (void)lbdUpdateSensorTree("/xyz/openbmc_project/sensors/motherboard",

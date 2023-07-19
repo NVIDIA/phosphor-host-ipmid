@@ -210,8 +210,8 @@ std::map<DbusInterface,
                          IPMISensorReadingByte3::presenceDetected)}}}}},
           {"xyz.openbmc_project.State.Decorator.OperationalStatus",
            {{"Functional",
-             {{true, static_cast<uint8_t>(
-                         IPMISensorReadingByte3::failureDetected)}}}}},
+             {{false, static_cast<uint8_t>(
+                          IPMISensorReadingByte3::failureDetected)}}}}},
           {"xyz.openbmc_project.State.Decorator.PowerState",
            {{"PowerState",
              {{"xyz.openbmc_project."
