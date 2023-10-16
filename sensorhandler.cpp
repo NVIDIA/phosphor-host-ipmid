@@ -1097,7 +1097,8 @@ ipmi_ret_t populate_record_from_dbus(get_sdr::SensorDataFullRecordBody* body,
         get_sdr::body::set_id_strlen(id_string.length(), body);
     }
     strncpy(body->id_string, id_string.c_str(),
-            get_sdr::body::get_id_strlen(body));
+            std::min(static_cast<size_t>(get_sdr::body::get_id_strlen(body)),
+                     static_cast<size_t>(FULL_RECORD_ID_STR_MAX_LENGTH)));
 
     return IPMI_CC_OK;
 };
