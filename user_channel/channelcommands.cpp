@@ -196,7 +196,7 @@ ipmi ::RspType<uint3_t, // access mode,
 
     ChannelAccess chAccess;
 
-    Cc compCode;
+    Cc compCode = ccUnspecifiedError;
 
     if (types::enum_cast<EChannelActionType>(accessSetMode) == nvData)
     {
