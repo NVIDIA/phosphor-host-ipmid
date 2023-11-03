@@ -15,6 +15,8 @@
 constexpr auto selEraseTimestamp = "/var/lib/ipmi/sel_erase_time";
 static constexpr auto logObjPath = "/xyz/openbmc_project/logging";
 static constexpr auto logInterface = "xyz.openbmc_project.Logging.Create";
+static constexpr auto capacityInterface = "xyz.openbmc_project.Logging.Capacity";
+constexpr auto dbusProperty = "org.freedesktop.DBus.Properties";
 using ErrLvl = sdbusplus::xyz::openbmc_project::Logging::server::Entry::Level;
 auto sevLvl = ErrLvl::Informational;
 using InternalFailure =
@@ -708,6 +710,53 @@ ipmi::RspType<uint32_t> ipmiStorageGetSELTime()
     return ipmi::responseSuccess(selTime.tv_sec);
 }
 
+ipmi::RspType<uint8_t> ipmiStorageSetErrorInfoCap(size_t capacity)
+{
+    sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
+    try
+    {
+        auto service = ipmi::getService(bus, capacityInterface, logObjPath);
+        auto method = bus.new_method_call(service.c_str(), logObjPath,
+                                          dbusProperty, "Set");
+        method.append(capacityInterface, "InfoLogCapacity", std::variant<size_t>(capacity));
+        bus.call_noreply(method);
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "Failed to set capacity for SEL error entry, ERROR="
+                  << e.what() << "\n";
+        return ipmi::responseUnspecifiedError();
+    }
+
+    return ipmi::responseSuccess(
+        static_cast<uint8_t>(ipmi::sel::eraseComplete));
+}
+
+ipmi::RspType<size_t> ipmiStorageGetErrorInfoCap()
+{
+    std::variant<size_t> capacity;
+    sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
+    sdbusplus::message::message response;
+    try
+    {
+        auto service = ipmi::getService(bus, capacityInterface, logObjPath);
+        auto method = bus.new_method_call(service.c_str(), logObjPath,
+                                          dbusProperty, "Get");
+        method.append(capacityInterface, "InfoLogCapacity");
+        response = bus.call(method);
+        response.read(capacity);
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "Failed to get capacity for SEL error entry, ERROR="
+                  << e.what() << "\n";
+        return ipmi::responseUnspecifiedError();
+    }
+
+    return ipmi::responseSuccess(
+        static_cast<size_t>(std::get<size_t>(capacity)));
+}
+
 void registerStorageFunctions()
 {
 
@@ -742,6 +791,16 @@ void registerStorageFunctions()
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
                           ipmi::storage::cmdGetSelTime, ipmi::Privilege::User,
                           ipmiStorageGetSELTime);
+
+    // <Set SEL Error Info Entry Capacity>
+    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
+                          ipmi::storage::cmdSetErrorInfoCap,
+                          ipmi::Privilege::Operator, ipmiStorageSetErrorInfoCap);
+
+    // <Get SEL Error Info Entry Capacity>
+    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
+                          ipmi::storage::cmdGetErrorInfoCap,
+                          ipmi::Privilege::Operator, ipmiStorageGetErrorInfoCap);
 
     /*Note:
      * <Set SEL Time> and  <Reserve SEl>
