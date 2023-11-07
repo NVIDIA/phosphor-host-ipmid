@@ -45,7 +45,7 @@ constexpr static const char* chassisTypeMainServer = "17";
 constexpr static const uint8_t deassertionEvent = 0x80;
 
 static std::vector<uint8_t> fruCache;
-static uint8_t cacheBus = 0xFF;
+static uint16_t cacheBus = 0xFF;
 static uint8_t cacheAddr = 0XFF;
 static uint8_t lastDevId = 0xFF;
 
@@ -59,7 +59,7 @@ ManagedObjectType frus;
 
 // we unfortunately have to build a map of hashes in case there is a
 // collision to verify our dev-id
-boost::container::flat_map<uint8_t, std::pair<uint8_t, uint8_t>> deviceHashes;
+boost::container::flat_map<uint8_t, std::pair<uint16_t, uint8_t>> deviceHashes;
 
 void registerStorageFRUFunctions() __attribute__((constructor));
 
@@ -122,7 +122,7 @@ void recalculateHashes()
             continue;
         }
 
-        uint8_t fruBus = std::get<uint32_t>(busFind->second);
+        uint16_t fruBus = std::get<uint32_t>(busFind->second);
         uint8_t fruAddr = std::get<uint32_t>(addrFind->second);
         auto chassisFind = fruIface->second.find("CHASSIS_TYPE");
         std::string chassisType;
@@ -142,7 +142,7 @@ void recalculateHashes()
                 fruHash = 1;
             }
         }
-        std::pair<uint8_t, uint8_t> newDev(fruBus, fruAddr);
+        std::pair<uint16_t, uint8_t> newDev(fruBus, fruAddr);
 
         bool emplacePassed = false;
         while (!emplacePassed)
@@ -501,7 +501,7 @@ ipmi_ret_t getFruSdrs(ipmi::Context::ptr ctx, size_t index,
         return IPMI_CC_INVALID_FIELD_REQUEST;
     }
     auto device = deviceHashes.begin() + index;
-    uint8_t& bus = device->second.first;
+    uint16_t& bus = device->second.first;
     uint8_t& address = device->second.second;
 
     boost::container::flat_map<std::string, Value>* fruData = nullptr;
