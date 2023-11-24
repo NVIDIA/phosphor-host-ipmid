@@ -63,6 +63,7 @@ enum class SensorUnits : uint8_t
     amps = 0x5,
     watts = 0x6,
     rpm = 0x12,
+    percent = 0x0,
 };
 
 #pragma pack(push, 1)

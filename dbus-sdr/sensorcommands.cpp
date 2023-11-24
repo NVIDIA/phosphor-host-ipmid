@@ -112,7 +112,8 @@ const static boost::container::flat_map<const char*, SensorUnits, CmpStr>
                  {"voltage", SensorUnits::volts},
                  {"current", SensorUnits::amps},
                  {"fan_tach", SensorUnits::rpm},
-                 {"power", SensorUnits::watts}}};
+                 {"power", SensorUnits::watts},
+                 {"fan_pwm", SensorUnits::percent}}};
 
 void registerSensorFunctions() __attribute__((constructor));
 
@@ -1837,6 +1838,12 @@ bool constructSensorSdr(ipmi::Context::ptr ctx, uint16_t sensorNum,
     auto findUnits = sensorUnits.find(typeCstr);
     if (findUnits != sensorUnits.end())
     {
+        if (static_cast<std::string>(findUnits->first) == "fan_pwm")
+        {
+            // Enable Percentage unit (bit 0) for PWM sensors
+            record.body.sensor_units_1 |= 1 << 0;
+        }
+
         record.body.sensor_units_2_base =
             static_cast<uint8_t>(findUnits->second);
     } // else default 0x0 unspecified
@@ -1922,7 +1929,7 @@ bool constructSensorSdr(ipmi::Context::ptr ctx, uint16_t sensorNum,
         (rExpSign << 7) | (rExpBits << 4) | (bExpSign << 3) | bExpBits;
 
     // Set the analog reading byte interpretation accordingly
-    record.body.sensor_units_1 = (bSigned ? 1 : 0) << 7;
+    record.body.sensor_units_1 |= (bSigned ? 1 : 0) << 7;
 
     // TODO(): Perhaps care about Tolerance, Accuracy, and so on
     // These seem redundant, but derivable from the above 5 attributes
