@@ -35,7 +35,7 @@ constexpr auto logDeleteIntf = "xyz.openbmc_project.Object.Delete";
 void registerStorageFunctions() __attribute__((constructor));
 
 constexpr uint8_t firstEntryId = 1;
-constexpr uint8_t eventDataSize = 3;
+
 using InternalFailure =
     sdbusplus::xyz::openbmc_project::Common::Error::InternalFailure;
 using namespace phosphor::logging;
@@ -655,7 +655,7 @@ ipmi::RspType<uint16_t // recordID of the Added SEL entry
         }
 
         bool assert = (eventDir & 0x80) ? false : true;
-        std::string messageID = "";
+        std::string messageID = ipmi::getSelEventMessage(objpath, eventData);
 
         sdbusplus::bus::bus bus(ipmid_get_sd_bus_connection());
         std::map<std::string, std::string> addData;

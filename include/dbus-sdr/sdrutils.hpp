@@ -32,6 +32,7 @@
 #pragma once
 
 static constexpr bool debug = false;
+constexpr uint8_t eventDataSize = 3;
 
 struct CmpStrVersion
 {
@@ -400,4 +401,8 @@ const std::string* getSensorConfigurationInterface(
 void updateIpmiFromAssociation(const std::string& path,
                                const DbusInterfaceMap& sensorMap,
                                uint8_t& entityId, uint8_t& entityInstance);
+
+std::string getSelEventMessage(const std::string& sensorPath,  
+                               std::array<uint8_t, eventDataSize>& eventData);
+
 } // namespace ipmi
