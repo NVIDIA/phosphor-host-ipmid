@@ -1,12 +1,13 @@
 #pragma once
 
 #include <boost/system/error_code.hpp>
-#include <chrono>
 #include <ipmid/api-types.hpp>
 #include <ipmid/message.hpp>
 #include <ipmid/types.hpp>
-#include <optional>
 #include <sdbusplus/server.hpp>
+
+#include <chrono>
+#include <optional>
 
 namespace ipmi
 {
@@ -57,7 +58,7 @@ class ServiceCache
      *  @param[in] bus - The bus associated with and used for looking
      *                   up the service.
      */
-    const std::string& getService(sdbusplus::bus::bus& bus);
+    const std::string& getService(sdbusplus::bus_t& bus);
 
     /** @brief Invalidates the current service name */
     void invalidate();
@@ -69,16 +70,15 @@ class ServiceCache
      *  @param[in] method - The method name
      *  @return The message containing the method call.
      */
-    sdbusplus::message::message newMethodCall(sdbusplus::bus::bus& bus,
-                                              const char* intf,
-                                              const char* method);
+    sdbusplus::message_t newMethodCall(sdbusplus::bus_t& bus, const char* intf,
+                                       const char* method);
 
     /** @brief Check to see if the current cache is valid
      *
      * @param[in] bus - The bus used for the service lookup
      * @return True if the cache is valid false otherwise.
      */
-    bool isValid(sdbusplus::bus::bus& bus) const;
+    bool isValid(sdbusplus::bus_t& bus) const;
 
   private:
     /** @brief DBUS interface provided by the service */
@@ -99,7 +99,7 @@ class ServiceCache
  * @param[in] path - DBUS Object Path
  *
  */
-std::string getService(sdbusplus::bus::bus& bus, const std::string& intf,
+std::string getService(sdbusplus::bus_t& bus, const std::string& intf,
                        const std::string& path);
 
 /** @brief Gets the dbus object info implementing the given interface
@@ -110,7 +110,7 @@ std::string getService(sdbusplus::bus::bus& bus, const std::string& intf,
  *  @param[in] match - identifier for object.
  *  @return On success returns the object having objectpath and servicename.
  */
-DbusObjectInfo getDbusObject(sdbusplus::bus::bus& bus,
+DbusObjectInfo getDbusObject(sdbusplus::bus_t& bus,
                              const std::string& interface,
                              const std::string& subtreePath = ROOT,
                              const std::string& match = {});
@@ -124,7 +124,7 @@ DbusObjectInfo getDbusObject(sdbusplus::bus::bus& bus,
  *  @param[in] property - name of the property.
  *  @return On success returns the value of the property.
  */
-Value getDbusProperty(sdbusplus::bus::bus& bus, const std::string& service,
+Value getDbusProperty(sdbusplus::bus_t& bus, const std::string& service,
                       const std::string& objPath, const std::string& interface,
                       const std::string& property,
                       std::chrono::microseconds timeout = IPMI_DBUS_TIMEOUT);
@@ -138,7 +138,7 @@ Value getDbusProperty(sdbusplus::bus::bus& bus, const std::string& service,
  *  @return On success returns the map of name value pair.
  */
 PropertyMap
-    getAllDbusProperties(sdbusplus::bus::bus& bus, const std::string& service,
+    getAllDbusProperties(sdbusplus::bus_t& bus, const std::string& service,
                          const std::string& objPath,
                          const std::string& interface,
                          std::chrono::microseconds timeout = IPMI_DBUS_TIMEOUT);
@@ -150,7 +150,7 @@ PropertyMap
  *  @param[in] objPath - D-Bus object path.
  *  @return On success returns the map of name value pair.
  */
-ObjectValueTree getManagedObjects(sdbusplus::bus::bus& bus,
+ObjectValueTree getManagedObjects(sdbusplus::bus_t& bus,
                                   const std::string& service,
                                   const std::string& objPath);
 
@@ -162,7 +162,7 @@ ObjectValueTree getManagedObjects(sdbusplus::bus::bus& bus,
  *  @param[in] property - name of the property.
  *  @param[in] value - value which needs to be set.
  */
-void setDbusProperty(sdbusplus::bus::bus& bus, const std::string& service,
+void setDbusProperty(sdbusplus::bus_t& bus, const std::string& service,
                      const std::string& objPath, const std::string& interface,
                      const std::string& property, const Value& value,
                      std::chrono::microseconds timeout = IPMI_DBUS_TIMEOUT);
@@ -175,7 +175,7 @@ void setDbusProperty(sdbusplus::bus::bus& bus, const std::string& service,
  *  @param[in] match - Identifier for a path.
  *  @returns map of object path and service info.
  */
-ObjectTree getAllDbusObjects(sdbusplus::bus::bus& bus,
+ObjectTree getAllDbusObjects(sdbusplus::bus_t& bus,
                              const std::string& serviceRoot,
                              const std::string& interface,
                              const std::string& match = {});
@@ -187,8 +187,7 @@ ObjectTree getAllDbusObjects(sdbusplus::bus::bus& bus,
  *  @param[in] interface - Dbus interface.
  *  @param[in] match - Identifier for object.
  */
-void deleteAllDbusObjects(sdbusplus::bus::bus& bus,
-                          const std::string& serviceRoot,
+void deleteAllDbusObjects(sdbusplus::bus_t& bus, const std::string& serviceRoot,
                           const std::string& interface,
                           const std::string& match = {});
 
@@ -199,7 +198,7 @@ void deleteAllDbusObjects(sdbusplus::bus::bus& bus,
  *  @param[in] interfaces - Dbus interface list.
  *  @return map of object path and service info.
  */
-ObjectTree getAllAncestors(sdbusplus::bus::bus& bus, const std::string& path,
+ObjectTree getAllAncestors(sdbusplus::bus_t& bus, const std::string& path,
                            InterfaceList&& interfaces);
 
 /********* Begin co-routine yielding alternatives ***************/
@@ -374,6 +373,22 @@ boost::system::error_code getAllAncestors(Context::ptr ctx,
                                           const InterfaceList& interfaces,
                                           ObjectTree& objectTree);
 
+/** @brief Gets the value associated with the given object
+ *         and the interface.
+ *  @param[in] ctx - ipmi::Context::ptr
+ *  @param[in] service - D-Bus service name.
+ *  @param[in] objPath - D-Bus object path.
+ *  @param[in] interface - D-Bus interface.
+ *  @param[in] method - name of the method.
+ *  @return - boost error code object
+ */
+
+boost::system::error_code callDbusMethod(Context::ptr ctx,
+                                         const std::string& service,
+                                         const std::string& objPath,
+                                         const std::string& interface,
+                                         const std::string& method);
+
 /********* End co-routine yielding alternatives ***************/
 
 /** @brief Retrieve the value from map of variants,
@@ -418,7 +433,7 @@ struct VariantToDoubleVisitor
 
     template <typename T>
     std::enable_if_t<!std::is_arithmetic<T>::value, double>
-        operator()(const T& t) const
+        operator()(const T&) const
     {
         throw std::invalid_argument("Cannot translate type to double");
     }
@@ -434,7 +449,7 @@ namespace method_no_args
  *  @param[in] interface - Dbus interface.
  *  @param[in] method - Dbus method.
  */
-void callDbusMethod(sdbusplus::bus::bus& bus, const std::string& service,
+void callDbusMethod(sdbusplus::bus_t& bus, const std::string& service,
                     const std::string& objPath, const std::string& interface,
                     const std::string& method);
 
@@ -442,11 +457,11 @@ void callDbusMethod(sdbusplus::bus::bus& bus, const std::string& service,
 
 /** @brief Perform the low-level i2c bus write-read.
  *  @param[in] i2cBus - i2c bus device node name, such as /dev/i2c-2.
- *  @param[in] slaveAddr - i2c device slave address.
+ *  @param[in] targetAddr - i2c device target address.
  *  @param[in] writeData - The data written to i2c device.
  *  @param[out] readBuf - Data read from the i2c device.
  */
-ipmi::Cc i2cWriteRead(std::string i2cBus, const uint8_t slaveAddr,
+ipmi::Cc i2cWriteRead(std::string i2cBus, const uint8_t targetAddr,
                       std::vector<uint8_t> writeData,
                       std::vector<uint8_t>& readBuf);
 

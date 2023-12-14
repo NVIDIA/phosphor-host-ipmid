@@ -17,16 +17,19 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/bimap.hpp>
 #include <boost/container/flat_map.hpp>
+#include <ipmid/api.hpp>
+#include <ipmid/types.hpp>
+#include <phosphor-logging/log.hpp>
+#include <sdbusplus/bus/match.hpp>
+
 #include <cstdio>
 #include <cstring>
 #include <exception>
 #include <filesystem>
-#include <ipmid/api.hpp>
-#include <ipmid/types.hpp>
 #include <map>
-#include <phosphor-logging/log.hpp>
-#include <sdbusplus/bus/match.hpp>
+#include <optional>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #pragma once
@@ -308,18 +311,20 @@ enum class SensorTypeCodes : uint8_t
     voltage = 0x2,
     current = 0x3,
     fan = 0x4,
+    physical_security = 0x5,
     processor = 0x07,
     power_supply = 0x08,
     power_unit = 0x09,
     other = 0xB,
     memory = 0x0c,
     drive_slot = 0x0D,
+    systemFirmwareProgress = 0xF
     event_log = 0x10,
     buttons = 0x14,
     module = 0x15,
     cable = 0x1B,
     watchdog2 = 0x23,
-    systemFirmwareProgress = 0xF
+    entity = 0x25,
 };
 
 enum class SensorEventTypeCodes : uint8_t
@@ -344,6 +349,10 @@ const static boost::container::flat_map<
                                      SensorEventTypeCodes::threshold)},
          {"fan_pwm", std::make_pair(SensorTypeCodes::fan,
                                     SensorEventTypeCodes::threshold)},
+         {"intrusion", std::make_pair(SensorTypeCodes::physical_security,
+                                      SensorEventTypeCodes::sensorSpecified)},
+         {"processor", std::make_pair(SensorTypeCodes::processor,
+                                      SensorEventTypeCodes::sensorSpecified)},
          {"power", std::make_pair(SensorTypeCodes::other,
                                   SensorEventTypeCodes::threshold)},
          {"memory", std::make_pair(SensorTypeCodes::memory,
@@ -372,7 +381,9 @@ const static boost::container::flat_map<
          {"boot_progress",
           std::make_pair(SensorTypeCodes::systemFirmwareProgress,
                          SensorEventTypeCodes::sensorSpecified)}}};
-
+         {"entity", std::make_pair(SensorTypeCodes::entity,
+                                   SensorEventTypeCodes::sensorSpecified)}}};
+>>>>>>> origin/master
 std::string getSensorTypeStringFromPath(const std::string& path);
 
 uint8_t getSensorTypeFromPath(const std::string& path);
@@ -393,11 +404,16 @@ std::map<std::string, std::vector<std::string>>
 std::map<std::string, Value> getEntityManagerProperties(const char* path,
                                                         const char* interface);
 
+std::optional<std::unordered_set<std::string>>&
+    getIpmiDecoratorPaths(const std::optional<ipmi::Context::ptr>& ctx);
+
 const std::string* getSensorConfigurationInterface(
     const std::map<std::string, std::vector<std::string>>&
         sensorInterfacesResponse);
 
-void updateIpmiFromAssociation(const std::string& path,
-                               const DbusInterfaceMap& sensorMap,
-                               uint8_t& entityId, uint8_t& entityInstance);
+void updateIpmiFromAssociation(
+    const std::string& path,
+    const std::unordered_set<std::string>& ipmiDecoratorPaths,
+    const DbusInterfaceMap& sensorMap, uint8_t& entityId,
+    uint8_t& entityInstance);
 } // namespace ipmi

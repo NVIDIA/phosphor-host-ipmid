@@ -4,13 +4,14 @@
 
 #include "sensorhandler.hpp"
 
-#include <cmath>
 #include <ipmid/api.hpp>
 #include <ipmid/types.hpp>
 #include <ipmid/utils.hpp>
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/log.hpp>
 #include <sdbusplus/message/types.hpp>
+
+#include <cmath>
 
 #ifdef FEATURE_SENSORS_CACHE
 
@@ -46,7 +47,7 @@ using namespace phosphor::logging;
  *  @param[in] path - interested path in the list of objects
  *  @return pair of service path and service
  */
-ServicePath getServiceAndPath(sdbusplus::bus::bus& bus,
+ServicePath getServiceAndPath(sdbusplus::bus_t& bus,
                               const std::string& interface,
                               const std::string& path = std::string());
 
@@ -181,7 +182,7 @@ GetSensorResponse eventdata2(const Info& sensorInfo);
 template <typename T>
 GetSensorResponse readingAssertion(const Info& sensorInfo)
 {
-    sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
+    sdbusplus::bus_t bus{ipmid_get_sd_bus_connection()};
     GetSensorResponse response{};
 
     enableScanning(&response);
@@ -210,7 +211,7 @@ GetSensorResponse readingAssertion(const Info& sensorInfo)
 template <typename T>
 GetSensorResponse readingData(const Info& sensorInfo)
 {
-    sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
+    sdbusplus::bus_t bus{ipmid_get_sd_bus_connection()};
 
     GetSensorResponse response{};
 
@@ -252,32 +253,26 @@ GetSensorResponse readingData(const Info& sensorInfo)
 
     double value = std::get<T>(propValue) *
                    std::pow(10, sensorInfo.scale - sensorInfo.exponentR);
-    int32_t rawData =
-        (value - sensorInfo.scaledOffset) / sensorInfo.coefficientM;
+    int32_t rawData = (value - sensorInfo.scaledOffset) /
+                      sensorInfo.coefficientM;
 
     constexpr uint8_t sensorUnitsSignedBits = 2 << 6;
     constexpr uint8_t signedDataFormat = 0x80;
     // if sensorUnits1 [7:6] = 10b, sensor is signed
+    int32_t minClamp;
+    int32_t maxClamp;
     if ((sensorInfo.sensorUnits1 & sensorUnitsSignedBits) == signedDataFormat)
     {
-        if (rawData > std::numeric_limits<int8_t>::max() ||
-            rawData < std::numeric_limits<int8_t>::lowest())
-        {
-            log<level::ERR>("Value out of range");
-            throw std::out_of_range("Value out of range");
-        }
-        setReading(static_cast<int8_t>(rawData), &response);
+        minClamp = std::numeric_limits<int8_t>::lowest();
+        maxClamp = std::numeric_limits<int8_t>::max();
     }
     else
     {
-        if (rawData > std::numeric_limits<uint8_t>::max() ||
-            rawData < std::numeric_limits<uint8_t>::lowest())
-        {
-            log<level::ERR>("Value out of range");
-            throw std::out_of_range("Value out of range");
-        }
-        setReading(static_cast<uint8_t>(rawData), &response);
+        minClamp = std::numeric_limits<uint8_t>::lowest();
+        maxClamp = std::numeric_limits<uint8_t>::max();
     }
+    setReading(static_cast<uint8_t>(std::clamp(rawData, minClamp, maxClamp)),
+               &response);
 
     if (!std::isfinite(value))
     {
@@ -325,17 +320,17 @@ GetSensorResponse readingData(const Info& sensorInfo)
     {
         warningAlarmLow = std::get<bool>(ipmi::getDbusProperty(
             bus, service, sensorInfo.sensorPath,
-            "xyz.openbmc_project.Sensor.Threshold.Warning", "WarningAlarmlow"));
+            "xyz.openbmc_project.Sensor.Threshold.Warning", "WarningAlarmLow"));
     }
     catch (const std::exception& e)
     {
         warningAlarmLow = false;
     }
     response.thresholdLevelsStates =
-        (static_cast<uint8_t>(critAlarmHigh) << 4) |
-        (static_cast<uint8_t>(warningAlarmHigh) << 3) |
-        (static_cast<uint8_t>(warningAlarmLow) << 2) |
-        (static_cast<uint8_t>(critAlarmLow) << 1);
+        (static_cast<uint8_t>(critAlarmHigh) << 3) |
+        (static_cast<uint8_t>(critAlarmLow) << 2) |
+        (static_cast<uint8_t>(warningAlarmHigh) << 1) |
+        (static_cast<uint8_t>(warningAlarmLow));
 
     return response;
 }
@@ -451,8 +446,8 @@ std::optional<GetSensorResponse> readingData(uint8_t id, const Info& sensorInfo,
 
     double value = std::get<T>(iter->second) *
                    std::pow(10, sensorInfo.scale - sensorInfo.exponentR);
-    int32_t rawData =
-        (value - sensorInfo.scaledOffset) / sensorInfo.coefficientM;
+    int32_t rawData = (value - sensorInfo.scaledOffset) /
+                      sensorInfo.coefficientM;
 
     constexpr uint8_t sensorUnitsSignedBits = 2 << 6;
     constexpr uint8_t signedDataFormat = 0x80;
@@ -529,9 +524,9 @@ template <typename T>
 ipmi_ret_t readingAssertion(const SetSensorReadingReq& cmdData,
                             const Info& sensorInfo)
 {
-    auto msg =
-        makeDbusMsg("org.freedesktop.DBus.Properties", sensorInfo.sensorPath,
-                    "Set", sensorInfo.sensorInterface);
+    auto msg = makeDbusMsg("org.freedesktop.DBus.Properties",
+                           sensorInfo.sensorPath, "Set",
+                           sensorInfo.sensorInterface);
 
     const auto& interface = sensorInfo.propertyInterfaces.begin();
     msg.append(interface->first);
@@ -554,14 +549,14 @@ template <typename T>
 ipmi_ret_t readingData(const SetSensorReadingReq& cmdData,
                        const Info& sensorInfo)
 {
-    T raw_value =
-        (sensorInfo.coefficientM * cmdData.reading) + sensorInfo.scaledOffset;
+    T raw_value = (sensorInfo.coefficientM * cmdData.reading) +
+                  sensorInfo.scaledOffset;
 
     raw_value *= std::pow(10, sensorInfo.exponentR - sensorInfo.scale);
 
-    auto msg =
-        makeDbusMsg("org.freedesktop.DBus.Properties", sensorInfo.sensorPath,
-                    "Set", sensorInfo.sensorInterface);
+    auto msg = makeDbusMsg("org.freedesktop.DBus.Properties",
+                           sensorInfo.sensorPath, "Set",
+                           sensorInfo.sensorInterface);
 
     const auto& interface = sensorInfo.propertyInterfaces.begin();
     msg.append(interface->first);

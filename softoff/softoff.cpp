@@ -17,22 +17,23 @@
 
 #include "softoff.hpp"
 
-#include <chrono>
 #include <ipmid/utils.hpp>
 #include <phosphor-logging/log.hpp>
 #include <xyz/openbmc_project/Control/Host/server.hpp>
+
+#include <chrono>
 namespace phosphor
 {
 namespace ipmi
 {
 
 using namespace phosphor::logging;
-using namespace sdbusplus::xyz::openbmc_project::Control::server;
+using namespace sdbusplus::server::xyz::openbmc_project::control;
 
 void SoftPowerOff::sendHostShutDownCmd()
 {
-    auto ctrlHostPath =
-        std::string{CONTROL_HOST_OBJ_MGR} + '/' + HOST_NAME + '0';
+    auto ctrlHostPath = std::string{CONTROL_HOST_OBJ_MGR} + '/' + HOST_NAME +
+                        '0';
     auto host = ::ipmi::getService(this->bus, CONTROL_HOST_BUSNAME,
                                    ctrlHostPath.c_str());
 
@@ -40,20 +41,21 @@ void SoftPowerOff::sendHostShutDownCmd()
                                       CONTROL_HOST_BUSNAME, "Execute");
 
     method.append(convertForMessage(Host::Command::SoftOff).c_str());
-
-    auto reply = bus.call(method);
-    if (reply.is_method_error())
+    try
     {
-        log<level::ERR>("Error in call to control host Execute");
+        auto reply = bus.call(method);
+    }
+    catch (const std::exception& e)
+    {
+        log<level::ERR>("Error in call to control host Execute",
+                        entry("ERROR=%s", e.what()));
         // TODO openbmc/openbmc#851 - Once available, throw returned error
         throw std::runtime_error("Error in call to control host Execute");
     }
-
-    return;
 }
 
 // Function called on host control signals
-void SoftPowerOff::hostControlEvent(sdbusplus::message::message& msg)
+void SoftPowerOff::hostControlEvent(sdbusplus::message_t& msg)
 {
     std::string cmdCompleted{};
     std::string cmdStatus{};
@@ -67,7 +69,7 @@ void SoftPowerOff::hostControlEvent(sdbusplus::message::message& msg)
     if (Host::convertResultFromString(cmdStatus) == Host::Result::Success)
     {
         // Set our internal property indicating we got host attention
-        sdbusplus::xyz::openbmc_project::Ipmi::Internal ::server::SoftPowerOff::
+        sdbusplus::server::xyz::openbmc_project::ipmi::internal::SoftPowerOff::
             responseReceived(HostResponse::SoftOffReceived);
 
         // Start timer for host shutdown
@@ -126,7 +128,7 @@ auto SoftPowerOff::responseReceived(HostResponse response) -> HostResponse
         completed = true;
     }
 
-    return sdbusplus::xyz::openbmc_project::Ipmi::Internal ::server::
+    return sdbusplus::server::xyz::openbmc_project::ipmi::internal::
         SoftPowerOff::responseReceived(response);
 }
 

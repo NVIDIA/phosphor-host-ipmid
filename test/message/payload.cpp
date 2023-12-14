@@ -19,6 +19,7 @@
 
 #include <ipmid/api.hpp>
 #include <ipmid/message.hpp>
+
 #include <stdexcept>
 
 #include <gtest/gtest.h>
@@ -314,15 +315,16 @@ TEST(PayloadRequest, PartialPayload)
 
 std::vector<std::string> logs;
 
-extern "C" {
+extern "C"
+{
 int sd_journal_send(const char* format, ...)
 {
     logs.push_back(format);
     return 0;
 }
 
-int sd_journal_send_with_location(const char* file, const char* line,
-                                  const char* func, const char* format, ...)
+int sd_journal_send_with_location(const char* /*file*/, const char* /*line*/,
+                                  const char* /*func*/, const char* format, ...)
 {
     logs.push_back(format);
     return 0;
@@ -436,7 +438,6 @@ TEST_F(PayloadLogging, EnforcingException)
         throw std::runtime_error("test");
     }
     catch (...)
-    {
-    }
+    {}
     EXPECT_EQ(logs.size(), 0);
 }

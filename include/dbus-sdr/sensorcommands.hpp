@@ -15,8 +15,9 @@
 */
 
 #pragma once
-#include <cstdint>
 #include <dbus-sdr/sdrutils.hpp>
+
+#include <cstdint>
 
 #pragma pack(push, 1)
 
@@ -305,5 +306,19 @@ namespace dcmi
     constexpr auto cmdGetSensorInfo = 0x07;
 
 }
+
+namespace dcmi
+{
+
+struct sensorInfo
+{
+    std::string objectPath;
+    uint8_t type;
+    uint16_t recordId;
+    uint8_t entityId;
+    uint8_t entityInstance;
+};
+
+} // namespace dcmi
 
 } // namespace ipmi

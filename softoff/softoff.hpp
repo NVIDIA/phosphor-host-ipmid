@@ -2,27 +2,32 @@
 
 #include "config.h"
 
-#include <functional>
 #include <sdbusplus/bus.hpp>
 #include <sdbusplus/server/object.hpp>
 #include <sdbusplus/timer.hpp>
 #include <xyz/openbmc_project/Control/Host/server.hpp>
 #include <xyz/openbmc_project/Ipmi/Internal/SoftPowerOff/server.hpp>
+
+#include <functional>
 namespace phosphor
 {
 namespace ipmi
 {
 
-namespace Base = sdbusplus::xyz::openbmc_project::Ipmi::Internal::server;
-using namespace sdbusplus::xyz::openbmc_project::Control::server;
+namespace Base = sdbusplus::server::xyz::openbmc_project::ipmi::internal;
+using namespace sdbusplus::server::xyz::openbmc_project::control;
 
 namespace sdbusRule = sdbusplus::bus::match::rules;
+
+namespace
+{
+using SoftPowerOffInherit = sdbusplus::server::object_t<Base::SoftPowerOff>;
+}
 
 /** @class SoftPowerOff
  *  @brief Responsible for coordinating Host SoftPowerOff operation
  */
-class SoftPowerOff
-    : public sdbusplus::server::object::object<Base::SoftPowerOff>
+class SoftPowerOff : public SoftPowerOffInherit
 {
   public:
     /** @brief Constructs SoftPowerOff object.
@@ -31,10 +36,9 @@ class SoftPowerOff
      *  @param[in] event     - sd_event handler
      *  @param[in] objPath   - The Dbus path hosting SoftPowerOff function
      */
-    SoftPowerOff(sdbusplus::bus::bus& bus, sd_event* event,
-                 const char* objPath) :
-        sdbusplus::server::object::object<Base::SoftPowerOff>(bus, objPath,
-                                                              SoftPowerOff::action::defer_emit),
+    SoftPowerOff(sdbusplus::bus_t& bus, sd_event* event, const char* objPath) :
+        SoftPowerOffInherit(bus, objPath,
+                            SoftPowerOffInherit::action::defer_emit),
         bus(bus), timer(event),
         hostControlSignal(
             bus,
@@ -95,7 +99,7 @@ class SoftPowerOff
     static constexpr auto HOST_IPMI_INTF = "org.openbmc.HostIpmi";
 
     /* @brief sdbusplus handle */
-    sdbusplus::bus::bus& bus;
+    sdbusplus::bus_t& bus;
 
     /** @brief Reference to Timer object */
     Timer timer;
@@ -135,7 +139,7 @@ class SoftPowerOff
      * @param[in]  msg       - Data associated with subscribed signal
      *
      */
-    void hostControlEvent(sdbusplus::message::message& msg);
+    void hostControlEvent(sdbusplus::message_t& msg);
 };
 } // namespace ipmi
 } // namespace phosphor

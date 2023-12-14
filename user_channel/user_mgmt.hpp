@@ -18,10 +18,11 @@
 
 #include <boost/interprocess/sync/file_lock.hpp>
 #include <boost/interprocess/sync/named_recursive_mutex.hpp>
-#include <cstdint>
-#include <ctime>
 #include <ipmid/api.hpp>
 #include <sdbusplus/bus.hpp>
+
+#include <cstdint>
+#include <ctime>
 #include <variant>
 
 namespace ipmi
@@ -378,7 +379,7 @@ class UserAccess
     UsersTbl usersTbl;
     std::vector<std::string> availablePrivileges;
     std::vector<std::string> availableGroups;
-    sdbusplus::bus::bus bus;
+    sdbusplus::bus_t bus;
     std::timespec fileLastUpdatedTime;
     bool signalHndlrObject = false;
     boost::interprocess::file_lock sigHndlrLock;

@@ -15,9 +15,11 @@
  */
 #pragma once
 
-#include <array>
 #include <ipmid/message/types.hpp>
+
+#include <array>
 #include <optional>
+#include <span>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -157,7 +159,7 @@ struct UnpackSingle<std::string>
 
 /** @brief Specialization of UnpackSingle for fixed_uint_t types
  */
-template <unsigned N>
+template <bitcount_t N>
 struct UnpackSingle<fixed_uint_t<N>>
 {
     static int op(Payload& p, fixed_uint_t<N>& t)
@@ -231,8 +233,8 @@ struct UnpackSingle<std::optional<T>>
         // more stuff to unroll if partial bytes are out
         size_t priorBitCount = p.bitCount;
         fixed_uint_t<details::bitStreamSize> priorBits = p.bitStream;
-        t.emplace();
-        int ret = UnpackSingle<T>::op(p, *t);
+        T value;
+        int ret = UnpackSingle<T>::op(p, value);
         if (ret != 0)
         {
             t.reset();
@@ -240,6 +242,10 @@ struct UnpackSingle<std::optional<T>>
             p.bitStream = priorBits;
             p.bitCount = priorBitCount;
             p.unpackError = priorError;
+        }
+        else
+        {
+            t.emplace(std::move(value));
         }
         return 0;
     }
@@ -333,6 +339,19 @@ struct UnpackSingle<SecureBuffer>
         // copy out the remainder of the message
         t.reserve(p.raw.size() - p.rawIndex);
         t.insert(t.begin(), p.raw.begin() + p.rawIndex, p.raw.end());
+        p.rawIndex = p.raw.size();
+        return 0;
+    }
+};
+
+/** @brief Specialization of UnpackSingle for std::span<const uint8_t> */
+template <>
+struct UnpackSingle<std::span<const uint8_t>>
+{
+    static int op(Payload& p, std::span<const uint8_t>& t)
+    {
+        // copy out the remainder of the message
+        t = std::span<const uint8_t>(p.raw.begin() + p.rawIndex, p.raw.end());
         p.rawIndex = p.raw.size();
         return 0;
     }

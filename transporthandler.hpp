@@ -1,162 +1,43 @@
 #pragma once
 
 #include "app/channel.hpp"
+#include "transportconstants.hpp"
 #include "user_channel/cipher_mgmt.hpp"
 
-#include <arpa/inet.h>
-#include <netinet/ether.h>
-
-#include <array>
-#include <bitset>
-#include <cinttypes>
-#include <cstdint>
-#include <cstring>
-#include <fstream>
-#include <functional>
 #include <ipmid/api-types.hpp>
 #include <ipmid/api.hpp>
 #include <ipmid/message.hpp>
 #include <ipmid/message/types.hpp>
 #include <ipmid/types.hpp>
 #include <ipmid/utils.hpp>
-#include <optional>
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/elog.hpp>
 #include <phosphor-logging/log.hpp>
 #include <sdbusplus/bus.hpp>
 #include <sdbusplus/exception.hpp>
-#include <string>
-#include <string_view>
-#include <type_traits>
-#include <unordered_map>
-#include <unordered_set>
+#include <stdplus/net/addr/ether.hpp>
+#include <stdplus/net/addr/ip.hpp>
+#include <stdplus/str/conv.hpp>
+#include <stdplus/zstring_view.hpp>
 #include <user_channel/channel_layer.hpp>
-#include <utility>
-#include <vector>
 #include <xyz/openbmc_project/Common/error.hpp>
 #include <xyz/openbmc_project/Network/EthernetInterface/server.hpp>
 #include <xyz/openbmc_project/Network/IP/server.hpp>
 #include <xyz/openbmc_project/Network/Neighbor/server.hpp>
 
+#include <cinttypes>
+#include <functional>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
+
 namespace ipmi
 {
 namespace transport
 {
-
-// D-Bus Network Daemon definitions
-constexpr auto PATH_ROOT = "/xyz/openbmc_project/network";
-constexpr auto INTF_ETHERNET = "xyz.openbmc_project.Network.EthernetInterface";
-constexpr auto INTF_IP = "xyz.openbmc_project.Network.IP";
-constexpr auto INTF_IP_CREATE = "xyz.openbmc_project.Network.IP.Create";
-constexpr auto INTF_MAC = "xyz.openbmc_project.Network.MACAddress";
-constexpr auto INTF_NEIGHBOR = "xyz.openbmc_project.Network.Neighbor";
-constexpr auto INTF_NEIGHBOR_CREATE_STATIC =
-    "xyz.openbmc_project.Network.Neighbor.CreateStatic";
-constexpr auto INTF_VLAN = "xyz.openbmc_project.Network.VLAN";
-constexpr auto INTF_VLAN_CREATE = "xyz.openbmc_project.Network.VLAN.Create";
-
-/** @brief IPMI LAN Parameters */
-enum class LanParam : uint8_t
-{
-    SetStatus = 0,
-    AuthSupport = 1,
-    AuthEnables = 2,
-    IP = 3,
-    IPSrc = 4,
-    MAC = 5,
-    SubnetMask = 6,
-    Gateway1 = 12,
-    Gateway1MAC = 13,
-    VLANId = 20,
-    CiphersuiteSupport = 22,
-    CiphersuiteEntries = 23,
-    cipherSuitePrivilegeLevels = 24,
-    IPFamilySupport = 50,
-    IPFamilyEnables = 51,
-    IPv6Status = 55,
-    IPv6StaticAddresses = 56,
-    IPv6DynamicAddresses = 59,
-    IPv6RouterControl = 64,
-    IPv6StaticRouter1IP = 65,
-    IPv6StaticRouter1MAC = 66,
-    IPv6StaticRouter1PrefixLength = 67,
-    IPv6StaticRouter1PrefixValue = 68,
-};
-
-/** @brief IPMI IP Origin Types */
-enum class IPSrc : uint8_t
-{
-    Unspecified = 0,
-    Static = 1,
-    DHCP = 2,
-    BIOS = 3,
-    BMC = 4,
-};
-
-/** @brief IPMI Set Status */
-enum class SetStatus : uint8_t
-{
-    Complete = 0,
-    InProgress = 1,
-    Commit = 2,
-};
-
-/** @brief IPMI Family Suport Bits */
-namespace IPFamilySupportFlag
-{
-constexpr uint8_t IPv6Only = 0;
-constexpr uint8_t DualStack = 1;
-constexpr uint8_t IPv6Alerts = 2;
-} // namespace IPFamilySupportFlag
-
-/** @brief IPMI IPFamily Enables Flag */
-enum class IPFamilyEnables : uint8_t
-{
-    IPv4Only = 0,
-    IPv6Only = 1,
-    DualStack = 2,
-};
-
-/** @brief IPMI IPv6 Dyanmic Status Bits */
-namespace IPv6StatusFlag
-{
-constexpr uint8_t DHCP = 0;
-constexpr uint8_t SLAAC = 1;
-}; // namespace IPv6StatusFlag
-
-/** @brief IPMI IPv6 Source */
-enum class IPv6Source : uint8_t
-{
-    Static = 0,
-    SLAAC = 1,
-    DHCP = 2,
-};
-
-/** @brief IPMI IPv6 Address Status */
-enum class IPv6AddressStatus : uint8_t
-{
-    Active = 0,
-    Disabled = 1,
-};
-
-namespace IPv6RouterControlFlag
-{
-constexpr uint8_t Static = 0;
-constexpr uint8_t Dynamic = 1;
-}; // namespace IPv6RouterControlFlag
-
-// LAN Handler specific response codes
-constexpr Cc ccParamNotSupported = 0x80;
-constexpr Cc ccParamSetLocked = 0x81;
-constexpr Cc ccParamReadOnly = 0x82;
-
-// VLANs are a 12-bit value
-constexpr uint16_t VLAN_VALUE_MASK = 0x0fff;
-constexpr uint16_t VLAN_ENABLE_FLAG = 0x8000;
-
-// Arbitrary v6 Address Limits to prevent too much output in ipmitool
-constexpr uint8_t MAX_IPV6_STATIC_ADDRESSES = 15;
-constexpr uint8_t MAX_IPV6_DYNAMIC_ADDRESSES = 15;
 
 /** @brief The dbus parameters for the interface corresponding to a channel
  *         This helps reduce the number of mapper lookups we need for each
@@ -176,44 +57,6 @@ struct ChannelParams
     std::string logicalPath;
 };
 
-/** @brief A trivial helper used to determine if two PODs are equal
- *
- *  @params[in] a - The first object to compare
- *  @params[in] b - The second object to compare
- *  @return True if the objects are the same bytewise
- */
-template <typename T>
-bool equal(const T& a, const T& b)
-{
-    static_assert(std::is_trivially_copyable_v<T>);
-    return std::memcmp(&a, &b, sizeof(T)) == 0;
-}
-
-/** @brief Copies bytes from an array into a trivially copyable container
- *
- *  @params[out] t     - The container receiving the data
- *  @params[in]  bytes - The data to copy
- */
-template <size_t N, typename T>
-void copyInto(T& t, const std::array<uint8_t, N>& bytes)
-{
-    static_assert(std::is_trivially_copyable_v<T>);
-    static_assert(N == sizeof(T));
-    std::memcpy(&t, bytes.data(), bytes.size());
-}
-
-/** @brief Gets a generic view of the bytes in the input container
- *
- *  @params[in] t - The data to reference
- *  @return A string_view referencing the bytes in the container
- */
-template <typename T>
-std::string_view dataRef(const T& t)
-{
-    static_assert(std::is_trivially_copyable_v<T>);
-    return {reinterpret_cast<const char*>(&t), sizeof(T)};
-}
-
 /** @brief Determines the ethernet interface name corresponding to a channel
  *         Tries to map a VLAN object first so that the address information
  *         is accurate. Otherwise it gets the standard ethernet interface.
@@ -222,7 +65,7 @@ std::string_view dataRef(const T& t)
  *  @param[in] channel - The channel id corresponding to an ethernet interface
  *  @return Ethernet interface service and object path if it exists
  */
-std::optional<ChannelParams> maybeGetChannelParams(sdbusplus::bus::bus& bus,
+std::optional<ChannelParams> maybeGetChannelParams(sdbusplus::bus_t& bus,
                                                    uint8_t channel);
 
 /** @brief A trivial helper around maybeGetChannelParams() that throws an
@@ -232,7 +75,7 @@ std::optional<ChannelParams> maybeGetChannelParams(sdbusplus::bus::bus& bus,
  *  @param[in] channel - The channel id corresponding to an ethernet interface
  *  @return Ethernet interface service and object path
  */
-ChannelParams getChannelParams(sdbusplus::bus::bus& bus, uint8_t channel);
+ChannelParams getChannelParams(sdbusplus::bus_t& bus, uint8_t channel);
 
 /** @brief Trivializes using parameter getter functions by providing a bus
  *         and channel parameters automatically.
@@ -243,7 +86,7 @@ ChannelParams getChannelParams(sdbusplus::bus::bus& bus, uint8_t channel);
 template <auto func, typename... Args>
 auto channelCall(uint8_t channel, Args&&... args)
 {
-    sdbusplus::bus::bus bus(ipmid_get_sd_bus_connection());
+    sdbusplus::bus_t bus(ipmid_get_sd_bus_connection());
     auto params = getChannelParams(bus, channel);
     return std::invoke(func, bus, params, std::forward<Args>(args)...);
 }
@@ -251,16 +94,15 @@ auto channelCall(uint8_t channel, Args&&... args)
 /** @brief Generic paramters for different address families */
 template <int family>
 struct AddrFamily
-{
-};
+{};
 
 /** @brief Parameter specialization for IPv4 */
 template <>
 struct AddrFamily<AF_INET>
 {
-    using addr = in_addr;
+    using addr = stdplus::In4Addr;
     static constexpr auto protocol =
-        sdbusplus::xyz::openbmc_project::Network::server::IP::Protocol::IPv4;
+        sdbusplus::server::xyz::openbmc_project::network::IP::Protocol::IPv4;
     static constexpr size_t maxStrLen = INET6_ADDRSTRLEN;
     static constexpr uint8_t defaultPrefix = 32;
     static constexpr char propertyGateway[] = "DefaultGateway";
@@ -270,9 +112,9 @@ struct AddrFamily<AF_INET>
 template <>
 struct AddrFamily<AF_INET6>
 {
-    using addr = in6_addr;
+    using addr = stdplus::In6Addr;
     static constexpr auto protocol =
-        sdbusplus::xyz::openbmc_project::Network::server::IP::Protocol::IPv6;
+        sdbusplus::server::xyz::openbmc_project::network::IP::Protocol::IPv6;
     static constexpr size_t maxStrLen = INET6_ADDRSTRLEN;
     static constexpr uint8_t defaultPrefix = 128;
     static constexpr char propertyGateway[] = "DefaultGateway6";
@@ -284,7 +126,7 @@ struct IfNeigh
 {
     std::string path;
     typename AddrFamily<family>::addr ip;
-    ether_addr mac;
+    stdplus::EtherAddr mac;
 };
 
 /** @brief Interface IP Address configuration parameters */
@@ -293,21 +135,21 @@ struct IfAddr
 {
     std::string path;
     typename AddrFamily<family>::addr address;
-    sdbusplus::xyz::openbmc_project::Network::server::IP::AddressOrigin origin;
+    sdbusplus::server::xyz::openbmc_project::network::IP::AddressOrigin origin;
     uint8_t prefix;
 };
 
 /** @brief Valid address origins for IPv6 */
 static inline const std::unordered_set<
-    sdbusplus::xyz::openbmc_project::Network::server::IP::AddressOrigin>
-    originsV6Static = {sdbusplus::xyz::openbmc_project::Network::server::IP::
+    sdbusplus::server::xyz::openbmc_project::network::IP::AddressOrigin>
+    originsV6Static = {sdbusplus::server::xyz::openbmc_project::network::IP::
                            AddressOrigin::Static};
 static inline const std::unordered_set<
-    sdbusplus::xyz::openbmc_project::Network::server::IP::AddressOrigin>
+    sdbusplus::server::xyz::openbmc_project::network::IP::AddressOrigin>
     originsV6Dynamic = {
-        sdbusplus::xyz::openbmc_project::Network::server::IP::AddressOrigin::
+        sdbusplus::server::xyz::openbmc_project::network::IP::AddressOrigin::
             DHCP,
-        sdbusplus::xyz::openbmc_project::Network::server::IP::AddressOrigin::
+        sdbusplus::server::xyz::openbmc_project::network::IP::AddressOrigin::
             SLAAC,
 };
 
@@ -328,13 +170,12 @@ class ObjectLookupCache
      *  @param[in] params - The parameters for the channel
      *  @param[in] intf   - The interface we are looking up
      */
-    ObjectLookupCache(sdbusplus::bus::bus& bus, const ChannelParams& params,
+    ObjectLookupCache(sdbusplus::bus_t& bus, const ChannelParams& params,
                       const char* intf) :
         bus(bus),
         params(params), intf(intf),
         objs(getAllDbusObjects(bus, params.logicalPath, intf, ""))
-    {
-    }
+    {}
 
     class iterator : public ObjectTree::const_iterator
     {
@@ -344,8 +185,7 @@ class ObjectLookupCache
         iterator(ObjectTree::const_iterator it, ObjectLookupCache& container) :
             ObjectTree::const_iterator(it), container(container),
             ret(container.cache.end())
-        {
-        }
+        {}
         value_type& operator*()
         {
             ret = container.get(ObjectTree::const_iterator::operator*().first);
@@ -372,7 +212,7 @@ class ObjectLookupCache
     }
 
   private:
-    sdbusplus::bus::bus& bus;
+    sdbusplus::bus_t& bus;
     const ChannelParams& params;
     const char* const intf;
     const ObjectTree objs;
@@ -396,66 +236,6 @@ class ObjectLookupCache
     }
 };
 
-/** @brief Turns an IP address string into the network byte order form
- *         NOTE: This version strictly validates family matches
- *
- *  @param[in] address - The string form of the address
- *  @return A network byte order address or none if conversion failed
- */
-template <int family>
-std::optional<typename AddrFamily<family>::addr>
-    maybeStringToAddr(const char* address)
-{
-    typename AddrFamily<family>::addr ret;
-    if (inet_pton(family, address, &ret) == 1)
-    {
-        return ret;
-    }
-    return std::nullopt;
-}
-
-/** @brief Turns an IP address string into the network byte order form
- *         NOTE: This version strictly validates family matches
- *
- *  @param[in] address - The string form of the address
- *  @return A network byte order address
- */
-template <int family>
-typename AddrFamily<family>::addr stringToAddr(const char* address)
-{
-    auto ret = maybeStringToAddr<family>(address);
-    if (!ret)
-    {
-        phosphor::logging::log<phosphor::logging::level::ERR>(
-            "Failed to convert IP Address",
-            phosphor::logging::entry("FAMILY=%d", family),
-            phosphor::logging::entry("ADDRESS=%s", address));
-        phosphor::logging::elog<
-            sdbusplus::xyz::openbmc_project::Common::Error::InternalFailure>();
-    }
-    return *ret;
-}
-
-/** @brief Turns an IP address in network byte order into a string
- *
- *  @param[in] address - The string form of the address
- *  @return A network byte order address
- */
-template <int family>
-std::string addrToString(const typename AddrFamily<family>::addr& address)
-{
-    std::string ret(AddrFamily<family>::maxStrLen, '\0');
-    inet_ntop(family, &address, ret.data(), ret.size());
-    ret.resize(strlen(ret.c_str()));
-    return ret;
-}
-
-/** @brief Converts a human readable MAC string into MAC bytes
- *
- *  @param[in] mac - The MAC string
- *  @return MAC in bytes
- */
-ether_addr stringToMAC(const char* mac);
 /** @brief Searches the ip object lookup cache for an address matching
  *         the input parameters. NOTE: The index lacks stability across address
  *         changes since the network daemon has no notion of stable indicies.
@@ -469,23 +249,28 @@ ether_addr stringToMAC(const char* mac);
  */
 template <int family>
 std::optional<IfAddr<family>> findIfAddr(
-    sdbusplus::bus::bus& bus, const ChannelParams& params, uint8_t idx,
+    [[maybe_unused]] sdbusplus::bus_t& bus,
+    [[maybe_unused]] const ChannelParams& params, uint8_t idx,
     const std::unordered_set<
-        sdbusplus::xyz::openbmc_project::Network::server::IP::AddressOrigin>&
+        sdbusplus::server::xyz::openbmc_project::network::IP::AddressOrigin>&
         origins,
     ObjectLookupCache& ips)
 {
     for (const auto& [path, properties] : ips)
     {
-        const auto& addrStr = std::get<std::string>(properties.at("Address"));
-        auto addr = maybeStringToAddr<family>(addrStr.c_str());
-        if (!addr)
+        std::optional<typename AddrFamily<family>::addr> addr;
+        try
+        {
+            addr.emplace(stdplus::fromStr<typename AddrFamily<family>::addr>(
+                std::get<std::string>(properties.at("Address"))));
+        }
+        catch (...)
         {
             continue;
         }
 
-        sdbusplus::xyz::openbmc_project::Network::server::IP::AddressOrigin
-            origin = sdbusplus::xyz::openbmc_project::Network::server::IP::
+        sdbusplus::server::xyz::openbmc_project::network::IP::AddressOrigin
+            origin = sdbusplus::server::xyz::openbmc_project::network::IP::
                 convertAddressOriginFromString(
                     std::get<std::string>(properties.at("Origin")));
         if (origins.find(origin) == origins.end())
@@ -504,7 +289,7 @@ std::optional<IfAddr<family>> findIfAddr(
         ifaddr.address = *addr;
         ifaddr.prefix = std::get<uint8_t>(properties.at("PrefixLength"));
         ifaddr.origin = origin;
-        return std::move(ifaddr);
+        return ifaddr;
     }
 
     return std::nullopt;
@@ -521,9 +306,9 @@ std::optional<IfAddr<family>> findIfAddr(
  */
 template <int family>
 auto getIfAddr(
-    sdbusplus::bus::bus& bus, const ChannelParams& params, uint8_t idx,
+    sdbusplus::bus_t& bus, const ChannelParams& params, uint8_t idx,
     const std::unordered_set<
-        sdbusplus::xyz::openbmc_project::Network::server::IP::AddressOrigin>&
+        sdbusplus::server::xyz::openbmc_project::network::IP::AddressOrigin>&
         origins)
 {
     ObjectLookupCache ips(bus, params, INTF_IP);
@@ -557,8 +342,8 @@ void setDHCPv6Property(sdbusplus::bus::bus& bus, const ChannelParams& params,
  *  @param[in] address - The new address
  *  @param[in] prefix  - The new address prefix
  */
-void reconfigureIfAddr6(sdbusplus::bus::bus& bus, const ChannelParams& params,
-                        uint8_t idx, const in6_addr& address, uint8_t prefix);
+void reconfigureIfAddr6(sdbusplus::bus_t& bus, const ChannelParams& params,
+                        uint8_t idx, stdplus::In6Addr address, uint8_t prefix);
 
 /** @brief Retrieves the current gateway for the address family on the system
  *         NOTE: The gateway is per channel instead of the system wide one.
@@ -569,7 +354,7 @@ void reconfigureIfAddr6(sdbusplus::bus::bus& bus, const ChannelParams& params,
  */
 template <int family>
 std::optional<typename AddrFamily<family>::addr>
-    getGatewayProperty(sdbusplus::bus::bus& bus, const ChannelParams& params)
+    getGatewayProperty(sdbusplus::bus_t& bus, const ChannelParams& params)
 {
     auto objPath = "/xyz/openbmc_project/network/" + params.ifname;
     auto gatewayStr = std::get<std::string>(
@@ -579,28 +364,32 @@ std::optional<typename AddrFamily<family>::addr>
     {
         return std::nullopt;
     }
-    return stringToAddr<family>(gatewayStr.c_str());
+    return stdplus::fromStr<typename AddrFamily<family>::addr>(gatewayStr);
 }
 
 template <int family>
 std::optional<IfNeigh<family>>
-    findStaticNeighbor(sdbusplus::bus::bus& bus, const ChannelParams& params,
-                       const typename AddrFamily<family>::addr& ip,
+    findStaticNeighbor(sdbusplus::bus_t&, const ChannelParams&,
+                       typename AddrFamily<family>::addr ip,
                        ObjectLookupCache& neighbors)
 {
-    using sdbusplus::xyz::openbmc_project::Network::server::Neighbor;
+    using sdbusplus::server::xyz::openbmc_project::network::Neighbor;
     const auto state =
-        sdbusplus::xyz::openbmc_project::Network::server::convertForMessage(
+        sdbusplus::common::xyz::openbmc_project::network::convertForMessage(
             Neighbor::State::Permanent);
     for (const auto& [path, neighbor] : neighbors)
     {
-        const auto& ipStr = std::get<std::string>(neighbor.at("IPAddress"));
-        auto neighIP = maybeStringToAddr<family>(ipStr.c_str());
-        if (!neighIP)
+        std::optional<typename AddrFamily<family>::addr> neighIP;
+        try
+        {
+            neighIP.emplace(stdplus::fromStr<typename AddrFamily<family>::addr>(
+                std::get<std::string>(neighbor.at("IPAddress"))));
+        }
+        catch (...)
         {
             continue;
         }
-        if (!equal(*neighIP, ip))
+        if (*neighIP != ip)
         {
             continue;
         }
@@ -612,24 +401,26 @@ std::optional<IfNeigh<family>>
         IfNeigh<family> ret;
         ret.path = path;
         ret.ip = ip;
-        const auto& macStr = std::get<std::string>(neighbor.at("MACAddress"));
-        ret.mac = stringToMAC(macStr.c_str());
-        return std::move(ret);
+        ret.mac = stdplus::fromStr<stdplus::EtherAddr>(
+            std::get<std::string>(neighbor.at("MACAddress")));
+        return ret;
     }
 
     return std::nullopt;
 }
 
 template <int family>
-void createNeighbor(sdbusplus::bus::bus& bus, const ChannelParams& params,
-                    const typename AddrFamily<family>::addr& address,
-                    const ether_addr& mac)
+void createNeighbor(sdbusplus::bus_t& bus, const ChannelParams& params,
+                    typename AddrFamily<family>::addr address,
+                    stdplus::EtherAddr mac)
 {
-    auto newreq =
-        bus.new_method_call(params.service.c_str(), params.logicalPath.c_str(),
-                            INTF_NEIGHBOR_CREATE_STATIC, "Neighbor");
-    std::string macStr = ether_ntoa(&mac);
-    newreq.append(addrToString<family>(address), macStr);
+    auto newreq = bus.new_method_call(params.service.c_str(),
+                                      params.logicalPath.c_str(),
+                                      INTF_NEIGHBOR_CREATE_STATIC, "Neighbor");
+    stdplus::ToStrHandle<stdplus::ToStr<stdplus::EtherAddr>> macToStr;
+    stdplus::ToStrHandle<stdplus::ToStr<typename AddrFamily<family>::addr>>
+        addrToStr;
+    newreq.append(addrToStr(address), macToStr(mac));
     bus.call_noreply(newreq);
 }
 
@@ -640,7 +431,7 @@ void createNeighbor(sdbusplus::bus::bus& bus, const ChannelParams& params,
  *  @param[in] service - The name of the service
  *  @param[in] path    - The path of the object to delete
  */
-void deleteObjectIfExists(sdbusplus::bus::bus& bus, const std::string& service,
+void deleteObjectIfExists(sdbusplus::bus_t& bus, const std::string& service,
                           const std::string& path);
 
 /** @brief Sets the value for the default gateway of the channel
@@ -650,8 +441,8 @@ void deleteObjectIfExists(sdbusplus::bus::bus& bus, const std::string& service,
  *  @param[in] gateway - Gateway address to apply
  */
 template <int family>
-void setGatewayProperty(sdbusplus::bus::bus& bus, const ChannelParams& params,
-                        const typename AddrFamily<family>::addr& address)
+void setGatewayProperty(sdbusplus::bus_t& bus, const ChannelParams& params,
+                        typename AddrFamily<family>::addr address)
 {
     // Save the old gateway MAC address if it exists so we can recreate it
     auto gateway = getGatewayProperty<family>(bus, params);
@@ -665,7 +456,7 @@ void setGatewayProperty(sdbusplus::bus::bus& bus, const ChannelParams& params,
     auto objPath = "/xyz/openbmc_project/network/" + params.ifname;
     setDbusProperty(bus, params.service, objPath, INTF_ETHERNET,
                     AddrFamily<family>::propertyGateway,
-                    addrToString<family>(address));
+                    stdplus::toStr(address));
 
     // Restore the gateway MAC if we had one
     if (neighbor)

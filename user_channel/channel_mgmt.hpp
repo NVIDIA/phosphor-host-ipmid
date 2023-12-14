@@ -20,10 +20,11 @@
 
 #include <boost/interprocess/sync/file_lock.hpp>
 #include <boost/interprocess/sync/named_recursive_mutex.hpp>
-#include <cstdint>
-#include <ctime>
 #include <nlohmann/json.hpp>
 #include <sdbusplus/bus.hpp>
+
+#include <cstdint>
+#include <ctime>
 #include <variant>
 
 namespace ipmi
@@ -252,7 +253,7 @@ class ChannelConfig
     std::time_t nvFileLastUpdatedTime;
     std::time_t voltFileLastUpdatedTime;
     boost::interprocess::file_lock mutexCleanupLock;
-    sdbusplus::bus::bus bus;
+    sdbusplus::bus_t bus;
     bool signalHndlrObjectState = false;
     boost::interprocess::file_lock sigHndlrLock;
 

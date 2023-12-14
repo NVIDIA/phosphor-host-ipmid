@@ -2,9 +2,10 @@
 
 #include <stdint.h>
 
-#include <exception>
 #include <ipmid/api.hpp>
 #include <ipmid/types.hpp>
+
+#include <exception>
 
 // IPMI commands for net functions.
 enum ipmi_netfn_sen_cmds
@@ -69,10 +70,10 @@ struct PlatformEventRequest
     uint8_t data[3];
 };
 
-static constexpr char const* ipmiSELPath = "/xyz/openbmc_project/Logging/IPMI";
-static constexpr char const* ipmiSELAddInterface =
+static constexpr const char* ipmiSELPath = "/xyz/openbmc_project/Logging/IPMI";
+static constexpr const char* ipmiSELAddInterface =
     "xyz.openbmc_project.Logging.IPMI";
-static const std::string ipmiSELAddMessage = "SEL Entry";
+static const std::string ipmiSELAddMessage = "IPMI generated SEL Entry";
 
 static constexpr int selSystemEventSizeWith3Bytes = 8;
 static constexpr int selSystemEventSizeWith2Bytes = 7;
@@ -110,7 +111,7 @@ namespace request
 // raw value for this call.
 inline bool get_count(void* req)
 {
-    return (bool)((uint64_t)(req)&1);
+    return (bool)((uint64_t)(req) & 1);
 }
 } // namespace request
 } // namespace get_sdr_info
@@ -191,8 +192,9 @@ enum SensorDataRecordType
     SENSOR_DATA_FULL_RECORD = 0x1,
     SENSOR_DATA_COMPACT_RECORD = 0x2,
     SENSOR_DATA_EVENT_RECORD = 0x3,
-    SENSOR_DATA_FRU_RECORD = 0x11,
     SENSOR_DATA_ENTITY_RECORD = 0x8,
+    SENSOR_DATA_FRU_RECORD = 0x11,
+    SENSOR_DATA_MGMT_CTRL_LOCATOR = 0x12,
 };
 
 // Record key
@@ -602,11 +604,21 @@ inline void set_id_strlen(uint8_t len, SensorDataFullRecordBody* body)
     body->id_string_info &= ~(0x1f);
     body->id_string_info |= len & 0x1f;
 };
+inline void set_id_strlen(uint8_t len, SensorDataEventRecordBody* body)
+{
+    body->id_string_info &= ~(0x1f);
+    body->id_string_info |= len & 0x1f;
+};
 inline uint8_t get_id_strlen(SensorDataFullRecordBody* body)
 {
     return body->id_string_info & 0x1f;
 };
 inline void set_id_type(uint8_t type, SensorDataFullRecordBody* body)
+{
+    body->id_string_info &= ~(3 << 6);
+    body->id_string_info |= (type & 0x3) << 6;
+};
+inline void set_id_type(uint8_t type, SensorDataEventRecordBody* body)
 {
     body->id_string_info &= ~(3 << 6);
     body->id_string_info |= (type & 0x3) << 6;

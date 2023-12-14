@@ -16,19 +16,20 @@
 #pragma once
 #include <cxxabi.h>
 
-#include <algorithm>
 #include <boost/asio/spawn.hpp>
 #include <boost/callable_traits.hpp>
-#include <cstdint>
-#include <exception>
 #include <ipmid/api-types.hpp>
 #include <ipmid/message.hpp>
+#include <phosphor-logging/log.hpp>
+#include <user_channel/channel_layer.hpp>
+
+#include <algorithm>
+#include <cstdint>
+#include <exception>
 #include <memory>
 #include <optional>
-#include <phosphor-logging/log.hpp>
 #include <stdexcept>
 #include <tuple>
-#include <user_channel/channel_layer.hpp>
 #include <utility>
 
 #ifdef ALLOW_DEPRECATED_API
@@ -61,9 +62,7 @@ static inline message::Response::ptr
 class HandlerCompletion
 {
   public:
-    HandlerCompletion(Cc cc) noexcept : cc(cc)
-    {
-    }
+    HandlerCompletion(Cc cc) noexcept : cc(cc) {}
 
     Cc code() const noexcept
     {
@@ -81,12 +80,10 @@ class HandlerException : public HandlerCompletion, public std::runtime_error
   public:
     HandlerException(Cc cc, const char* what) :
         HandlerCompletion(cc), std::runtime_error(what)
-    {
-    }
+    {}
     HandlerException(Cc cc, const std::string& what) :
         HandlerException(cc, what.c_str())
-    {
-    }
+    {}
 };
 
 static inline const char* currentExceptionType()
@@ -106,6 +103,8 @@ class HandlerBase
 {
   public:
     using ptr = std::shared_ptr<HandlerBase>;
+
+    virtual ~HandlerBase() = default;
 
     /** @brief wrap the call to the registered handler with the request
      *
@@ -159,8 +158,7 @@ class IpmiHandler final : public HandlerBase
   public:
     explicit IpmiHandler(Handler&& handler) :
         handler_(std::forward<Handler>(handler))
-    {
-    }
+    {}
 
   private:
     Handler handler_;
@@ -194,7 +192,7 @@ class IpmiHandler final : public HandlerBase
             InputArgsType>::type;
         using ResultType = boost::callable_traits::return_type_t<Handler>;
 
-        UnpackArgsType unpackArgs;
+        UnpackArgsType unpackArgs{};
         request->payload.trailingOk = false;
         ipmi::Cc unpackError = request->unpack(unpackArgs);
         if (unpackError != ipmi::ccSuccess)
@@ -329,8 +327,7 @@ class IpmiHandler<ipmid_callback_t> final : public HandlerBase
   public:
     explicit IpmiHandler(const ipmid_callback_t& handler, void* ctx = nullptr) :
         handler_(handler), handlerCtx(ctx)
-    {
-    }
+    {}
 
   private:
     ipmid_callback_t handler_;
@@ -421,9 +418,7 @@ template <>
 class IpmiHandler<oem::Handler> final : public HandlerBase
 {
   public:
-    explicit IpmiHandler(const oem::Handler& handler) : handler_(handler)
-    {
-    }
+    explicit IpmiHandler(const oem::Handler& handler) : handler_(handler) {}
 
   private:
     oem::Handler handler_;

@@ -32,7 +32,7 @@ sensorNameMaxLength = 16
 namespace ipmi {
 namespace sensor {
 
-extern const IdInfoMap sensors = {
+extern const IdInfoMap __attribute__((init_priority(101))) sensors = {
 % for key in sensorDict.keys():
    % if key:
 {${key},{
@@ -99,7 +99,9 @@ extern const IdInfoMap sensors = {
         .mutability = Mutability(${mutability}),
     % if sensorName:
         .sensorName = "${sensorName}",
+        .sensorNameFunc = nullptr,
     % else:
+        .sensorName = "",
         .sensorNameFunc = ${sensorNameFunc},
     % endif
         .propertyInterfaces = {

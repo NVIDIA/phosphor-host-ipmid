@@ -2,13 +2,14 @@
 
 #include "sensorhandler.hpp"
 
-#include <bitset>
-#include <filesystem>
 #include <ipmid/types.hpp>
 #include <ipmid/utils.hpp>
-#include <optional>
 #include <sdbusplus/message/types.hpp>
 #include <xyz/openbmc_project/Common/error.hpp>
+
+#include <bitset>
+#include <filesystem>
+#include <optional>
 
 namespace ipmi
 {
@@ -17,7 +18,7 @@ namespace sensor
 
 using namespace phosphor::logging;
 using InternalFailure =
-    sdbusplus::xyz::openbmc_project::Common::Error::InternalFailure;
+    sdbusplus::error::xyz::openbmc_project::common::InternalFailure;
 
 static constexpr auto MAPPER_BUSNAME = "xyz.openbmc_project.ObjectMapper";
 static constexpr auto MAPPER_PATH = "/xyz/openbmc_project/object_mapper";
@@ -29,7 +30,7 @@ static constexpr auto MAPPER_INTERFACE = "xyz.openbmc_project.ObjectMapper";
  *  @param[in] path - interested path in the list of objects
  *  @return pair of service path and service
  */
-ServicePath getServiceAndPath(sdbusplus::bus::bus& bus,
+ServicePath getServiceAndPath(sdbusplus::bus_t& bus,
                               const std::string& interface,
                               const std::string& path)
 {
@@ -40,22 +41,18 @@ ServicePath getServiceAndPath(sdbusplus::bus::bus& bus,
     mapperCall.append(depth);
     mapperCall.append(std::vector<Interface>({interface}));
 
-    auto mapperResponseMsg = bus.call(mapperCall);
-    if (mapperResponseMsg.is_method_error())
-    {
-        log<level::ERR>("Mapper GetSubTree failed",
-                        entry("PATH=%s", path.c_str()),
-                        entry("INTERFACE=%s", interface.c_str()));
-        elog<InternalFailure>();
-    }
-
     MapperResponseType mapperResponse;
-    mapperResponseMsg.read(mapperResponse);
-    if (mapperResponse.empty())
+    try
+    {
+        auto mapperResponseMsg = bus.call(mapperCall);
+        mapperResponseMsg.read(mapperResponse);
+    }
+    catch (const std::exception& e)
     {
         log<level::ERR>("Invalid mapper response",
                         entry("PATH=%s", path.c_str()),
-                        entry("INTERFACE=%s", interface.c_str()));
+                        entry("INTERFACE=%s", interface.c_str()),
+                        entry("ERROR=%s", e.what()));
         elog<InternalFailure>();
     }
 
@@ -89,18 +86,14 @@ AssertionSet getAssertionSet(const SetSensorReadingReq& cmdData)
 
 ipmi_ret_t updateToDbus(IpmiUpdateData& msg)
 {
-    sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
+    sdbusplus::bus_t bus{ipmid_get_sd_bus_connection()};
     try
     {
         auto serviceResponseMsg = bus.call(msg);
-        if (serviceResponseMsg.is_method_error())
-        {
-            log<level::ERR>("Error in D-Bus call");
-            return IPMI_CC_UNSPECIFIED_ERROR;
-        }
     }
     catch (const InternalFailure& e)
     {
+        log<level::ERR>("Error in D-Bus call", entry("ERROR=%s", e.what()));
         commit<InternalFailure>();
         return IPMI_CC_UNSPECIFIED_ERROR;
     }
@@ -128,7 +121,7 @@ GetSensorResponse mapDbusToAssertion(const Info& sensorInfo,
                                      const InstancePath& path,
                                      const DbusInterface& interface)
 {
-    sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
+    sdbusplus::bus_t bus{ipmid_get_sd_bus_connection()};
     GetSensorResponse response{};
 
     enableScanning(&response);
@@ -160,7 +153,7 @@ GetSensorResponse mapDbusToAssertion(const Info& sensorInfo,
 
 GetSensorResponse mapDbusToEventdata2(const Info& sensorInfo)
 {
-    sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
+    sdbusplus::bus_t bus{ipmid_get_sd_bus_connection()};
     GetSensorResponse response{};
 
     enableScanning(&response);
@@ -247,7 +240,7 @@ IpmiUpdateData makeDbusMsg(const std::string& updateInterface,
                            const std::string& command,
                            const std::string& sensorInterface)
 {
-    sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
+    sdbusplus::bus_t bus{ipmid_get_sd_bus_connection()};
     using namespace std::string_literals;
 
     auto dbusService = getService(bus, sensorInterface, sensorPath);
@@ -256,12 +249,12 @@ IpmiUpdateData makeDbusMsg(const std::string& updateInterface,
                                updateInterface.c_str(), command.c_str());
 }
 
-ipmi_ret_t eventdata(const SetSensorReadingReq& cmdData, const Info& sensorInfo,
+ipmi_ret_t eventdata(const SetSensorReadingReq&, const Info& sensorInfo,
                      uint8_t data)
 {
-    auto msg =
-        makeDbusMsg("org.freedesktop.DBus.Properties", sensorInfo.sensorPath,
-                    "Set", sensorInfo.sensorInterface);
+    auto msg = makeDbusMsg("org.freedesktop.DBus.Properties",
+                           sensorInfo.sensorPath, "Set",
+                           sensorInfo.sensorInterface);
 
     const auto& interface = sensorInfo.propertyInterfaces.begin();
     msg.append(interface->first);
@@ -336,11 +329,10 @@ namespace notify
 {
 
 IpmiUpdateData makeDbusMsg(const std::string& updateInterface,
-                           const std::string& sensorPath,
-                           const std::string& command,
-                           const std::string& sensorInterface)
+                           const std::string&, const std::string& command,
+                           const std::string&)
 {
-    sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
+    sdbusplus::bus_t bus{ipmid_get_sd_bus_connection()};
     using namespace std::string_literals;
 
     static const auto dbusPath = "/xyz/openbmc_project/inventory"s;

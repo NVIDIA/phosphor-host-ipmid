@@ -5,14 +5,15 @@
 
 #include "systemintfcmds.hpp"
 
-#include <functional>
 #include <ipmid-host/cmd-utils.hpp>
 #include <ipmid-host/cmd.hpp>
 #include <ipmid/api.hpp>
 #include <ipmid/utils.hpp>
+#include <phosphor-logging/log.hpp>
+
+#include <functional>
 #include <memory>
 #include <optional>
-#include <phosphor-logging/log.hpp>
 
 namespace phosphor
 {
@@ -24,7 +25,7 @@ namespace command
 using namespace phosphor::logging;
 
 // When you see Base:: you know we're referencing our base class
-namespace Base = sdbusplus::xyz::openbmc_project::Control::server;
+namespace Base = sdbusplus::server::xyz::openbmc_project::control;
 
 // IPMI OEM command.
 // https://github.com/openbmc/openbmc/issues/2082 for handling
@@ -78,7 +79,7 @@ Host::FirmwareCondition Host::currentFirmwareCondition() const
         std::make_shared<std::optional<Host::FirmwareCondition>>();
 
     // callback for command to host
-    auto hostAckCallback = [hostCondition](IpmiCmdData cmd, bool status) {
+    auto hostAckCallback = [hostCondition](IpmiCmdData, bool status) {
         auto value = status ? Host::FirmwareCondition::Running
                             : Host::FirmwareCondition::Off;
 
@@ -96,7 +97,7 @@ Host::FirmwareCondition Host::currentFirmwareCondition() const
     ipmid_send_cmd_to_host(std::move(cmd));
 
     // Timer to ensure this function returns something within a reasonable time
-    phosphor::Timer hostAckTimer([hostCondition]() {
+    sdbusplus::Timer hostAckTimer([hostCondition]() {
         log<level::DEBUG>("currentFirmwareCondition: timer expired!");
         *(hostCondition.get()) = Host::FirmwareCondition::Off;
     });

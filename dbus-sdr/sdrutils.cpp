@@ -16,6 +16,9 @@
 
 #include "dbus-sdr/sdrutils.hpp"
 
+#include <optional>
+#include <unordered_set>
+
 #ifdef FEATURE_HYBRID_SENSORS
 
 #include <ipmid/utils.hpp>
@@ -36,17 +39,17 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
     static std::shared_ptr<SensorSubTree> sensorTreePtr;
     static uint16_t sensorUpdatedIndex = 0;
     std::shared_ptr<sdbusplus::asio::connection> dbus = getSdBus();
-    static sdbusplus::bus::match::match sensorAdded(
+    static sdbusplus::bus::match_t sensorAdded(
         *dbus,
         "type='signal',member='InterfacesAdded',arg0path='/xyz/openbmc_project/"
         "sensors/'",
-        [](sdbusplus::message::message& m) { sensorTreePtr.reset(); });
+        [](sdbusplus::message_t&) { sensorTreePtr.reset(); });
 
-    static sdbusplus::bus::match::match sensorRemoved(
+    static sdbusplus::bus::match_t sensorRemoved(
         *dbus,
         "type='signal',member='InterfacesRemoved',arg0path='/xyz/"
         "openbmc_project/sensors/'",
-        [](sdbusplus::message::message& m) { sensorTreePtr.reset(); });
+        [](sdbusplus::message_t&) { sensorTreePtr.reset(); });
 
     if (sensorTreePtr)
     {
@@ -110,8 +113,8 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
 	static constexpr const std::array bootProgressInterfaces = {
         "xyz.openbmc_project.State.Boot.Progress"};
 
-    lbdUpdateSensorTree("/xyz/openbmc_project/sensors", sensorInterfaces);
-
+    bool sensorRez = lbdUpdateSensorTree("/xyz/openbmc_project/sensors",
+                                         sensorInterfaces);
 #ifdef FEATURE_HYBRID_SENSORS
 
     if (!ipmi::sensor::sensors.empty())
@@ -136,6 +139,12 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
     }
 
 #endif
+
+    // Error if searching for sensors failed.
+    if (!sensorRez)
+    {
+        return sensorUpdatedIndex;
+    }
 
     // Add VR control as optional search path.
     (void)lbdUpdateSensorTree("/xyz/openbmc_project/vr", vrInterfaces);
@@ -236,8 +245,8 @@ ipmi::sensor::IdInfoMap::const_iterator
     return std::find_if(
         ipmi::sensor::sensors.begin(), ipmi::sensor::sensors.end(),
         [&path](const ipmi::sensor::IdInfoMap::value_type& findSensor) {
-            return findSensor.second.sensorPath == path;
-        });
+        return findSensor.second.sensorPath == path;
+    });
 }
 #endif
 
@@ -364,7 +373,7 @@ std::map<std::string, std::vector<std::string>>
     std::vector<std::string> interfaces;
     std::shared_ptr<sdbusplus::asio::connection> dbus = getSdBus();
 
-    sdbusplus::message::message getObjectMessage =
+    sdbusplus::message_t getObjectMessage =
         dbus->new_method_call("xyz.openbmc_project.ObjectMapper",
                               "/xyz/openbmc_project/object_mapper",
                               "xyz.openbmc_project.ObjectMapper", "GetObject");
@@ -372,7 +381,7 @@ std::map<std::string, std::vector<std::string>>
 
     try
     {
-        sdbusplus::message::message response = dbus->call(getObjectMessage);
+        sdbusplus::message_t response = dbus->call(getObjectMessage);
         response.read(interfacesResponse);
     }
     catch (const std::exception& e)
@@ -391,14 +400,14 @@ std::map<std::string, Value> getEntityManagerProperties(const char* path,
     std::map<std::string, Value> properties;
     std::shared_ptr<sdbusplus::asio::connection> dbus = getSdBus();
 
-    sdbusplus::message::message getProperties =
+    sdbusplus::message_t getProperties =
         dbus->new_method_call("xyz.openbmc_project.EntityManager", path,
                               "org.freedesktop.DBus.Properties", "GetAll");
     getProperties.append(interface);
 
     try
     {
-        sdbusplus::message::message response = dbus->call(getProperties);
+        sdbusplus::message_t response = dbus->call(getProperties);
         response.read(properties);
     }
     catch (const std::exception& e)
@@ -410,6 +419,37 @@ std::map<std::string, Value> getEntityManagerProperties(const char* path,
     }
 
     return properties;
+}
+
+// Fetch the ipmiDecoratorPaths to get the list of dbus objects that
+// have ipmi decorator to prevent unnessary dbus call to fetch the info
+std::optional<std::unordered_set<std::string>>&
+    getIpmiDecoratorPaths(const std::optional<ipmi::Context::ptr>& ctx)
+{
+    static std::optional<std::unordered_set<std::string>> ipmiDecoratorPaths;
+
+    if (!ctx.has_value() || ipmiDecoratorPaths != std::nullopt)
+    {
+        return ipmiDecoratorPaths;
+    }
+
+    boost::system::error_code ec;
+    std::vector<std::string> paths =
+        (*ctx)->bus->yield_method_call<std::vector<std::string>>(
+            (*ctx)->yield, ec, "xyz.openbmc_project.ObjectMapper",
+            "/xyz/openbmc_project/object_mapper",
+            "xyz.openbmc_project.ObjectMapper", "GetSubTreePaths", "/",
+            int32_t(0),
+            std::array<const char*, 1>{
+                "xyz.openbmc_project.Inventory.Decorator.Ipmi"});
+    if (ec)
+    {
+        return ipmiDecoratorPaths;
+    }
+
+    ipmiDecoratorPaths = std::unordered_set<std::string>(paths.begin(),
+                                                         paths.end());
+    return ipmiDecoratorPaths;
 }
 
 const std::string* getSensorConfigurationInterface(
@@ -449,9 +489,11 @@ const std::string* getSensorConfigurationInterface(
 
 // Follow Association properties for Sensor back to the Board dbus object to
 // check for an EntityId and EntityInstance property.
-void updateIpmiFromAssociation(const std::string& path,
-                               const DbusInterfaceMap& sensorMap,
-                               uint8_t& entityId, uint8_t& entityInstance)
+void updateIpmiFromAssociation(
+    const std::string& path,
+    const std::unordered_set<std::string>& ipmiDecoratorPaths,
+    const DbusInterfaceMap& sensorMap, uint8_t& entityId,
+    uint8_t& entityInstance)
 {
     namespace fs = std::filesystem;
 
@@ -503,22 +545,27 @@ void updateIpmiFromAssociation(const std::string& path,
         // the right interface.
 
         // just try grabbing the properties first.
-        std::map<std::string, Value> ipmiProperties =
-            getEntityManagerProperties(
-                endpoint.c_str(),
-                "xyz.openbmc_project.Inventory.Decorator.Ipmi");
+        ipmi::PropertyMap::iterator entityIdProp;
+        ipmi::PropertyMap::iterator entityInstanceProp;
+        if (ipmiDecoratorPaths.contains(endpoint))
+        {
+            std::map<std::string, Value> ipmiProperties =
+                getEntityManagerProperties(
+                    endpoint.c_str(),
+                    "xyz.openbmc_project.Inventory.Decorator.Ipmi");
 
-        auto entityIdProp = ipmiProperties.find("EntityId");
-        auto entityInstanceProp = ipmiProperties.find("EntityInstance");
-        if (entityIdProp != ipmiProperties.end())
-        {
-            entityId =
-                static_cast<uint8_t>(std::get<uint64_t>(entityIdProp->second));
-        }
-        if (entityInstanceProp != ipmiProperties.end())
-        {
-            entityInstance = static_cast<uint8_t>(
-                std::get<uint64_t>(entityInstanceProp->second));
+            entityIdProp = ipmiProperties.find("EntityId");
+            entityInstanceProp = ipmiProperties.find("EntityInstance");
+            if (entityIdProp != ipmiProperties.end())
+            {
+                entityId = static_cast<uint8_t>(
+                    std::get<uint64_t>(entityIdProp->second));
+            }
+            if (entityInstanceProp != ipmiProperties.end())
+            {
+                entityInstance = static_cast<uint8_t>(
+                    std::get<uint64_t>(entityInstanceProp->second));
+            }
         }
 
         // Now check the entity-manager entry for this sensor to see
@@ -541,12 +588,12 @@ void updateIpmiFromAssociation(const std::string& path,
         const std::string* configurationInterface =
             getSensorConfigurationInterface(sensorInterfacesResponse);
 
-        // We didnt' find a configuration interface for this sensor, but we
-        // followed the Association property to get here, so we're done
-        // searching.
+        // If there are multi association path settings and only one path exist,
+        // we need to continue if cannot find configuration interface for this
+        // sensor.
         if (!configurationInterface)
         {
-            break;
+            continue;
         }
 
         // We found a configuration interface.

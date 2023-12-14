@@ -141,7 +141,6 @@ Cc ipmiUserCheckEnabled(const uint8_t userId, bool& state)
 Cc ipmiUserGetPrivilegeAccess(const uint8_t userId, const uint8_t chNum,
                               PrivAccess& privAccess)
 {
-
     if (!UserAccess::isValidChannel(chNum))
     {
         return ccInvalidFieldRequest;

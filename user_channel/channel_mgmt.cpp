@@ -25,13 +25,14 @@
 #include <unistd.h>
 
 #include <boost/interprocess/sync/scoped_lock.hpp>
-#include <cerrno>
-#include <exception>
-#include <experimental/filesystem>
-#include <fstream>
 #include <phosphor-logging/log.hpp>
 #include <sdbusplus/bus/match.hpp>
 #include <sdbusplus/server/object.hpp>
+
+#include <cerrno>
+#include <exception>
+#include <filesystem>
+#include <fstream>
 #include <unordered_map>
 
 namespace ipmi
@@ -180,8 +181,7 @@ int ChannelConfig::convertToChannelNumberFromChannelName(
 
 std::string ChannelConfig::getChannelNameFromPath(const std::string& path)
 {
-
-    constexpr size_t length = strlen(networkIntfObjectBasePath);
+    const size_t length = strlen(networkIntfObjectBasePath);
     if (((length + 1) >= path.size()) ||
         path.compare(0, length, networkIntfObjectBasePath))
     {
@@ -335,7 +335,7 @@ ChannelConfig::ChannelConfig() : bus(ipmid_get_sd_bus_connection())
     initChannelPersistData();
 
     sigHndlrLock = boost::interprocess::file_lock(channelNvDataFilename);
-    // Register it for single object and single process either netipimd /
+    // Register it for single object and single process either netipmid /
     // host-ipmid
     if (chPropertiesSignal == nullptr && sigHndlrLock.try_lock())
     {
@@ -349,13 +349,13 @@ ChannelConfig::ChannelConfig() : bus(ipmid_get_sd_bus_connection())
                 sdbusplus::bus::match::rules::interface(
                     dBusPropertiesInterface) +
                 sdbusplus::bus::match::rules::argN(0, networkChConfigIntfName),
-            [&](sdbusplus::message::message& msg) {
-                DbusChObjProperties props;
-                std::string iface;
-                std::string path = msg.get_path();
-                msg.read(iface, props);
-                processChAccessPropChange(path, props);
-            });
+            [&](sdbusplus::message_t& msg) {
+            DbusChObjProperties props;
+            std::string iface;
+            std::string path = msg.get_path();
+            msg.read(iface, props);
+            processChAccessPropChange(path, props);
+        });
         signalHndlrObjectState = true;
 
         chInterfaceAddedSignal = std::make_unique<sdbusplus::bus::match_t>(
@@ -364,9 +364,7 @@ ChannelConfig::ChannelConfig() : bus(ipmid_get_sd_bus_connection())
                 sdbusplus::bus::match::rules::member(interfaceAddedSignal) +
                 sdbusplus::bus::match::rules::argNpath(
                     0, std::string(networkIntfObjectBasePath) + "/"),
-            [&](sdbusplus::message::message& msg) {
-                initChannelPersistData();
-            });
+            [&](sdbusplus::message_t&) { initChannelPersistData(); });
 
         chInterfaceRemovedSignal = std::make_unique<sdbusplus::bus::match_t>(
             bus,
@@ -374,9 +372,7 @@ ChannelConfig::ChannelConfig() : bus(ipmid_get_sd_bus_connection())
                 sdbusplus::bus::match::rules::member(interfaceRemovedSignal) +
                 sdbusplus::bus::match::rules::argNpath(
                     0, std::string(networkIntfObjectBasePath) + "/"),
-            [&](sdbusplus::message::message& msg) {
-                initChannelPersistData();
-            });
+            [&](sdbusplus::message_t&) { initChannelPersistData(); });
     }
 }
 
@@ -653,7 +649,7 @@ Cc ChannelConfig::setChannelAccessPersistData(const uint8_t chNum,
                 return ccUnspecifiedError;
             }
         }
-        catch (const sdbusplus::exception::exception& e)
+        catch (const sdbusplus::exception_t& e)
         {
             log<level::ERR>("Exception: Network interface does not exist");
             return ccInvalidFieldRequest;
@@ -778,8 +774,8 @@ std::string ChannelConfig::convertToPrivLimitString(const uint8_t value)
 EChannelSessSupported
     ChannelConfig::convertToSessionSupportIndex(const std::string& value)
 {
-    auto iter =
-        std::find(sessionSupportList.begin(), sessionSupportList.end(), value);
+    auto iter = std::find(sessionSupportList.begin(), sessionSupportList.end(),
+                          value);
     if (iter == sessionSupportList.end())
     {
         log<level::ERR>("Invalid session supported.",
@@ -954,9 +950,6 @@ int ChannelConfig::loadChannelConfig()
             Json jsonChData = data[chKey].get<Json>();
             if (jsonChData.is_null())
             {
-                log<level::WARNING>(
-                    "Channel not configured so loading default.",
-                    entry("CHANNEL_NUM=%d", chNum));
                 // If user didn't want to configure specific channel (say
                 // reserved channel), then load that index with default values.
                 setDefaultChannelConfig(chNum, defaultChannelName);
@@ -988,11 +981,11 @@ int ChannelConfig::loadChannelConfig()
             ChannelProperties& chData = channelData[chNum];
             chData.chID = chNum;
             chData.chName = jsonChData[nameString].get<std::string>();
-            chData.isChValid =
-                channelFound && jsonChData[isValidString].get<bool>();
+            chData.isChValid = channelFound &&
+                               jsonChData[isValidString].get<bool>();
             chData.activeSessCount = jsonChData.value(activeSessionsString, 0);
-            chData.maxTransferSize =
-                jsonChData.value(maxTransferSizeString, smallChannelSize);
+            chData.maxTransferSize = jsonChData.value(maxTransferSizeString,
+                                                      smallChannelSize);
             if (jsonChData.count(isManagementNIC) != 0)
             {
                 chData.isManagementNIC =
@@ -1317,15 +1310,15 @@ int ChannelConfig::setDbusProperty(const std::string& service,
 {
     try
     {
-        auto method =
-            bus.new_method_call(service.c_str(), objPath.c_str(),
-                                "org.freedesktop.DBus.Properties", "Set");
+        auto method = bus.new_method_call(service.c_str(), objPath.c_str(),
+                                          "org.freedesktop.DBus.Properties",
+                                          "Set");
 
         method.append(interface, property, value);
 
         auto reply = bus.call(method);
     }
-    catch (const sdbusplus::exception::exception& e)
+    catch (const sdbusplus::exception_t& e)
     {
         log<level::DEBUG>("set-property failed",
                           entry("SERVICE=%s", service.c_str()),
@@ -1346,16 +1339,16 @@ int ChannelConfig::getDbusProperty(const std::string& service,
 {
     try
     {
-        auto method =
-            bus.new_method_call(service.c_str(), objPath.c_str(),
-                                "org.freedesktop.DBus.Properties", "Get");
+        auto method = bus.new_method_call(service.c_str(), objPath.c_str(),
+                                          "org.freedesktop.DBus.Properties",
+                                          "Get");
 
         method.append(interface, property);
 
         auto reply = bus.call(method);
         reply.read(value);
     }
-    catch (const sdbusplus::exception::exception& e)
+    catch (const sdbusplus::exception_t& e)
     {
         log<level::DEBUG>("get-property failed",
                           entry("SERVICE=%s", service.c_str()),
@@ -1377,6 +1370,7 @@ int ChannelConfig::syncNetworkChannelConfig()
         if (getChannelSessionSupport(chNum) != EChannelSessSupported::none)
         {
             std::string intfPrivStr;
+            uint8_t intfPriv = 0;
             try
             {
                 std::string networkIntfObj =
@@ -1393,6 +1387,8 @@ int ChannelConfig::syncNetworkChannelConfig()
                     continue;
                 }
                 intfPrivStr = std::get<std::string>(variant);
+                intfPriv =
+                    static_cast<uint8_t>(convertToPrivLimitIndex(intfPrivStr));
             }
             catch (const std::bad_variant_access& e)
             {
@@ -1400,15 +1396,18 @@ int ChannelConfig::syncNetworkChannelConfig()
                     "exception: Network interface does not exist");
                 continue;
             }
-            catch (const sdbusplus::exception::exception& e)
+            catch (const sdbusplus::exception_t& e)
             {
                 log<level::DEBUG>(
                     "exception: Network interface does not exist");
                 continue;
             }
+            catch (const std::invalid_argument& e)
+            {
+                log<level::DEBUG>("exception: Invalid privilege");
+                continue;
+            }
 
-            uint8_t intfPriv =
-                static_cast<uint8_t>(convertToPrivLimitIndex(intfPrivStr));
             if (channelData[chNum].chAccess.chNonVolatileData.privLimit !=
                 intfPriv)
             {
@@ -1455,8 +1454,8 @@ void ChannelConfig::initChannelPersistData()
     if (readChannelPersistData() != 0)
     {
         // Copy default NV data to RW location
-        std::experimental::filesystem::copy_file(channelAccessDefaultFilename,
-                                                 channelNvDataFilename);
+        std::filesystem::copy_file(channelAccessDefaultFilename,
+                                   channelNvDataFilename);
 
         // Load the channel access NV data
         if (readChannelPersistData() != 0)
@@ -1473,8 +1472,8 @@ void ChannelConfig::initChannelPersistData()
     {
         // Copy default volatile data to temporary location
         // NV file(channelNvDataFilename) must have created by now.
-        std::experimental::filesystem::copy_file(channelNvDataFilename,
-                                                 channelVolatileDataFilename);
+        std::filesystem::copy_file(channelNvDataFilename,
+                                   channelVolatileDataFilename);
 
         // Load the channel access volatile data
         if (readChannelVolatileData() != 0)

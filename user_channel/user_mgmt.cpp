@@ -25,18 +25,19 @@
 
 #include <boost/interprocess/sync/named_recursive_mutex.hpp>
 #include <boost/interprocess/sync/scoped_lock.hpp>
-#include <cerrno>
-#include <fstream>
 #include <ipmid/types.hpp>
 #include <nlohmann/json.hpp>
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/log.hpp>
-#include <regex>
 #include <sdbusplus/bus/match.hpp>
 #include <sdbusplus/server/object.hpp>
-#include <variant>
 #include <xyz/openbmc_project/Common/error.hpp>
 #include <xyz/openbmc_project/User/Common/error.hpp>
+
+#include <cerrno>
+#include <fstream>
+#include <regex>
+#include <variant>
 
 namespace ipmi
 {
@@ -115,10 +116,10 @@ using Json = nlohmann::json;
 using PrivAndGroupType = std::variant<std::string, std::vector<std::string>>;
 
 using NoResource =
-    sdbusplus::xyz::openbmc_project::User::Common::Error::NoResource;
+    sdbusplus::error::xyz::openbmc_project::user::common::NoResource;
 
 using InternalFailure =
-    sdbusplus::xyz::openbmc_project::Common::Error::InternalFailure;
+    sdbusplus::error::xyz::openbmc_project::common::InternalFailure;
 
 std::unique_ptr<sdbusplus::bus::match_t> userUpdatedSignal
     __attribute__((init_priority(101)));
@@ -128,7 +129,7 @@ std::unique_ptr<sdbusplus::bus::match_t> userPropertiesSignal
     __attribute__((init_priority(101)));
 
 // TODO:  Below code can be removed once it is moved to common layer libmiscutil
-std::string getUserService(sdbusplus::bus::bus& bus, const std::string& intf,
+std::string getUserService(sdbusplus::bus_t& bus, const std::string& intf,
                            const std::string& path)
 {
     auto mapperCall = bus.new_method_call(objMapperService, objMapperPath,
@@ -151,20 +152,20 @@ std::string getUserService(sdbusplus::bus::bus& bus, const std::string& intf,
     return mapperResponse.begin()->first;
 }
 
-void setDbusProperty(sdbusplus::bus::bus& bus, const std::string& service,
+void setDbusProperty(sdbusplus::bus_t& bus, const std::string& service,
                      const std::string& objPath, const std::string& interface,
                      const std::string& property,
                      const DbusUserPropVariant& value)
 {
     try
     {
-        auto method =
-            bus.new_method_call(service.c_str(), objPath.c_str(),
-                                dBusPropertiesInterface, setPropertiesMethod);
+        auto method = bus.new_method_call(service.c_str(), objPath.c_str(),
+                                          dBusPropertiesInterface,
+                                          setPropertiesMethod);
         method.append(interface, property, value);
         bus.call(method);
     }
-    catch (const sdbusplus::exception::exception& e)
+    catch (const sdbusplus::exception_t& e)
     {
         log<level::ERR>("Failed to set property",
                         entry("PROPERTY=%s", property.c_str()),
@@ -174,18 +175,18 @@ void setDbusProperty(sdbusplus::bus::bus& bus, const std::string& service,
     }
 }
 
-static std::string getUserServiceName()
+std::string getUserServiceName()
 {
-    static sdbusplus::bus::bus bus(ipmid_get_sd_bus_connection());
+    static sdbusplus::bus_t bus(ipmid_get_sd_bus_connection());
     static std::string userMgmtService;
     if (userMgmtService.empty())
     {
         try
         {
-            userMgmtService =
-                ipmi::getUserService(bus, userMgrInterface, userMgrObjBasePath);
+            userMgmtService = ipmi::getUserService(bus, userMgrInterface,
+                                                   userMgrObjBasePath);
         }
-        catch (const sdbusplus::exception::exception& e)
+        catch (const sdbusplus::exception_t& e)
         {
             userMgmtService.clear();
         }
@@ -302,10 +303,9 @@ void userUpdateHelper(UserAccess& usrAccess, const UserUpdateEvent& userEvent,
     return;
 }
 
-void userUpdatedSignalHandler(UserAccess& usrAccess,
-                              sdbusplus::message::message& msg)
+void userUpdatedSignalHandler(UserAccess& usrAccess, sdbusplus::message_t& msg)
 {
-    static sdbusplus::bus::bus bus(ipmid_get_sd_bus_connection());
+    static sdbusplus::bus_t bus(ipmid_get_sd_bus_connection());
     std::string signal = msg.get_member();
     std::string userName, priv, newUserName;
     std::vector<std::string> groups;
@@ -410,7 +410,7 @@ void userUpdatedSignalHandler(UserAccess& usrAccess,
                         auto reply = bus.call(method);
                         reply.read(properties);
                     }
-                    catch (const sdbusplus::exception::exception& e)
+                    catch (const sdbusplus::exception_t& e)
                     {
                         log<level::DEBUG>(
                             "Failed to excute method",
@@ -503,7 +503,7 @@ bool UserAccess::isValidUserId(const uint8_t userId)
 bool UserAccess::isValidPrivilege(const uint8_t priv)
 {
     // Callback privilege is deprecated in OpenBMC
-    return (isValidPrivLimit(priv) || priv == privNoAccess);
+    return isValidPrivLimit(priv);
 }
 
 uint8_t UserAccess::getUsrMgmtSyncIndex()
@@ -584,7 +584,7 @@ bool UserAccess::isValidUserName(const std::string& userName)
         auto reply = bus.call(method);
         reply.read(properties);
     }
-    catch (const sdbusplus::exception::exception& e)
+    catch (const sdbusplus::exception_t& e)
     {
         log<level::ERR>("Failed to excute method",
                         entry("METHOD=%s", getSubTreeMethod),
@@ -657,8 +657,8 @@ static int pamFunctionConversation(int numMsg, const struct pam_message** msg,
             return PAM_BUF_ERR;
         }
 
-        void* ptr =
-            calloc(static_cast<size_t>(numMsg), sizeof(struct pam_response));
+        void* ptr = calloc(static_cast<size_t>(numMsg),
+                           sizeof(struct pam_response));
         if (ptr == nullptr)
         {
             free(pass);
@@ -691,8 +691,8 @@ int pamUpdatePasswd(const char* username, const char* password)
                                                const_cast<char*>(password)};
     pam_handle_t* localAuthHandle = NULL; // this gets set by pam_start
 
-    int retval =
-        pam_start("passwd", username, &localConversation, &localAuthHandle);
+    int retval = pam_start("passwd", username, &localConversation,
+                           &localAuthHandle);
 
     if (retval != PAM_SUCCESS)
     {
@@ -1038,7 +1038,7 @@ Cc UserAccess::setUserName(const uint8_t userId, const std::string& userName)
                 deleteUserInterface, deleteUserMethod);
             auto reply = bus.call(method);
         }
-        catch (const sdbusplus::exception::exception& e)
+        catch (const sdbusplus::exception_t& e)
         {
             log<level::DEBUG>("Failed to excute method",
                               entry("METHOD=%s", deleteUserMethod),
@@ -1059,10 +1059,11 @@ Cc UserAccess::setUserName(const uint8_t userId, const std::string& userName)
             auto method = bus.new_method_call(
                 getUserServiceName().c_str(), userMgrObjBasePath,
                 userMgrInterface, createUserMethod);
-            method.append(userName.c_str(), availableGroups, "", false);
+            method.append(userName.c_str(), availableGroups,
+                          ipmiPrivIndex[PRIVILEGE_USER], false);
             auto reply = bus.call(method);
         }
-        catch (const sdbusplus::exception::exception& e)
+        catch (const sdbusplus::exception_t& e)
         {
             log<level::DEBUG>("Failed to excute method",
                               entry("METHOD=%s", createUserMethod),
@@ -1074,6 +1075,11 @@ Cc UserAccess::setUserName(const uint8_t userId, const std::string& userName)
         std::memcpy(userInfo->userName,
                     static_cast<const void*>(userName.data()), userName.size());
         userInfo->userInSystem = true;
+        for (size_t chIndex = 0; chIndex < ipmiMaxChannels; chIndex++)
+        {
+            userInfo->userPrivAccess[chIndex].privilege =
+                static_cast<uint8_t>(PRIVILEGE_USER);
+        }
     }
     else if (oldUser != userName && validUser)
     {
@@ -1086,7 +1092,7 @@ Cc UserAccess::setUserName(const uint8_t userId, const std::string& userName)
             method.append(oldUser.c_str(), userName.c_str());
             auto reply = bus.call(method);
         }
-        catch (const sdbusplus::exception::exception& e)
+        catch (const sdbusplus::exception_t& e)
         {
             log<level::DEBUG>("Failed to excute method",
                               entry("METHOD=%s", renameUserMethod),
@@ -1204,8 +1210,7 @@ void UserAccess::readPayloadAccessFromUserInfo(
 void UserAccess::updatePayloadAccessInUserInfo(
     const std::array<std::array<bool, ipmiMaxChannels>, payloadsPerByte>&
         stdPayload,
-    const std::array<std::array<bool, ipmiMaxChannels>, payloadsPerByte>&
-        oemPayload,
+    const std::array<std::array<bool, ipmiMaxChannels>, payloadsPerByte>&,
     UserInfo& userInfo)
 {
     for (size_t chIndex = 0; chIndex < ipmiMaxChannels; ++chIndex)
@@ -1394,8 +1399,8 @@ void UserAccess::writeUserData()
 
         readPayloadAccessFromUserInfo(usersTbl.user[usrIndex], stdPayload,
                                       oemPayload);
-        Json jsonPayloadEnabledInfo =
-            constructJsonPayloadEnables(stdPayload, oemPayload);
+        Json jsonPayloadEnabledInfo = constructJsonPayloadEnables(stdPayload,
+                                                                  oemPayload);
         jsonUserInfo[payloadEnabledStr] = jsonPayloadEnabledInfo;
 
         jsonUsersTbl.push_back(jsonUserInfo);
@@ -1538,7 +1543,7 @@ void UserAccess::getSystemPrivAndGroups()
         auto reply = bus.call(method);
         reply.read(properties);
     }
-    catch (const sdbusplus::exception::exception& e)
+    catch (const sdbusplus::exception_t& e)
     {
         log<level::DEBUG>("Failed to excute method",
                           entry("METHOD=%s", getAllPropertiesMethod),
@@ -1647,7 +1652,7 @@ void UserAccess::cacheUserDataFile()
     close(fd);
 
     sigHndlrLock = boost::interprocess::file_lock(ipmiUserSignalLockFile);
-    // Register it for single object and single process either netipimd /
+    // Register it for single object and single process either netipmid /
     // host-ipmid
     if (userUpdatedSignal == nullptr && sigHndlrLock.try_lock())
     {
@@ -1657,17 +1662,17 @@ void UserAccess::cacheUserDataFile()
             sdbusplus::bus::match::rules::type::signal() +
                 sdbusplus::bus::match::rules::interface(dBusObjManager) +
                 sdbusplus::bus::match::rules::path(userMgrObjBasePath),
-            [&](sdbusplus::message::message& msg) {
-                userUpdatedSignalHandler(*this, msg);
-            });
+            [&](sdbusplus::message_t& msg) {
+            userUpdatedSignalHandler(*this, msg);
+        });
         userMgrRenamedSignal = std::make_unique<sdbusplus::bus::match_t>(
             bus,
             sdbusplus::bus::match::rules::type::signal() +
                 sdbusplus::bus::match::rules::interface(userMgrInterface) +
                 sdbusplus::bus::match::rules::path(userMgrObjBasePath),
-            [&](sdbusplus::message::message& msg) {
-                userUpdatedSignalHandler(*this, msg);
-            });
+            [&](sdbusplus::message_t& msg) {
+            userUpdatedSignalHandler(*this, msg);
+        });
         userPropertiesSignal = std::make_unique<sdbusplus::bus::match_t>(
             bus,
             sdbusplus::bus::match::rules::type::signal() +
@@ -1676,9 +1681,9 @@ void UserAccess::cacheUserDataFile()
                     dBusPropertiesInterface) +
                 sdbusplus::bus::match::rules::member(propertiesChangedSignal) +
                 sdbusplus::bus::match::rules::argN(0, usersInterface),
-            [&](sdbusplus::message::message& msg) {
-                userUpdatedSignalHandler(*this, msg);
-            });
+            [&](sdbusplus::message_t& msg) {
+            userUpdatedSignalHandler(*this, msg);
+        });
         signalHndlrObject = true;
     }
     std::map<DbusUserObjPath, DbusUserObjValue> managedObjs;
@@ -1690,7 +1695,7 @@ void UserAccess::cacheUserDataFile()
         auto reply = bus.call(method);
         reply.read(managedObjs);
     }
-    catch (const sdbusplus::exception::exception& e)
+    catch (const sdbusplus::exception_t& e)
     {
         log<level::DEBUG>("Failed to excute method",
                           entry("METHOD=%s", getSubTreeMethod),
@@ -1734,8 +1739,8 @@ void UserAccess::cacheUserDataFile()
                 {
                     // Group "ipmi" is present so lets update other properties
                     // in IPMI
-                    uint8_t priv =
-                        UserAccess::convertToIPMIPrivilege(usrPriv) & privMask;
+                    uint8_t priv = UserAccess::convertToIPMIPrivilege(usrPriv) &
+                                   privMask;
                     // Update all channels priv, only if it is not equivalent to
                     // getUsrMgmtSyncIndex()
                     if (userData->user[usrIdx]

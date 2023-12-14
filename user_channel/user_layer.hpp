@@ -15,9 +15,10 @@
 */
 #pragma once
 
-#include <bitset>
 #include <ipmid/api.hpp>
 #include <ipmid/types.hpp>
+
+#include <bitset>
 #include <string>
 
 namespace ipmi
@@ -49,18 +50,18 @@ static constexpr uint8_t payloadsPerByte = 8;
 struct PrivAccess
 {
 #if BYTE_ORDER == LITTLE_ENDIAN
-    uint8_t privilege : 4;
-    uint8_t ipmiEnabled : 1;
-    uint8_t linkAuthEnabled : 1;
-    uint8_t accessCallback : 1;
-    uint8_t reserved : 1;
+    uint8_t privilege:4;
+    uint8_t ipmiEnabled:1;
+    uint8_t linkAuthEnabled:1;
+    uint8_t accessCallback:1;
+    uint8_t reserved:1;
 #endif
 #if BYTE_ORDER == BIG_ENDIAN
-    uint8_t reserved : 1;
-    uint8_t accessCallback : 1;
-    uint8_t linkAuthEnabled : 1;
-    uint8_t ipmiEnabled : 1;
-    uint8_t privilege : 4;
+    uint8_t reserved:1;
+    uint8_t accessCallback:1;
+    uint8_t linkAuthEnabled:1;
+    uint8_t ipmiEnabled:1;
+    uint8_t privilege:4;
 #endif
 } __attribute__((packed));
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <sdbusplus/bus.hpp>
+
 #include <string>
 #include <tuple>
 
@@ -25,7 +26,7 @@ struct Objects
      * @param[in] filter - A vector of settings interfaces the caller is
      *            interested in.
      */
-    Objects(sdbusplus::bus::bus& bus, const std::vector<Interface>& filter);
+    Objects(sdbusplus::bus_t& bus, const std::vector<Interface>& filter);
     Objects(const Objects&) = default;
     Objects& operator=(const Objects&) = default;
     Objects(Objects&&) = delete;
@@ -47,7 +48,7 @@ struct Objects
     std::map<Interface, std::vector<Path>> map;
 
     /** @brief The Dbus bus object */
-    sdbusplus::bus::bus& bus;
+    sdbusplus::bus_t& bus;
 };
 
 namespace boot

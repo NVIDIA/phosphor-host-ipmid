@@ -5,32 +5,13 @@
 #include <map>
 #include <ipmid/utils.hpp>
 #include <sdbusplus/bus.hpp>
+
+#include <map>
 #include <string>
 #include <vector>
 
 namespace dcmi
 {
-
-using NumInstances = size_t;
-using Json = nlohmann::json;
-
-enum Commands
-{
-    // Get capability bits
-    GET_CAPABILITIES = 0x01,
-    GET_POWER_READING = 0x02,
-    GET_POWER_LIMIT = 0x03,
-    SET_POWER_LIMIT = 0x04,
-    APPLY_POWER_LIMIT = 0x05,
-    GET_ASSET_TAG = 0x06,
-    GET_SENSOR_INFO = 0x07,
-    SET_ASSET_TAG = 0x08,
-    GET_MGMNT_CTRL_ID_STR = 0x09,
-    SET_MGMNT_CTRL_ID_STR = 0x0A,
-    GET_TEMP_READINGS = 0x10,
-    SET_CONF_PARAMS = 0x12,
-    GET_CONF_PARAMS = 0x13,
-};
 
 static constexpr auto propIntf = "org.freedesktop.DBus.Properties";
 static constexpr auto assetTagIntf =
@@ -42,14 +23,15 @@ static constexpr auto networkConfigIntf =
     "xyz.openbmc_project.Network.SystemConfiguration";
 static constexpr auto hostNameProp = "HostName";
 static constexpr auto temperatureSensorType = 0x01;
-static constexpr auto maxInstances = 255;
+static constexpr size_t maxInstances = 255;
+static constexpr uint8_t maxRecords = 8;
 static constexpr auto gDCMISensorsConfig =
     "/usr/share/ipmi-providers/dcmi_sensors.json";
 static constexpr auto ethernetIntf =
     "xyz.openbmc_project.Network.EthernetInterface";
 static constexpr auto ethernetDefaultChannelNum = 0x1;
 static constexpr auto networkRoot = "/xyz/openbmc_project/network";
-static constexpr auto dhcpObj = "/xyz/openbmc_project/network/config/dhcp";
+static constexpr auto dhcpObj = "/xyz/openbmc_project/network/dhcp";
 static constexpr auto dhcpIntf =
     "xyz.openbmc_project.Network.DHCPConfiguration";
 static constexpr auto systemBusName = "org.freedesktop.systemd1";

@@ -2,14 +2,15 @@
 
 #include "fruread.hpp"
 
-#include <algorithm>
 #include <ipmid/api.hpp>
 #include <ipmid/types.hpp>
 #include <ipmid/utils.hpp>
-#include <map>
 #include <phosphor-logging/elog-errors.hpp>
 #include <sdbusplus/message/types.hpp>
 #include <xyz/openbmc_project/Common/error.hpp>
+
+#include <algorithm>
+#include <map>
 
 extern const FruMap frus;
 namespace ipmi
@@ -19,7 +20,7 @@ namespace fru
 
 using namespace phosphor::logging;
 using InternalFailure =
-    sdbusplus::xyz::openbmc_project::Common::Error::InternalFailure;
+    sdbusplus::error::xyz::openbmc_project::common::InternalFailure;
 std::unique_ptr<sdbusplus::bus::match_t> matchPtr
     __attribute__((init_priority(101)));
 
@@ -44,7 +45,7 @@ ipmi::PropertyMap readAllProperties(const std::string& intf,
                                     const std::string& path)
 {
     ipmi::PropertyMap properties;
-    sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
+    sdbusplus::bus_t bus{ipmid_get_sd_bus_connection()};
     std::string service;
     std::string objPath;
 
@@ -68,7 +69,7 @@ ipmi::PropertyMap readAllProperties(const std::string& intf,
         auto reply = bus.call(method);
         reply.read(properties);
     }
-    catch (const sdbusplus::exception::exception& e)
+    catch (const sdbusplus::exception_t& e)
     {
         // If property is not found simply return empty value
         log<level::ERR>("Error in reading property values",
@@ -80,7 +81,7 @@ ipmi::PropertyMap readAllProperties(const std::string& intf,
     return properties;
 }
 
-void processFruPropChange(sdbusplus::message::message& msg)
+void processFruPropChange(sdbusplus::message_t& msg)
 {
     if (cache::fruMap.empty())
     {
@@ -112,7 +113,7 @@ int registerCallbackHandler()
     if (matchPtr == nullptr)
     {
         using namespace sdbusplus::bus::match::rules;
-        sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
+        sdbusplus::bus_t bus{ipmid_get_sd_bus_connection()};
         matchPtr = std::make_unique<sdbusplus::bus::match_t>(
             bus,
             path_namespace(invObjPath) + type::signal() +
@@ -143,8 +144,8 @@ FruInventoryData readDataFromInventory(const FRUId& fruNum)
     {
         for (auto& intf : instance.interfaces)
         {
-            ipmi::PropertyMap allProp =
-                readAllProperties(intf.first, instance.path);
+            ipmi::PropertyMap allProp = readAllProperties(intf.first,
+                                                          instance.path);
             for (auto& properties : intf.second)
             {
                 auto iter = allProp.find(properties.first);

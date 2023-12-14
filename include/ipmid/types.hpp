@@ -3,8 +3,9 @@
 #include <openssl/crypto.h>
 #include <stdint.h>
 
-#include <map>
 #include <sdbusplus/server.hpp>
+
+#include <map>
 #include <string>
 #include <variant>
 
@@ -19,9 +20,12 @@ using DbusProperty = std::string;
 
 using Association = std::tuple<std::string, std::string, std::string>;
 
-using Value = std::variant<bool, uint8_t, int16_t, uint16_t, int32_t, uint32_t,
-                           int64_t, uint64_t, double, std::string,
-                           std::vector<std::string>, std::vector<Association>, std::map<std::string, bool>>;
+using Value =
+    std::variant<bool, uint8_t, int16_t, uint16_t, int32_t, uint32_t, int64_t,
+                 uint64_t, double, std::string, std::vector<uint8_t>,
+                 std::vector<uint16_t>, std::vector<uint32_t>,
+                 std::vector<std::string>, std::vector<Association>,
+                 std::map<std::string, bool>>;
 
 using PropertyMap = std::map<DbusProperty, Value>;
 
@@ -195,7 +199,7 @@ using InterfaceMap = std::map<DbusInterface, PropertyMap>;
 using Object = sdbusplus::message::object_path;
 using ObjectMap = std::map<Object, InterfaceMap>;
 
-using IpmiUpdateData = sdbusplus::message::message;
+using IpmiUpdateData = sdbusplus::message_t;
 
 struct SelData
 {
@@ -279,24 +283,42 @@ class SecureAllocator : public std::allocator<T>
         return std::allocator<T>::deallocate(p, n);
     }
 };
-using SecureString =
+
+using SecureStringBase =
     std::basic_string<char, std::char_traits<char>, SecureAllocator<char>>;
+class SecureString : public SecureStringBase
+{
+  public:
+    using SecureStringBase::basic_string;
+    SecureString(const SecureStringBase& other) : SecureStringBase(other){};
+    SecureString(SecureString&) = default;
+    SecureString(const SecureString&) = default;
+    SecureString(SecureString&&) = default;
+    SecureString& operator=(SecureString&&) = default;
+    SecureString& operator=(const SecureString&) = default;
 
-using SecureBuffer = std::vector<uint8_t, SecureAllocator<uint8_t>>;
+    ~SecureString()
+    {
+        OPENSSL_cleanse(this->data(), this->size());
+    }
+};
 
+using SecureBufferBase = std::vector<uint8_t, SecureAllocator<uint8_t>>;
+
+class SecureBuffer : public SecureBufferBase
+{
+  public:
+    using SecureBufferBase::vector;
+    SecureBuffer(const SecureBufferBase& other) : SecureBufferBase(other){};
+    SecureBuffer(SecureBuffer&) = default;
+    SecureBuffer(const SecureBuffer&) = default;
+    SecureBuffer(SecureBuffer&&) = default;
+    SecureBuffer& operator=(SecureBuffer&&) = default;
+    SecureBuffer& operator=(const SecureBuffer&) = default;
+
+    ~SecureBuffer()
+    {
+        OPENSSL_cleanse(this->data(), this->size());
+    }
+};
 } // namespace ipmi
-
-namespace std
-{
-template <>
-inline ipmi::SecureString::~SecureString()
-{
-    OPENSSL_cleanse(&((*this)[0]), this->size());
-}
-
-template <>
-inline ipmi::SecureBuffer::~SecureBuffer()
-{
-    OPENSSL_cleanse(&((*this)[0]), this->size());
-}
-} // namespace std

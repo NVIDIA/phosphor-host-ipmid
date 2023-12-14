@@ -1,4 +1,3 @@
-#include "elog-errors.hpp"
 #include "error-HostEvent.hpp"
 #include "sensorhandler.hpp"
 #include "storagehandler.hpp"
@@ -6,21 +5,23 @@
 #include <mapper.h>
 #include <systemd/sd-bus.h>
 
+#include <ipmid/api.hpp>
+#include <ipmid/types.hpp>
+#include <phosphor-logging/elog-errors.hpp>
+#include <phosphor-logging/elog.hpp>
+#include <xyz/openbmc_project/Logging/Entry/server.hpp>
+
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <iostream>
-#include <ipmid/api.hpp>
-#include <ipmid/types.hpp>
 #include <memory>
-#include <phosphor-logging/elog.hpp>
 #include <vector>
-#include <xyz/openbmc_project/Logging/Entry/server.hpp>
 
 using namespace std;
 using namespace phosphor::logging;
-using namespace sdbusplus::xyz::openbmc_project::Logging::server;
+using namespace sdbusplus::server::xyz::openbmc_project::logging;
 
 std::string readESEL(const char* fileName)
 {
@@ -60,8 +61,8 @@ void createProcedureLogEntry(uint8_t procedureNum)
     }
     data[eSELData.size() * byteSeparator] = '\0';
 
-    using error = sdbusplus::org::open_power::Host::Error::MaintenanceProcedure;
-    using metadata = org::open_power::Host::MaintenanceProcedure;
+    using error = sdbusplus::error::org::open_power::host::MaintenanceProcedure;
+    using metadata = org::open_power::host::MaintenanceProcedure;
 
     report<error>(metadata::ESEL(data.get()),
                   metadata::PROCEDURE(static_cast<uint32_t>(procedureNum)));

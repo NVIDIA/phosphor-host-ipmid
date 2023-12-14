@@ -16,10 +16,10 @@ namespace command
  *  @details A concrete implementation for xyz.openbmc_project.Control.Host
  *  and xyz.openbmc_project.Condition.HostFirmware DBus API's.
  */
-class Host
-    : public sdbusplus::server::object::object<
-          sdbusplus::xyz::openbmc_project::Control::server::Host,
-          sdbusplus::xyz::openbmc_project::Condition::server::HostFirmware>
+class Host :
+    public sdbusplus::server::object_t<
+        sdbusplus::server::xyz::openbmc_project::control::Host,
+        sdbusplus::server::xyz::openbmc_project::condition::HostFirmware>
 {
   public:
     /** @brief Constructs Host Control and Condition Interfaces
@@ -27,10 +27,10 @@ class Host
      *  @param[in] bus     - The Dbus bus object
      *  @param[in] objPath - The Dbus object path
      */
-    Host(sdbusplus::bus::bus& bus, const char* objPath) :
-        sdbusplus::server::object::object<
-            sdbusplus::xyz::openbmc_project::Control::server::Host,
-            sdbusplus::xyz::openbmc_project::Condition::server::HostFirmware>(
+    Host(sdbusplus::bus_t& bus, const char* objPath) :
+        sdbusplus::server::object_t<
+            sdbusplus::server::xyz::openbmc_project::control::Host,
+            sdbusplus::server::xyz::openbmc_project::condition::HostFirmware>(
             bus, objPath),
         bus(bus)
     {
@@ -50,7 +50,7 @@ class Host
 
   private:
     /** @brief sdbusplus DBus bus connection. */
-    sdbusplus::bus::bus& bus;
+    sdbusplus::bus_t& bus;
 
     /** @brief  Callback function to be invoked by command manager
      *

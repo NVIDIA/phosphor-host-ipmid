@@ -1,7 +1,7 @@
-#include "entity_map_json.hpp"
-
+#include <ipmid/entity_map_json.hpp>
 #include <ipmid/types.hpp>
 #include <nlohmann/json.hpp>
+
 #include <utility>
 
 #include <gmock/gmock.h>

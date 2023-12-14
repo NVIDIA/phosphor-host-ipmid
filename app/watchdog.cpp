@@ -4,19 +4,20 @@
 
 #include <endian.h>
 
-#include <bitset>
-#include <cstdint>
 #include <ipmid/api.hpp>
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/elog.hpp>
 #include <phosphor-logging/log.hpp>
-#include <string>
 #include <xyz/openbmc_project/Common/error.hpp>
+
+#include <bitset>
+#include <cstdint>
+#include <string>
 
 using phosphor::logging::commit;
 using phosphor::logging::level;
 using phosphor::logging::log;
-using sdbusplus::xyz::openbmc_project::Common::Error::InternalFailure;
+using sdbusplus::error::xyz::openbmc_project::common::InternalFailure;
 
 static bool lastCallSuccessful = false;
 
@@ -248,6 +249,7 @@ ipmi::RspType<>
 
         // Mark as initialized so that future resets behave correctly
         wd_service.setInitialized(true);
+        wd_service.setLogTimeout(!dontLog);
 
         lastCallSuccessful = true;
         return ipmi::responseSuccess();
@@ -356,15 +358,15 @@ static constexpr uint8_t wd_running = 0x1 << 6;
  * - initialCountdown
  * - presentCountdown
  **/
-ipmi::RspType<uint3_t, // timerUse - timer use
-              uint3_t, // timerUse - reserved
-              bool,    // timerUse - timer is started
-              bool,    // timerUse - don't log
+ipmi::RspType<uint3_t,        // timerUse - timer use
+              uint3_t,        // timerUse - reserved
+              bool,           // timerUse - timer is started
+              bool,           // timerUse - don't log
 
-              uint3_t, // timerAction - timeout action
-              uint1_t, // timerAction - reserved
-              uint3_t, // timerAction - pre-timeout interrupt
-              uint1_t, // timerAction - reserved
+              uint3_t,        // timerAction - timeout action
+              uint1_t,        // timerAction - reserved
+              uint3_t,        // timerAction - pre-timeout interrupt
+              uint1_t,        // timerAction - reserved
 
               uint8_t,        // pretimeout
               std::bitset<8>, // expireFlags
