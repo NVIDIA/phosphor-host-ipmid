@@ -97,7 +97,7 @@ Host::FirmwareCondition Host::currentFirmwareCondition() const
     ipmid_send_cmd_to_host(std::move(cmd));
 
     // Timer to ensure this function returns something within a reasonable time
-    sdbusplus::Timer hostAckTimer([hostCondition]() {
+    phosphor::Timer hostAckTimer([hostCondition]() {
         log<level::DEBUG>("currentFirmwareCondition: timer expired!");
         *(hostCondition.get()) = Host::FirmwareCondition::Off;
     });
