@@ -318,7 +318,7 @@ enum class SensorTypeCodes : uint8_t
     other = 0xB,
     memory = 0x0c,
     drive_slot = 0x0D,
-    systemFirmwareProgress = 0xF
+    systemFirmwareProgress = 0xF,
     event_log = 0x10,
     buttons = 0x14,
     module = 0x15,
@@ -380,10 +380,9 @@ const static boost::container::flat_map<
           std::make_pair(SensorTypeCodes::module, SensorEventTypeCodes::oem)},
          {"boot_progress",
           std::make_pair(SensorTypeCodes::systemFirmwareProgress,
-                         SensorEventTypeCodes::sensorSpecified)}}};
+                         SensorEventTypeCodes::sensorSpecified)},
          {"entity", std::make_pair(SensorTypeCodes::entity,
                                    SensorEventTypeCodes::sensorSpecified)}}};
->>>>>>> origin/master
 std::string getSensorTypeStringFromPath(const std::string& path);
 
 uint8_t getSensorTypeFromPath(const std::string& path);

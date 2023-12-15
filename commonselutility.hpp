@@ -200,10 +200,6 @@ std::string toHexStr(const T& data)
 
 namespace internal
 {
-inline bool isRecordOEM(uint8_t recordType)
-{
-    return recordType != systemEventRecord;
-}
 using additionalDataMap = std::map<std::string, std::string>;
 using entryDataMap = std::map<PropertyName, PropertyType>;
 
@@ -214,10 +210,6 @@ std::chrono::seconds getEntryTimeStamp(const std::string& objPath);
  * recorType , which is available in key:value pair
  */
 additionalDataMap parseAdditionalData(const AdditionalData& data);
-
-// Helper functions convert string to integer
-std::vector<uint8_t> convertVec(const std::string_view& str);
-int convert(const std::string_view& str, int base = 10);
 
 /* Retrive entry data from dbus object such as entry ID,
  * Timestamp and recordID.

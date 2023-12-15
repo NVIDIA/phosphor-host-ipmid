@@ -2169,7 +2169,8 @@ bool constructDiscreteSdr(ipmi::Context::ptr ctx, uint16_t sensorNum,
     record.body.entity_instance = 0; 
     // follow the association chain to get the parent board's entityid and
     // entityInstance
-    updateIpmiFromAssociation(path, sensorMap, record.body.entity_id,
+    auto& ipmiDecoratorPaths = getIpmiDecoratorPaths(ctx);
+    updateIpmiFromAssociation(path, ipmiDecoratorPaths.value_or(std::unordered_set<std::string>()), sensorMap, record.body.entity_id,
                               record.body.entity_instance);
 
     record.body.sensor_type = getSensorTypeFromPath(path);
@@ -2765,7 +2766,8 @@ ipmi::RspType<uint8_t,  // sdr version
     uint8_t operationSupport = static_cast<uint8_t>(
         SdrRepositoryInfoOps::overflow); // write not supported
 
-    while (!getSensorDataRecord(ctx, record, recordID++))
+    auto& ipmiDecoratorPaths = getIpmiDecoratorPaths(ctx);
+    while (!getSensorDataRecord(ctx, ipmiDecoratorPaths.value_or(std::unordered_set<std::string>()), record, recordID++))
     {
         get_sdr::SensorDataRecordHeader* hdr =
             reinterpret_cast<get_sdr::SensorDataRecordHeader*>(record.data());

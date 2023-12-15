@@ -1,7 +1,9 @@
 #include "config.h"
 
 #include "selutility.hpp"
+
 #include <ipmid/api.hpp>
+#include <ipmid/types.hpp>
 #include <ipmid/utils.hpp>
 #include <phosphor-logging/elog-errors.hpp>
 #include <xyz/openbmc_project/Common/error.hpp>
@@ -15,6 +17,29 @@ extern const ipmi::sensor::InvObjectIDMap invSensors;
 using namespace phosphor::logging;
 using InternalFailure =
     sdbusplus::error::xyz::openbmc_project::common::InternalFailure;
+
+namespace
+{
+
+constexpr auto systemEventRecord = 0x02;
+constexpr auto generatorID = 0x2000;
+constexpr auto eventMsgRevision = 0x04;
+constexpr auto assertEvent = 0x00;
+constexpr auto deassertEvent = 0x80;
+constexpr auto selDataSize = 3;
+constexpr auto oemCDDataSize = 9;
+constexpr auto oemEFDataSize = 13;
+
+constexpr auto propAdditionalData = "AdditionalData";
+constexpr auto propResolved = "Resolved";
+
+constexpr auto strEventDir = "EVENT_DIR";
+constexpr auto strGenerateId = "GENERATOR_ID";
+constexpr auto strRecordType = "RECORD_TYPE";
+constexpr auto strSensorData = "SENSOR_DATA";
+constexpr auto strSensorPath = "SENSOR_PATH";
+
+} // namespace
 
 namespace ipmi
 {
@@ -203,13 +228,15 @@ GetSELEntryResponse
 
     // The recordID are with the same offset between different types,
     // so we are safe to set the recordID here
-    record.event.eventRecord.recordID = recordId;
-    auto iterData = entryData.find(propAdditionalData);
-    if (iterData != entryData.end())
+    record.event.eventRecord.recordID =
+        static_cast<uint16_t>(std::get<uint32_t>(iterId->second));
+
+    iterId = entryData.find(propAdditionalData);
+    if (iterId != entryData.end())
     {
         // Check if it's a SEL from phosphor-sel-logger which shall contain
         // the record ID, etc
-        const auto& addData = std::get<AdditionalData>(iterData->second);
+        const auto& addData = std::get<AdditionalData>(iterId->second);
         m = parseAdditionalData(addData);
         auto recordTypeIter = m.find(strRecordType);
         if (recordTypeIter != m.end())
