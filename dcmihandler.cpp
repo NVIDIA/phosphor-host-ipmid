@@ -26,43 +26,11 @@ using InternalFailure =
 
 void register_netfn_dcmi_functions() __attribute__((constructor));
 
-constexpr auto PCAP_PATH = "/xyz/openbmc_project/control/host0/power_cap";
-constexpr auto PCAP_INTERFACE = "xyz.openbmc_project.Control.Power.Cap";
-
-constexpr auto POWER_CAP_PROP = "PowerCap";
-constexpr auto POWER_CAP_ENABLE_PROP = "PowerCapEnable";
-
-constexpr auto DCMI_PARAMETER_REVISION = 2;
-constexpr auto DCMI_SPEC_MAJOR_VERSION = 1;
-constexpr auto DCMI_SPEC_MINOR_VERSION = 5;
-constexpr auto DCMI_CONFIG_PARAMETER_REVISION = 1;
-constexpr auto DCMI_RAND_BACK_OFF_MASK = 0x80;
-constexpr auto DCMI_OPTION_60_43_MASK = 0x02;
-constexpr auto DCMI_OPTION_12_MASK = 0x01;
-constexpr auto DCMI_ACTIVATE_DHCP_MASK = 0x01;
-constexpr auto DCMI_ACTIVATE_DHCP_REPLY = 0x00;
-constexpr auto DCMI_SET_CONF_PARAM_REQ_PACKET_MAX_SIZE = 0x04;
-constexpr auto DCMI_SET_CONF_PARAM_REQ_PACKET_MIN_SIZE = 0x03;
-constexpr auto DCMI_SET_PWR_LIMIT_EXCEPTION_ACTION_RESERVED = 0x12;
-constexpr auto DCMI_SET_PWR_LIMIT_EXCEPTION_ACTION_RESERVED1 = 0xFF;
-constexpr auto DHCP_TIMING1 = 0x04;       // 4 sec
-constexpr auto DHCP_TIMING2_UPPER = 0x00; // 2 min
-constexpr auto DHCP_TIMING2_LOWER = 0x78;
-constexpr auto DHCP_TIMING3_UPPER = 0x00; // 64 sec
-constexpr auto DHCP_TIMING3_LOWER = 0x40;
-// When DHCP Option 12 is enabled the string "SendHostName=true" will be
-// added into n/w configuration file and the parameter
-// SendHostNameEnabled will set to true.
-constexpr auto DHCP_OPT12_ENABLED = "SendHostNameEnabled";
 constexpr auto pcapPath = "/xyz/openbmc_project/control/host0/power_cap";
 constexpr auto pcapInterface = "xyz.openbmc_project.Control.Power.Cap";
 
 constexpr auto powerCapProp = "PowerCap";
 constexpr auto powerCapEnableProp = "PowerCapEnable";
-
-constexpr auto controlPowerModeIntf = "xyz.openbmc_project.Control.Power.Mode";
-constexpr auto controlPowerCapIntf =  "xyz.openbmc_project.Control.Power.Cap";
-constexpr auto control = "/xyz/openbmc_project/control/";
 
 using namespace phosphor::logging;
 
@@ -356,23 +324,7 @@ bool setDHCPOption(ipmi::Context::ptr& ctx, std::string prop, bool value)
     }
     return (!ec.value());
 }
-void restartSystemdUnit(ipmi::Context::ptr& ctx, const std::string& unit)
-{
 
-    try
-    {
-        auto method = ctx->bus->new_method_call(systemBusName, systemPath,
-                                                systemIntf, "RestartUnit");
-        method.append(unit.c_str(), "replace");
-        ctx->bus->call_noreply(method);
-    }
-    catch (const sdbusplus::exception::SdBusError& ex)
-    {
-        log<level::ERR>("Failed to restart network service",
-                        entry("ERR=%s", ex.what()));
-        elog<InternalFailure>();
-    }
-}
 } // namespace dcmi
 
 constexpr uint8_t exceptionPowerOff = 0x01;
@@ -849,6 +801,8 @@ std::tuple<std::vector<std::tuple<uint7_t, bool, uint8_t>>, uint8_t>
         {
             response.emplace_back(uint7_t{temp}, sign, instanceNum);
         }
+    }
+
     auto totalInstances =
         static_cast<uint8_t>(std::min(readings.size(), maxInstances));
     return std::make_tuple(response, totalInstances);
@@ -1103,9 +1057,6 @@ ipmi::RspType<uint16_t, // current power
     {
         return ipmi::responseInvalidFieldRequest();
     }
-    major = DCMI_SPEC_MAJOR_VERSION;
-    minor = DCMI_SPEC_MINOR_VERSION;
-    paramRevision = DCMI_CONFIG_PARAMETER_REVISION;
 
     std::optional<uint16_t> powerResp = readPower(ctx);
     if (!powerResp)
@@ -1202,6 +1153,7 @@ ipmi::RspType<uint8_t,              // total available instances
 
 void register_netfn_dcmi_functions()
 {
+    // <Get Power Limit>
     registerGroupHandler(ipmi::prioOpenBmcBase, ipmi::groupDCMI,
                          ipmi::dcmi::cmdGetPowerLimit, ipmi::Privilege::User,
                          getPowerLimit);
