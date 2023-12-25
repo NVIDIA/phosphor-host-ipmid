@@ -49,7 +49,7 @@ static uint16_t cacheBus = 0xFF;
 static uint8_t cacheAddr = 0XFF;
 static uint8_t lastDevId = 0xFF;
 
-static uint8_t writeBus = 0xFF;
+static uint16_t writeBus = 0xFF;
 static uint8_t writeAddr = 0XFF;
 
 std::unique_ptr<phosphor::Timer> writeTimer = nullptr;
