@@ -319,6 +319,9 @@ enum class SensorTypeCodes : uint8_t
     buttons = 0x14,
     module = 0x15,
     cable = 0x1B,
+    systemBoot = 0x1D,
+    systemShutdown = 0x20,
+    versionChange = 0x2b,
     watchdog2 = 0x23,
     systemFirmwareProgress = 0xF
 };
@@ -362,6 +365,12 @@ const static boost::container::flat_map<
          {"motherboard", std::make_pair(SensorTypeCodes::power_supply,
                                         SensorEventTypeCodes::sensorSpecified)},
          {"cable", std::make_pair(SensorTypeCodes::cable,
+                                  SensorEventTypeCodes::sensorSpecified)},
+         {"reboot", std::make_pair(SensorTypeCodes::systemBoot,
+                                  SensorEventTypeCodes::sensorSpecified)},
+         {"shutdown", std::make_pair(SensorTypeCodes::systemShutdown,
+                                  SensorEventTypeCodes::sensorSpecified)},
+         {"software", std::make_pair(SensorTypeCodes::versionChange,
                                   SensorEventTypeCodes::sensorSpecified)},
          {"eventlogging",
           std::make_pair(SensorTypeCodes::event_log,
