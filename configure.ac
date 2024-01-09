@@ -348,6 +348,16 @@ AS_IF([test x$dbus_logger = xtrue],
     AC_MSG_WARN([Disabling sel logger feature])
 )
 
+AC_ARG_ENABLE([sensor-name-algo-shortner],
+    [ --enable-sensor-name-algo-shortner    Enable/Disable algo based shortning for sensor name],
+    [case "${enableval}" in
+      yes) algo_shortner=true ;;
+      no) algo_shortner=false ;;
+      *) AC_MSG_ERROR([bad value ${enableval} for --enable-sensor-name-algo-shortner]) ;;
+      esac],[algo_shortner=false]
+      )
+AC_DEFINE_UNQUOTED([ENABLE_SENSORNAME_ALGO_SHORTNER],[$algo_shortner],[Enable algo based shortning for sensor name])
+
 # Create configured output
 AC_CONFIG_FILES([
     Makefile
