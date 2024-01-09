@@ -712,13 +712,15 @@ ipmi::RspType<uint32_t> ipmiStorageGetSELTime()
 
 ipmi::RspType<uint8_t> ipmiStorageSetErrorInfoCap(size_t capacity)
 {
+    cancelSELReservation();
     sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
     try
     {
         auto service = ipmi::getService(bus, capacityInterface, logObjPath);
         auto method = bus.new_method_call(service.c_str(), logObjPath,
-                                          dbusProperty, "Set");
-        method.append(capacityInterface, "InfoLogCapacity", std::variant<size_t>(capacity));
+                                          capacityInterface, "SetInfoLogCapacity");
+        method.append(capacity);
+
         bus.call_noreply(method);
     }
     catch (const std::exception& e)
