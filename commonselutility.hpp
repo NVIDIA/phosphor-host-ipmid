@@ -211,6 +211,10 @@ std::chrono::seconds getEntryTimeStamp(const std::string& objPath);
  */
 additionalDataMap parseAdditionalData(const AdditionalData& data);
 
+// Helper functions convert string to integer
+std::vector<uint8_t> convertVec(const std::string_view& str);
+int convert(const std::string_view& str, int base = 10);
+
 /* Retrive entry data from dbus object such as entry ID,
  * Timestamp and recordID.
  */

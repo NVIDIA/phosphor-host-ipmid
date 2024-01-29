@@ -1,4 +1,5 @@
 #include "dbus-sdr/sdrutils.hpp"
+#include "selutility.hpp"
 #include "dbus-sdr/storagecommands.hpp"
 #include <boost/algorithm/string.hpp>
 #include <boost/container/flat_map.hpp>

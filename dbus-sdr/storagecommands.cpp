@@ -1296,7 +1296,7 @@ void registerStorageFunctions()
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
                           ipmi::storage::cmdAddSelEntry,
                           ipmi::Privilege::Operator, ipmiStorageAddSELEntry);
-
+    
     // <Clear SEL>
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
                           ipmi::storage::cmdClearSel, ipmi::Privilege::Operator,

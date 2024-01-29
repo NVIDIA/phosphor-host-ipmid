@@ -552,7 +552,7 @@ ipmi::RspType<uint16_t, // Next Record ID
               uint8_t,  // Record Type
               std::variant<systemEventType>>
 ipmiGetSELEntry(uint16_t reservationID, uint16_t selRecordID,
-                           uint8_t offset, uint8_t readLength)
+                        [[maybe_unused]] uint8_t offset, [[maybe_unused]] uint8_t readLength)
 {
     if (reservationID != 0 )
     {
@@ -636,8 +636,8 @@ ipmiGetSELEntry(uint16_t reservationID, uint16_t selRecordID,
 
 ipmi::RspType<uint16_t // recordID of the Added SEL entry
               >
-    ipmiStorageAddSEL(uint16_t recordID, uint8_t recordType, uint32_t timeStamp,
-                      uint16_t generatorID, uint8_t evmRev, uint8_t sensorType,
+    ipmiStorageAddSEL(uint16_t recordID, uint8_t recordType, [[maybe_unused]] uint32_t timeStamp,
+                      uint16_t generatorID, [[maybe_unused]] uint8_t evmRev, [[maybe_unused]] uint8_t sensorType,
                       uint8_t sensorNumber, uint8_t eventDir,
                       std::array<uint8_t, eventDataSize> eventData)
 {

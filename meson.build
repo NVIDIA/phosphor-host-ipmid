@@ -52,6 +52,9 @@ conf_data.set('AUX_1_MATCH_INDEX', matches_map[3])
 conf_data.set('AUX_2_MATCH_INDEX', matches_map[4])
 conf_data.set('AUX_3_MATCH_INDEX', matches_map[5])
 
+# Max SEL Entries 
+conf_data.set('MAX_SEL_ENTRIES', get_option('max-sel-entries'))
+
 conf_h = configure_file(
   output: 'config.h',
   configuration: conf_data)
