@@ -39,6 +39,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstring>
+#include <format>
 #include <iostream>
 #include <map>
 #include <memory>
@@ -3040,6 +3041,7 @@ std::tuple<uint8_t,                // Total of instance sensors
 
     auto& ipmiDecoratorPaths = getIpmiDecoratorPaths(ctx);
 
+    size_t invalidSensorNumberErrCount = 0;
     for (const auto& sensor : sensorTree)
     {
         const std::string& sensorObjPath = sensor.first;
@@ -3099,25 +3101,37 @@ std::tuple<uint8_t,                // Total of instance sensors
                 if (entityInstanceValue == entityInstance)
                 {
                     auto recordId = getSensorNumberFromPath(sensorObjPath);
-                    if (recordId != invalidSensorNumber)
+                    if (recordId == invalidSensorNumber)
                     {
-                        sensorList.emplace_back(sensorObjPath, sensorTypeValue,
-                                                recordId, entityIdValue,
-                                                entityInstanceValue);
+                        ++invalidSensorNumberErrCount;
+                        continue;
                     }
-                }
-            }
-            else if (entityInstanceValue >= instanceStart)
-            {
-                auto recordId = getSensorNumberFromPath(sensorObjPath);
-                if (recordId != invalidSensorNumber)
-                {
                     sensorList.emplace_back(sensorObjPath, sensorTypeValue,
                                             recordId, entityIdValue,
                                             entityInstanceValue);
                 }
             }
+            else if (entityInstanceValue >= instanceStart)
+            {
+                auto recordId = getSensorNumberFromPath(sensorObjPath);
+                if (recordId == invalidSensorNumber)
+                {
+                    ++invalidSensorNumberErrCount;
+                    continue;
+                }
+                sensorList.emplace_back(sensorObjPath, sensorTypeValue,
+                                        recordId, entityIdValue,
+                                        entityInstanceValue);
+            }
         }
+    }
+    if (invalidSensorNumberErrCount != 0)
+    {
+        phosphor::logging::log<phosphor::logging::level::ERR>(
+            std::format(
+                "getSensorNumberFromPath returned invalidSensorNumber {} times",
+                invalidSensorNumberErrCount)
+                .data());
     }
 
     auto cmpFunc = [](sensorInfo first, sensorInfo second) {
