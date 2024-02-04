@@ -6,7 +6,6 @@ sensorutils_lib = static_library(
 
 sensorutils_dep = declare_dependency(link_with: sensorutils_lib)
 
-hybrid_dep = []
 hybrid_src = []
 
 selcmd_src = ['dbus-sdr/dbus_selcommands.cpp']
@@ -18,10 +17,6 @@ endif
 
 
 if not get_option('hybrid-sensors').disabled()
-  hybrid_dep = [
-    mapper,
-  ]
-
   hybrid_src = [
     'sensorhandler.cpp',
     'sensordatahandler.cpp',
@@ -38,7 +33,6 @@ dbus_sdr_pre = declare_dependency(
     phosphor_logging_dep,
     ipmid_dep,
     sensorutils_dep,
-    hybrid_dep,
   ])
 
 dbus_sdr_src = [
