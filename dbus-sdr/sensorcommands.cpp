@@ -21,7 +21,9 @@
 #include "dbus-sdr/sdrutils.hpp"
 #include "dbus-sdr/sensorutils.hpp"
 #include "dbus-sdr/storagecommands.hpp"
-
+#include "config.h"
+#include <algorithm>
+#include <array>
 #include <boost/algorithm/string.hpp>
 #include <boost/container/flat_map.hpp>
 #include <ipmid/api.hpp>
@@ -229,8 +231,8 @@ std::map<DbusInterface,
                          IPMISensorReadingByte3::presenceDetected)}}}}},
           {"xyz.openbmc_project.State.Decorator.OperationalStatus",
            {{"Functional",
-             {{true, static_cast<uint8_t>(
-                         IPMISensorReadingByte3::failureDetected)}}}}},
+             {{false, static_cast<uint8_t>(
+                          IPMISensorReadingByte3::failureDetected)}}}}},
           {"xyz.openbmc_project.State.Decorator.PowerState",
            {{"PowerState",
              {{"xyz.openbmc_project."
@@ -571,6 +573,68 @@ static std::optional<double>
 
     return value;
 }
+void splitCamelCase(const std::string word, std::vector<std::string>& subWords)
+{
+    std::string str="";
+    str.push_back(word[0]);
+    for(size_t i = 1; i < word.size(); i++)
+    {
+        if(word[i-1]<='z' && word[i-1]>='a' && word[i]<='Z' && word[i] >='A')
+        {
+            subWords.push_back(str);
+            str = "";
+        }
+        str.push_back(word[i]);
+    }
+    subWords.push_back(str);
+}
+
+std::string algoStringShortner(const std::string& input) {
+    std::string result;
+    std::vector<std::string> words;
+    std::vector<std::string> subWords;
+    std::vector<size_t> delimiterPositions;
+    std::string delimiters = "_ -";  // Add more delimiters as needed    
+    int allowed_min_char_length = FULL_RECORD_ID_STR_MAX_LENGTH;
+    // Step 1: Split the given name into sub words using predefined delimiters
+    boost::split(words, input, boost::is_any_of(delimiters), boost::token_compress_on);
+    
+    for(size_t i=0; i<words.size(); i++)
+    {
+        splitCamelCase(words[i], subWords);
+    }
+    // Record delimiter positions
+    size_t currentPosition = 0;
+    for (const auto& word : subWords) {
+        delimiterPositions.push_back(currentPosition);
+        currentPosition += word.size();
+    }
+    std::string init_result = boost::algorithm::join(subWords,"");
+    // Step 2: Decrease threshold until it reaches 1
+    for (int threshold = allowed_min_char_length; threshold > 0; threshold--) 
+    {
+        for (size_t i = 0; i < subWords.size(); ++i) 
+        {            
+            subWords[i].resize(std::min(subWords[i].size(),static_cast<size_t>(threshold)));
+            // 3.3: Stop the abbreviation process if the total length is less than 16 chars
+            result = boost::algorithm::join(subWords, "");      
+            if (result.size() <= FULL_RECORD_ID_STR_MAX_LENGTH) 
+            {          
+                return result;
+            }
+        }
+    }
+
+    // Step 3: Remove sub words until total length is less than 16 chars
+    size_t index = 0;
+    while (index < subWords.size() && init_result.size() >= 16) 
+    {
+        init_result.erase(delimiterPositions[index], subWords[index].size());
+        ++index;
+    }
+    return init_result;
+}
+
 
 // Extract file name from sensor path as the sensors SDR ID. Simplify the name
 // if it is too long.
@@ -582,7 +646,6 @@ std::string parseSdrIdFromPath(const std::string& path)
     {
         name = path.substr(nameStart + 1, std::string::npos - nameStart);
     }
-
     if (name.size() > FULL_RECORD_ID_STR_MAX_LENGTH)
     {
 #ifdef SHORTNAME_REMOVE_SUFFIX
@@ -605,8 +668,12 @@ std::string parseSdrIdFromPath(const std::string& path)
         }
 #endif
 
+#if ENABLE_SENSORNAME_ALGO_SHORTNER
+        name = algoStringShortner(name);
+#else
         // as a backup and if nothing else is configured
         name.resize(FULL_RECORD_ID_STR_MAX_LENGTH);
+#endif
     }
     return name;
 }

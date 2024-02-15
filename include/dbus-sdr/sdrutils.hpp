@@ -35,6 +35,7 @@
 #pragma once
 
 static constexpr bool debug = false;
+constexpr uint8_t eventDataSize = 3;
 
 struct CmpStrVersion
 {
@@ -323,6 +324,9 @@ enum class SensorTypeCodes : uint8_t
     buttons = 0x14,
     module = 0x15,
     cable = 0x1B,
+    systemBoot = 0x1D,
+    systemShutdown = 0x20,
+    versionChange = 0x2b,
     watchdog2 = 0x23,
     entity = 0x25,
 };
@@ -371,6 +375,12 @@ const static boost::container::flat_map<
                                         SensorEventTypeCodes::sensorSpecified)},
          {"cable", std::make_pair(SensorTypeCodes::cable,
                                   SensorEventTypeCodes::sensorSpecified)},
+         {"reboot", std::make_pair(SensorTypeCodes::systemBoot,
+                                  SensorEventTypeCodes::sensorSpecified)},
+         {"shutdown", std::make_pair(SensorTypeCodes::systemShutdown,
+                                  SensorEventTypeCodes::sensorSpecified)},
+         {"software", std::make_pair(SensorTypeCodes::versionChange,
+                                  SensorEventTypeCodes::sensorSpecified)},
          {"eventlogging",
           std::make_pair(SensorTypeCodes::event_log,
                          SensorEventTypeCodes::sensorSpecified)},
@@ -415,4 +425,7 @@ void updateIpmiFromAssociation(
     const std::unordered_set<std::string>& ipmiDecoratorPaths,
     const DbusInterfaceMap& sensorMap, uint8_t& entityId,
     uint8_t& entityInstance);
+
+std::string getSelEventMessage(const std::string& sensorPath,  
+                               std::array<uint8_t, eventDataSize>& eventData);
 } // namespace ipmi

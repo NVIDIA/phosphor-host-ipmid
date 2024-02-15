@@ -388,7 +388,7 @@ ipmi_ret_t getSELEntry(ipmi_netfn_t, ipmi_cmd_t, ipmi_request_t request,
                     sizeof(record.nextRecordID));
         std::memcpy(static_cast<uint8_t*>(response) +
                         sizeof(record.nextRecordID),
-                    &record.event.eventRecord.recordID + requestData->offset,
+                    reinterpret_cast<uint8_t*>(&record.event.eventRecord.recordID) + requestData->offset,
                     readLength);
         *data_len = sizeof(record.nextRecordID) + readLength;
     }

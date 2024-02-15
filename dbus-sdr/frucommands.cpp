@@ -542,6 +542,7 @@ ipmi_ret_t getFruSdrs([[maybe_unused]] ipmi::Context::ptr ctx, size_t index,
     auto device = deviceHashes.begin() + index;
     uint16_t& bus = device->second.first;
     uint8_t& address = device->second.second;
+    std::string propertyName;
 
     boost::container::flat_map<std::string, Value>* fruData = nullptr;
     auto fru = std::find_if(frus.begin(), frus.end(),
@@ -572,6 +573,16 @@ ipmi_ret_t getFruSdrs([[maybe_unused]] ipmi::Context::ptr ctx, size_t index,
     if (fru == frus.end())
     {
         return IPMI_CC_RESPONSE_ERROR;
+    }
+    auto findProductName = fruData->find("BOARD_PRODUCT_NAME");
+    auto findBoardName = fruData->find("PRODUCT_PRODUCT_NAME");
+    if (findProductName != fruData->end())
+    {
+        propertyName = std::get<std::string>(findProductName->second);
+    }
+    else if (findBoardName != fruData->end())
+    {
+        propertyName = std::get<std::string>(findBoardName->second);
     }
     std::string name;
 
@@ -668,19 +679,13 @@ ipmi_ret_t getFruSdrs([[maybe_unused]] ipmi::Context::ptr ctx, size_t index,
 
     if (name.empty())
     {
-        auto findProductName = fruData->find("BOARD_PRODUCT_NAME");
-        auto findBoardName = fruData->find("PRODUCT_PRODUCT_NAME");
-        if (findProductName != fruData->end())
+        if (propertyName.empty())
         {
-            name = std::get<std::string>(findProductName->second);
-        }
-        else if (findBoardName != fruData->end())
-        {
-            name = std::get<std::string>(findBoardName->second);
+            name = "UNKNOWN";
         }
         else
         {
-            name = "UNKNOWN";
+            name = propertyName;
         }
     }
     if (name.size() > maxFruSdrNameSize)
