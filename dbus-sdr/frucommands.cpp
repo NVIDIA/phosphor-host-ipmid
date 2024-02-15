@@ -93,7 +93,7 @@ ManagedObjectType frus;
 // we unfortunately have to build a map of hashes in case there is a
 // collision to verify our dev-id
 boost::container::flat_map<uint8_t, std::pair<uint16_t, uint8_t>> deviceHashes;
-void registerStorageFunctions() __attribute__((constructor));
+void registerStorageFRUFunctions() __attribute__((constructor));
 
 bool writeFru(const std::vector<uint8_t>& fru)
 {
