@@ -2433,9 +2433,11 @@ static int getSensorDataRecord(
             // handle type 8 entity map records
             ipmi::sensor::EntityInfoMap::const_iterator entity =
                 entityRecords.find(static_cast<uint8_t>(
-                    sdrIndex - fruCount - ipmi::storage::type12Count));
+                    sdrIndex - fruCount - ipmi::storage::type12Count + 1));
             if (entity == entityRecords.end())
             {
+                phosphor::logging::log<phosphor::logging::level::ERR>(
+                    "getSensorDataRecord: type8Index error");
                 return IPMI_CC_SENSOR_INVALID;
             }
             recordData = ipmi::storage::getType8SDRs(entity, recordID);
