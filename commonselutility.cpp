@@ -177,7 +177,7 @@ std::chrono::seconds getEntryTimeStamp(const std::string& objPath)
 
 void readLoggingObjectPaths(ObjectPaths& paths)
 {
-    sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
+    sdbusplus::bus_t bus{ipmid_get_sd_bus_connection()};
     auto depth = 0;
     paths.clear();
 
@@ -192,7 +192,7 @@ void readLoggingObjectPaths(ObjectPaths& paths)
         auto reply = bus.call(mapperCall);
         reply.read(paths);
     }
-    catch (const sdbusplus::exception::exception& e)
+    catch (const sdbusplus::exception_t & e)
     {
         if (strcmp(e.name(),
                    "xyz.openbmc_project.Common.Error.ResourceNotFound"))

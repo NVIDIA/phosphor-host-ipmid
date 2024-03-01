@@ -238,6 +238,7 @@ libipmi20_src = [
   'globalhandler.cpp',
   'groupext.cpp',
   'selutility.cpp',
+  'commonselutility.cpp',
   'ipmi_fru_info_area.cpp',
   'read_fru_data.cpp',
   'sensordatahandler.cpp',

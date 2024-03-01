@@ -927,14 +927,12 @@ ipmi::RspType<size_t> ipmiStorageGetErrorInfoCap()
 
 void register_netfn_storage_functions()
 {
+#ifndef FEATURE_DYNAMIC_SENSORS
     selCacheMapInitialized = false;
     initSELCache();
     // Handlers with dbus-sdr handler implementation.
     // Do not register the hander if it dynamic sensors stack is used.
 
-#ifndef FEATURE_DYNAMIC_SENSORS
-
-#ifndef FEATURE_DYNAMIC_STORAGES_ONLY
     // <Get SEL Info>
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
                           ipmi::storage::cmdGetSelInfo, ipmi::Privilege::User,
@@ -975,8 +973,6 @@ void register_netfn_storage_functions()
                           ipmi::storage::cmdReadFruData,
                           ipmi::Privilege::Operator, ipmiStorageReadFruData);
 
-#endif // FEATURE_DYNAMIC_STORAGES_ONLY
-
     // <Get Repository Info>
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
                           ipmi::storage::cmdGetSdrRepositoryInfo,
@@ -1004,26 +1000,7 @@ void register_netfn_storage_functions()
                           ipmi::storage::cmdSetSelTime,
                           ipmi::Privilege::Operator, ipmiStorageSetSelTime);
 
-    // <Get SEL Time>
-    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
-                          ipmi::storage::cmdGetSelTime, ipmi::Privilege::User,
-                          ipmiStorageGetSelTime);
-
-    // <Set SEL Time>
-    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
-                          ipmi::storage::cmdSetSelTime,
-                          ipmi::Privilege::Operator, ipmiStorageSetSelTime);
-
-    // <Set SEL Error Info Entry Capacity>
-    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
-                          ipmi::storage::cmdSetErrorInfoCap,
-                          ipmi::Privilege::Operator, ipmiStorageSetErrorInfoCap);
-
-    // <Get SEL Error Info Entry Capacity>
-    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
-                          ipmi::storage::cmdGetErrorInfoCap,
-                          ipmi::Privilege::Operator, ipmiStorageGetErrorInfoCap);
-
     ipmi::fru::registerCallbackHandler();
+
     return;
 }

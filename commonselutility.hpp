@@ -200,6 +200,11 @@ std::string toHexStr(const T& data)
 
 namespace internal
 {
+
+inline bool isRecordOEM(uint8_t recordType)
+{
+    return recordType != systemEventRecord;
+}
 using additionalDataMap = std::map<std::string, std::string>;
 using entryDataMap = std::map<PropertyName, PropertyType>;
 
