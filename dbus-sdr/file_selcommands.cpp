@@ -451,10 +451,12 @@ ipmi::RspType<uint16_t, // Next Record ID
 }
 
 ipmi::RspType<uint16_t> ipmiStorageAddSELEntry(
-    uint16_t recordID, uint8_t recordType, uint32_t timestamp,
-    uint16_t generatorID, uint8_t evmRev, uint8_t sensorType, uint8_t sensorNum,
-    uint8_t eventType, uint8_t eventData1, uint8_t eventData2,
-    uint8_t eventData3)
+    [[maybe_unused]] uint16_t recordID, [[maybe_unused]] uint8_t recordType,
+    [[maybe_unused]] uint32_t timestamp, [[maybe_unused]] uint16_t generatorID,
+    [[maybe_unused]] uint8_t evmRev, [[maybe_unused]] uint8_t sensorType,
+    [[maybe_unused]] uint8_t sensorNum, [[maybe_unused]] uint8_t eventType,
+    [[maybe_unused]] uint8_t eventData1, [[maybe_unused]] uint8_t eventData2,
+    [[maybe_unused]] uint8_t eventData3)
 {
     // Per the IPMI spec, need to cancel any reservation when a SEL entry is
     // added
@@ -464,10 +466,9 @@ ipmi::RspType<uint16_t> ipmiStorageAddSELEntry(
     return ipmi::responseSuccess(responseID);
 }
 
-ipmi::RspType<uint8_t> ipmiStorageClearSEL(ipmi::Context::ptr ctx,
-                                           uint16_t reservationID,
-                                           const std::array<uint8_t, 3>& clr,
-                                           uint8_t eraseOperation)
+ipmi::RspType<uint8_t> ipmiStorageClearSEL(
+    [[maybe_unused]] ipmi::Context::ptr ctx, uint16_t reservationID,
+    const std::array<uint8_t, 3>& clr, uint8_t eraseOperation)
 {
     if (!checkSELReservation(reservationID))
     {
