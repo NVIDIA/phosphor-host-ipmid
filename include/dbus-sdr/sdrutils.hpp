@@ -392,7 +392,9 @@ const static boost::container::flat_map<
           std::make_pair(SensorTypeCodes::systemFirmwareProgress,
                          SensorEventTypeCodes::sensorSpecified)},
          {"entity", std::make_pair(SensorTypeCodes::entity,
-                                   SensorEventTypeCodes::sensorSpecified)}}};
+                                   SensorEventTypeCodes::sensorSpecified)},
+         {"energy", std::make_pair(SensorTypeCodes::other,
+                                  SensorEventTypeCodes::threshold)}}};
 std::string getSensorTypeStringFromPath(const std::string& path);
 
 uint8_t getSensorTypeFromPath(const std::string& path);

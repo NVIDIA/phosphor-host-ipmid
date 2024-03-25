@@ -134,7 +134,8 @@ const static boost::container::flat_map<const char*, SensorUnits, CmpStr>
                  {"current", SensorUnits::amps},
                  {"fan_tach", SensorUnits::rpm},
                  {"power", SensorUnits::watts},
-                 {"fan_pwm", SensorUnits::percent}}};
+                 {"fan_pwm", SensorUnits::percent},
+                 {"energy", SensorUnits::joules}}};
 
 void registerSensorFunctions() __attribute__((constructor));
 
