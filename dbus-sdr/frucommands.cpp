@@ -632,18 +632,21 @@ ipmi_ret_t getFruSdrs([[maybe_unused]] ipmi::Context::ptr ctx, size_t index,
 
 #endif
 
-    std::vector<std::string> nameProperties = {
-        "PRODUCT_PRODUCT_NAME",  "BOARD_PRODUCT_NAME",   "PRODUCT_PART_NUMBER",
-        "BOARD_PART_NUMBER",     "PRODUCT_MANUFACTURER", "BOARD_MANUFACTURER",
-        "PRODUCT_SERIAL_NUMBER", "BOARD_SERIAL_NUMBER"};
-
-    for (const std::string& prop : nameProperties)
+    if (name.empty())
     {
-        auto findProp = fruData->find(prop);
-        if (findProp != fruData->end())
+        std::vector<std::string> nameProperties = {
+            "PRODUCT_PRODUCT_NAME",  "BOARD_PRODUCT_NAME",   "PRODUCT_PART_NUMBER",
+            "BOARD_PART_NUMBER",     "PRODUCT_MANUFACTURER", "BOARD_MANUFACTURER",
+            "PRODUCT_SERIAL_NUMBER", "BOARD_SERIAL_NUMBER"};
+
+        for (const std::string& prop : nameProperties)
         {
-            name = std::get<std::string>(findProp->second);
-            break;
+            auto findProp = fruData->find(prop);
+            if (findProp != fruData->end())
+            {
+                name = std::get<std::string>(findProp->second);
+                break;
+            }
         }
     }
 
