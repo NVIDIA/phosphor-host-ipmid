@@ -278,6 +278,8 @@ executable(
   install: true,
   install_dir: get_option('bindir'))
 
+install_headers(['sensorhandler.hpp', 'selutility.hpp'], install_dir : '/usr/local/include/phosphor-ipmi-host')
+
 # Dynamic Sensor Stack
 subdir('dbus-sdr')
 
