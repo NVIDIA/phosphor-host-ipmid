@@ -669,7 +669,7 @@ std::string parseSdrIdFromPath(const std::string& path)
         }
 #endif
 
-#if ENABLE_SENSORNAME_ALGO_SHORTNER
+#ifdef ENABLE_SENSORNAME_ALGO_SHORTNER
         name = algoStringShortner(name);
 #else
         // as a backup and if nothing else is configured

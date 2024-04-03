@@ -40,6 +40,9 @@ endif
 if get_option('shortname-replace-words').enabled()
   conf_data.set_quoted('SHORTNAME_REPLACE_WORDS', '1')
 endif
+if get_option('enable-sensorname-algo-shortner').enabled()
+  conf_data.set_quoted('ENABLE_SENSORNAME_ALGO_SHORTNER', '1')
+endif
 if get_option('open-power').allowed()
   conf_data.set_quoted('OPEN_POWER_SUPPORT', '1')
 endif

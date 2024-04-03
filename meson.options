@@ -63,6 +63,7 @@ option('sensors-cache', type: 'feature', value: 'disabled', description: 'Sensor
 # Short Sensor Names for IPMI
 option('shortname-remove-suffix', type: 'feature', value: 'enabled', description: 'shortname-remove-suffix is enabled by default')
 option('shortname-replace-words', type: 'feature', value: 'disabled', description: 'shortname-replace-words is disabled by default')
+option('enable-sensorname-algo-shortner', type: 'feature', value: 'disabled', description: 'enable-sensorname-algo-shortner is disabled by default')
 
 # Generate configuration from Yaml
 option('sensor-yaml-gen', type: 'string', value: 'sensor-example.yaml')
