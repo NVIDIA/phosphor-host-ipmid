@@ -16,6 +16,7 @@
 
 #include "dbus-sdr/sdrutils.hpp"
 
+#include "dbus-sdr/sensorutils.hpp"
 #include <optional>
 #include <unordered_set>
 
@@ -146,6 +147,74 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
         return sensorUpdatedIndex;
     }
 
+#ifdef ENABLE_DYNAMIC_SENSORS_REMOVE_EXCEEDED_SCALE
+    auto checksdrUpdateSensorTree = [&dbus]() {
+        std::vector<std::string> removeobjecpaths;
+        constexpr auto valueInterface = "xyz.openbmc_project.Sensor.Value";
+        for (const auto& sensor : *sensorTreePtr)
+        {
+            const std::string& sensorObjPath = sensor.first;
+            const std::string& service = sensor.second.begin()->first.c_str();
+            double max = 127;
+            double min = -128;
+
+            auto method =
+            dbus->new_method_call(service.c_str(), sensorObjPath.c_str(),
+                                "org.freedesktop.DBus.Properties", "Get");
+            method.append(valueInterface, "MaxValue");
+            try
+            {
+                std::variant<double> value;
+                auto reply =  dbus->call(method);
+                reply.read(value);
+                max=std::get<double>(value);
+            }
+            catch (const sdbusplus::exception_t& ex)
+            {
+                phosphor::logging::log<phosphor::logging::level::ERR>(
+                    "failed to get maximum value property");
+                continue;
+            }
+
+            method =
+            dbus->new_method_call(service.c_str(), sensorObjPath.c_str(),
+                                "org.freedesktop.DBus.Properties", "Get");
+            method.append(valueInterface, "MinValue");
+            try
+            {
+                std::variant<double> value;
+                auto reply =  dbus->call(method);
+                reply.read(value);
+                min=std::get<double>(value);
+            }
+            catch (const sdbusplus::exception_t& ex)
+            {
+                phosphor::logging::log<phosphor::logging::level::ERR>(
+                    "failed to get minimum value property");
+                continue;
+            }
+
+            int16_t mValue = 0;
+            int16_t bValue = 0;
+            int8_t rExp = 0;
+            int8_t bExp = 0;
+            bool bSigned = false;
+
+            if (!ipmi::getSensorAttributes(max, min, mValue, rExp, bValue, bExp, bSigned))
+            {
+                 removeobjecpaths.emplace_back(sensorObjPath);
+            }
+        }
+        // Remove if cannot calculate sdr
+        for (const auto& objpath : removeobjecpaths)
+        {
+            sensorTreePtr->erase(objpath);
+        }
+    };
+
+    // Filter out over
+    (void)checksdrUpdateSensorTree();
+#endif
     // Add VR control as optional search path.
     (void)lbdUpdateSensorTree("/xyz/openbmc_project/vr", vrInterfaces);
     // Add Power Supply sensors
