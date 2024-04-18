@@ -16,13 +16,10 @@
 
 #include "dbus-sdr/sdrutils.hpp"
 
-<<<<<<< HEAD
 #include "dbus-sdr/sensorutils.hpp"
-=======
 #include <nlohmann/json.hpp>
 
 #include <fstream>
->>>>>>> 04b0b07 (Enable reducing the number of sensors managed by IPMI)
 #include <optional>
 #include <unordered_set>
 
@@ -42,41 +39,41 @@ extern const IdInfoMap sensors;
 namespace details
 {
 
-// // IPMI supports a smaller number of sensors than are available via Redfish.
-// // Trim the list of sensors, via a configuration file.
-// // Read the IPMI Sensor Filtering section in docs/configuration.md for
-// // a more detailed description.
-// static void filterSensors(SensorSubTree& subtree)
-// {
-//     constexpr const char* filterFilename =
-//         "/usr/share/ipmi-providers/sensor_filter.json";
-//     std::ifstream filterFile(filterFilename);
-//     if (!filterFile.good())
-//     {
-//         return;
-//     }
-//     nlohmann::json sensorFilterJSON = nlohmann::json::parse(filterFile, nullptr,
-//                                                             false);
-//     nlohmann::json::iterator svcFilterit =
-//         sensorFilterJSON.find("ServiceFilter");
-//     if (svcFilterit == sensorFilterJSON.end())
-//     {
-//         return;
-//     }
+// IPMI supports a smaller number of sensors than are available via Redfish.
+// Trim the list of sensors, via a configuration file.
+// Read the IPMI Sensor Filtering section in docs/configuration.md for
+// a more detailed description.
+static void filterSensors(SensorSubTree& subtree)
+{
+    constexpr const char* filterFilename =
+        "/usr/share/ipmi-providers/sensor_filter.json";
+    std::ifstream filterFile(filterFilename);
+    if (!filterFile.good())
+    {
+        return;
+    }
+    nlohmann::json sensorFilterJSON = nlohmann::json::parse(filterFile, nullptr,
+                                                            false);
+    nlohmann::json::iterator svcFilterit =
+        sensorFilterJSON.find("ServiceFilter");
+    if (svcFilterit == sensorFilterJSON.end())
+    {
+        return;
+    }
 
-//     subtree.erase(std::remove_if(subtree.begin(), subtree.end(),
-//                                  [svcFilterit](SensorSubTree::value_type& kv) {
-//         auto& [_, serviceToIfaces] = kv;
+    subtree.erase(std::remove_if(subtree.begin(), subtree.end(),
+                                 [svcFilterit](SensorSubTree::value_type& kv) {
+        auto& [_, serviceToIfaces] = kv;
 
-//         for (auto service = svcFilterit->begin(); service != svcFilterit->end();
-//              ++service)
-//         {
-//             serviceToIfaces.erase(*service);
-//         }
-//         return serviceToIfaces.empty();
-//     }),
-//                   subtree.end());
-// }
+        for (auto service = svcFilterit->begin(); service != svcFilterit->end();
+             ++service)
+        {
+            serviceToIfaces.erase(*service);
+        }
+        return serviceToIfaces.empty();
+    }),
+                  subtree.end());
+}
 
 uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
 {
@@ -184,13 +181,13 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
 
 #endif
 
+    filterSensors(*sensorTreePtr);
     // Error if searching for sensors failed.
     if (!sensorRez)
     {
         return sensorUpdatedIndex;
     }
 
-<<<<<<< HEAD
 #ifdef ENABLE_DYNAMIC_SENSORS_REMOVE_EXCEEDED_SCALE
     auto checksdrUpdateSensorTree = [&dbus]() {
         std::vector<std::string> removeobjecpaths;
@@ -284,9 +281,6 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
     // Filter out over
     (void)checksdrUpdateSensorTree();
 #endif
-=======
-    filterSensors(*sensorTreePtr);
->>>>>>> 04b0b07 (Enable reducing the number of sensors managed by IPMI)
     // Add VR control as optional search path.
     (void)lbdUpdateSensorTree("/xyz/openbmc_project/vr", vrInterfaces);
     // Add Power Supply sensors
