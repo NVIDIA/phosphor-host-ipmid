@@ -151,6 +151,7 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
     auto checksdrUpdateSensorTree = [&dbus]() {
         std::vector<std::string> removeobjecpaths;
         constexpr auto valueInterface = "xyz.openbmc_project.Sensor.Value";
+        constexpr auto availabilityInterface = "xyz.openbmc_project.State.Decorator.Availability";
         for (const auto& sensor : *sensorTreePtr)
         {
             const std::string& sensorObjPath = sensor.first;
@@ -203,6 +204,30 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
             if (!ipmi::getSensorAttributes(max, min, mValue, rExp, bValue, bExp, bSigned))
             {
                  removeobjecpaths.emplace_back(sensorObjPath);
+                 continue;
+            }
+
+            // Sensor Availability check
+            bool isAvailable = true;
+            auto method2 =
+                dbus->new_method_call(service.c_str(), sensorObjPath.c_str(),
+                                      "org.freedesktop.DBus.Properties", "Get");
+            method2.append(availabilityInterface, "Available");
+            try
+            {
+                std::variant<bool> available;
+                auto reply =  dbus->call(method2);
+                reply.read(available);
+                isAvailable = std::get<bool>(available);
+            }
+            catch (const sdbusplus::exception_t& ex)
+            {
+                // Default set the sensor available as true if the 'available' property is not present
+                isAvailable = true;
+            }
+            if (isAvailable == false)
+            {
+                removeobjecpaths.emplace_back(sensorObjPath);
             }
         }
         // Remove if cannot calculate sdr
