@@ -983,7 +983,7 @@ std::string getSelEventMessage(const std::string& sensorPath,  std::array<uint8_
     return "";
 }
 
-std::map<std::string, std::vector<std::string>>
+std::optional<std::map<std::string, std::vector<std::string>>>
     getObjectInterfaces(const char* path)
 {
     std::map<std::string, std::vector<std::string>> interfacesResponse;
@@ -1003,9 +1003,7 @@ std::map<std::string, std::vector<std::string>>
     }
     catch (const std::exception& e)
     {
-        phosphor::logging::log<phosphor::logging::level::ERR>(
-            "Failed to GetObject", phosphor::logging::entry("PATH=%s", path),
-            phosphor::logging::entry("WHAT=%s", e.what()));
+        return std::nullopt;
     }
 
     return interfacesResponse;
@@ -1198,12 +1196,21 @@ void updateIpmiFromAssociation(
         // Download the interfaces for the sensor from
         // Entity-Manager to find the name of the configuration
         // interface.
-        std::map<std::string, std::vector<std::string>>
-            sensorInterfacesResponse =
+        std::optional<std::map<std::string, std::vector<std::string>>>
+            sensorInterfacesResponseOpt =
                 getObjectInterfaces(sensorConfigPath.c_str());
 
+        if (!sensorInterfacesResponseOpt.has_value())
+        {
+            phosphor::logging::log<phosphor::logging::level::DEBUG>(
+                "Failed to GetObject",
+                phosphor::logging::entry("PATH=%s", sensorConfigPath.c_str()));
+            continue;
+        }
+
         const std::string* configurationInterface =
-            getSensorConfigurationInterface(sensorInterfacesResponse);
+            getSensorConfigurationInterface(
+                sensorInterfacesResponseOpt.value());
 
         // If there are multi association path settings and only one path exist,
         // we need to continue if cannot find configuration interface for this

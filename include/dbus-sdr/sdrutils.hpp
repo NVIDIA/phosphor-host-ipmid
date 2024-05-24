@@ -409,7 +409,7 @@ uint8_t getEntityInstanceFromName(const std::string& path);
 
 namespace ipmi
 {
-std::map<std::string, std::vector<std::string>>
+std::optional<std::map<std::string, std::vector<std::string>>>
     getObjectInterfaces(const char* path);
 
 std::map<std::string, Value> getEntityManagerProperties(const char* path,

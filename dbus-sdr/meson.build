@@ -15,7 +15,6 @@ if get_option('dbus-logger').disabled()
   ]
 endif
 
-
 if not get_option('hybrid-sensors').disabled()
   hybrid_src = [
     'sensorhandler.cpp',
