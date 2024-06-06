@@ -239,7 +239,8 @@ void deleteObjectIfExists(sdbusplus::bus_t& bus, const std::string& service,
     {
         if (strcmp(e.name(),
                    "xyz.openbmc_project.Common.Error.InternalFailure") != 0 &&
-            strcmp(e.name(), "org.freedesktop.DBus.Error.UnknownObject") != 0)
+            strcmp(e.name(), "org.freedesktop.DBus.Error.UnknownObject") != 0 &&
+            strcmp(e.name(), "xyz.openbmc_project.Common.Error.NotAllowed") != 0)
         {
             // We want to rethrow real errors
             throw;
@@ -567,11 +568,15 @@ void reconfigureVLAN(sdbusplus::bus_t& bus, ChannelParams& params,
     ObjectLookupCache neighbors(bus, params, INTF_NEIGHBOR);
     auto neighbor4 = findGatewayNeighbor<AF_INET>(bus, params, neighbors);
     auto neighbor6 = findGatewayNeighbor<AF_INET6>(bus, params, neighbors);
-
+    ChannelParams parentIntParams = params;
     deconfigureChannel(bus, params);
     createVLAN(bus, params, vlan);
 
     // Re-establish the saved settings
+    setEthProp(bus, parentIntParams, "DHCP4", dhcp4);
+    setEthProp(bus, parentIntParams, "DHCP6", dhcp6);
+    setEthProp(bus, parentIntParams, "IPv6AcceptRA", ra);
+
     setEthProp(bus, params, "DHCP4", dhcp4);
     setEthProp(bus, params, "DHCP6", dhcp6);
     setEthProp(bus, params, "IPv6AcceptRA", ra);
