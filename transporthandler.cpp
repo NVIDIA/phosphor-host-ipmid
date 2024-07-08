@@ -70,7 +70,7 @@ bool ifnameInPath(std::string_view ifname, std::string_view path)
     constexpr auto rs = PATH_ROOT.size() + 1; // ROOT + separator
     const auto is = rs + ifname.size();       // ROOT + sep + ifname
     return path.size() > rs && path.substr(rs).starts_with(ifname) &&
-           (path.size() == is || path[is] == '/');
+           (path.size() == is || path[is] == '/' || path[is] == '_');
 }
 
 std::optional<ChannelParams> maybeGetChannelParams(sdbusplus::bus_t& bus,
