@@ -56,7 +56,7 @@ using namespace phosphor::logging;
 // IPMI Spec, shared Reservation ID.
 static unsigned short selReservationID = 0xFFFF;
 static bool selReservationValid = false;
-constexpr uint8_t sysInterface = 0x0F;
+constexpr uint8_t sysInterface = SYSTEM_INTERFACE_ID;
 constexpr uint8_t dbusInterface = 0x08;
 
 unsigned short reserveSel(void)
