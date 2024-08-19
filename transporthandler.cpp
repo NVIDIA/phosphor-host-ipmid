@@ -6,6 +6,7 @@
 #include <array>
 #include <fstream>
 
+
 using phosphor::logging::commit;
 using phosphor::logging::elog;
 using phosphor::logging::entry;
@@ -270,6 +271,19 @@ void createIfAddr(sdbusplus::bus_t& bus, const ChannelParams& params,
     stdplus::ToStrHandle<stdplus::ToStr<typename AddrFamily<family>::addr>> tsh;
     newreq.append(protocol, tsh(address), prefix, "");
     bus.call_noreply(newreq);
+}
+
+/** @brief Trivial helper for getting the IPv4 address from getIfAddrs()
+ *
+ *  @param[in] bus    - The bus object used for lookups
+ *  @param[in] params - The parameters for the channel
+ *  @param[in] idx    - The IP Address index
+ *  @return The address and prefix if found
+ */
+
+auto getIfAddr4ByIdx(sdbusplus::bus_t& bus, const ChannelParams& params, uint8_t idx)
+{
+    return getIfAddr<AF_INET>(bus, params, idx, originsV4);
 }
 
 /** @brief Trivial helper for getting the IPv4 address from getIfAddrs()
@@ -1160,11 +1174,34 @@ RspType<message::Payload> getLan(Context::ptr ctx, uint4_t channelBits,
         }
         case LanParam::IP:
         {
-            auto ifaddr = channelCall<getIfAddr4>(channel);
+            uint8_t idx = 0;
+            auto ifaddr = channelCall<getIfAddr4ByIdx>(channel, idx);
             stdplus::In4Addr addr{};
-            if (ifaddr)
+            // get the IPv4 dhcp state for the interface
+            auto dhcp = channelCall<getEthProp<bool>>(channel, "DHCP4");
+	    // The OpenBMC project has added support for IP aliasing,
+	    // which allows multiple IP addresses to be set on a single interface.
+	    // However, the IPMI protocol only supports a single IP address for IPv4.
+	    // To maintain backward compatibility, the following policy has been implemented:
+	    //   - IPv4 DHCP Enabled: IPMI will select the IP address assigned by the DHCP server found on the channel.
+	    //   - IPv4 DHCP Disabled: IPMI will select the first static IP address found on the channel.
+            while (ifaddr)
             {
-                addr = ifaddr->address;
+		// check if the address origin match the dhcp state
+		if ((dhcp && ifaddr->origin == IP::AddressOrigin::DHCP) ||
+                    (dhcp == false && ifaddr->origin == IP::AddressOrigin::Static))
+		{
+                    // address found escape while
+                    addr = ifaddr->address;
+		    break;
+		}
+		else
+		{
+                    // move to the next index
+		    idx++;
+                    ifaddr = channelCall<getIfAddr4ByIdx>(channel, idx);
+		    continue;
+		}
             }
             ret.pack(stdplus::raw::asView<char>(addr));
             return responseSuccess(std::move(ret));
