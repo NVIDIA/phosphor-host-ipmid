@@ -515,7 +515,7 @@ int convertVersion(std::string s, Revision& rev)
     std::regex fw_regex(FW_VER_REGEX);
     std::smatch m;
     Revision r = {0};
-    size_t val;
+    size_t val{0};
 
     if (std::regex_search(s, m, fw_regex))
     {
@@ -526,9 +526,9 @@ int convertVersion(std::string s, Revision& rev)
 
         // convert major
         {
-            std::string_view str = m[matches[0]].str();
-            auto [ptr, ec]{std::from_chars(str.begin(), str.end(), val)};
-            if (ec != std::errc() || ptr != str.begin() + str.size())
+            std::string str = m[matches[0]].str();
+            auto [ptr, ec]{std::from_chars(str.data(), str.data() + str.size(), val)};
+            if (ec != std::errc() || ptr != str.data() + str.size())
             { // failed to convert major string
                 return -1;
             }
@@ -548,9 +548,9 @@ int convertVersion(std::string s, Revision& rev)
 
         // convert minor
         {
-            std::string_view str = m[matches[1]].str();
-            auto [ptr, ec]{std::from_chars(str.begin(), str.end(), val)};
-            if (ec != std::errc() || ptr != str.begin() + str.size())
+            std::string str = m[matches[1]].str();
+            auto [ptr, ec]{std::from_chars(str.data(), str.data() + str.size(), val)};
+            if (ec != std::errc() || ptr != str.data() + str.size())
             { // failed to convert minor string
                 return -1;
             }
@@ -567,10 +567,9 @@ int convertVersion(std::string s, Revision& rev)
                     continue;
                 }
 
-                std::string_view str = m[matches[i + 2]].str();
-                auto [ptr,
-                      ec]{std::from_chars(str.begin(), str.end(), val, 16)};
-                if (ec != std::errc() || ptr != str.begin() + str.size())
+                std::string str = m[matches[i + 2]].str();
+                auto [ptr, ec]{std::from_chars(str.data(), str.data() + str.size(), val, 16)};
+                if (ec != std::errc() || ptr != str.data() + str.size())
                 { // failed to convert aux byte string
                     break;
                 }

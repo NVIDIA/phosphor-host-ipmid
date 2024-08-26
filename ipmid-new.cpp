@@ -853,7 +853,17 @@ int main(int argc, char* argv[])
     {
         sd_bus_default_system(&bus);
     }
-    auto sdbusp = std::make_shared<sdbusplus::asio::connection>(*io, bus);
+
+    std::shared_ptr<sdbusplus::asio::connection> sdbusp;
+    try
+    {
+        sdbusp = std::make_shared<sdbusplus::asio::connection>(*io, bus);
+    }
+    catch (std::exception& e)
+    {
+        log<level::ERR>("Failed to create D-Bus connection");
+        std::exit(1);
+    }
     setSdBus(sdbusp);
 
     // TODO: Hack to keep the sdEvents running.... Not sure why the sd_event
