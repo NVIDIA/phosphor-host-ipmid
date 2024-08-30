@@ -43,3 +43,19 @@ dbus_sdr_src = [
   selcmd_src,
   hybrid_src,
 ]
+
+dbus_sdr_lib = library(
+  'dbus_sdr',
+  ['sdrutils.cpp', 'sensorutils.cpp'],
+  implicit_include_directories: false,
+  dependencies: dbus_sdr_pre,
+  version: meson.project_version(),
+  install: true,
+  install_dir: get_option('libdir'),
+  override_options: ['b_lundef=false'])
+
+import('pkgconfig').generate(
+  dbus_sdr_lib,
+  name: 'libdbussdr',
+  version: meson.project_version(),
+  description: 'libdbussdr')

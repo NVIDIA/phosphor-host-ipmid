@@ -7,6 +7,7 @@
 #include "selutility.hpp"
 #include "sensorhandler.hpp"
 #include "storageaddsel.hpp"
+#include "dbus-sdr/sdrutils.hpp"
 
 #include <arpa/inet.h>
 #include <systemd/sd-bus.h>
@@ -42,7 +43,6 @@ extern const IdInfoMap sensors;
 } // namespace ipmi
 extern const ipmi::sensor::InvObjectIDMap invSensors;
 extern const FruMap frus;
-constexpr uint8_t eventDataSize = 3;
 namespace
 {
 constexpr auto SystemdTimeService = "org.freedesktop.timedate1";
@@ -709,7 +709,9 @@ ipmi::RspType<uint16_t // recordID of the Added SEL entry
                                       Created::GENERATOR_ID(generatorID),
                                       Created::SENSOR_DATA(selDataStr.c_str()),
                                       Created::EVENT_DIR(assert),
-                                      Created::SENSOR_PATH(objpath.c_str()));
+                                      Created::SENSOR_PATH(objpath.c_str()),
+                                      Created::SENSOR_TYPE(sensorTypeString[sensorType]),
+                                      Created::SENSOR_NUMBER(sensorNumber));
     }
 #ifdef OPEN_POWER_SUPPORT
     else if (recordType == procedureType)

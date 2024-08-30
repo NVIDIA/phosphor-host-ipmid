@@ -36,6 +36,10 @@ std::shared_ptr<boost::asio::io_context> getIoContext();
 // any client can interact with the main sdbus
 std::shared_ptr<sdbusplus::asio::connection> getSdBus();
 
+void setSdBus(std::shared_ptr<sdbusplus::asio::connection>& newBus);
+
+void setIoContext(std::shared_ptr<boost::asio::io_context>& newIo);
+
 /**
  * @brief post some work to the async exection queue
  *

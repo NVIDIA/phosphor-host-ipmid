@@ -61,6 +61,26 @@ static constexpr uint8_t reservedSensorNumber = 0xFF;
 
 static constexpr uint8_t sysEntityInstance = 0x01;
 static constexpr uint8_t eidReserved = 0x00;
+
+// Sensor Type string is defined according to the SensorType field in LogEntry schema
+// https://redfish.dmtf.org/schemas/v1/LogEntry.v1_16_1.json
+static constexpr const std::array<const char*, 45> sensorTypeString = {
+    "Reserved",
+    "Temperature", "Voltage", "Current", "Fan",
+    "Physical Chassis Security", "Platform Security Violation Attempt", "Processor",
+    "Power Supply / Converter", "PowerUnit", "Cooling Device", "Other Units-based Sensor",
+    "Memory", "Drive Slot/Bay", "POST Memory Resize",
+    "System Firmware Progress", "Event Logging Disabled", "Watchdog",
+    "System Event", "Critical Interrupt", "Button/Switch",
+    "Module/Board", "Microcontroller/Coprocessor", "Add-in Card",
+    "Chassis", "ChipSet", "Other FRU", "Cable/Interconnect",
+    "Terminator", "SystemBoot/Restart", "Boot Error",
+    "BaseOSBoot/InstallationStatus", "OS Stop/Shutdown", "Slot/Connector",
+    "System ACPI PowerState", "Watchdog", "Platform Alert",
+    "Entity Presence", "Monitor ASIC/IC", "LAN",
+    "Management Subsystem Health", "Battery", "Session Audit",
+    "Version Change", "FRU State"};
+
 namespace details
 {
 // Enable/disable the logging of stats instrumentation
@@ -398,6 +418,8 @@ const static boost::container::flat_map<
 std::string getSensorTypeStringFromPath(const std::string& path);
 
 uint8_t getSensorTypeFromPath(const std::string& path);
+
+std::string getSensorTypeStringPath(const std::string& path);
 
 uint16_t getSensorNumberFromPath(const std::string& path);
 

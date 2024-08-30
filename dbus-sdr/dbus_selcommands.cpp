@@ -656,6 +656,8 @@ ipmi::RspType<uint16_t // recordID of the Added SEL entry
         addData["EVENT_DIR"] = std::to_string(assert);
         addData["GENERATOR_ID"] = std::to_string(generatorID);
         addData["RECORD_TYPE"] = std::to_string(recordType);
+        addData["SENSOR_TYPE"] = getSensorTypeStringPath(objpath).c_str();
+        addData["SENSOR_NUMBER"] = std::to_string(sensorNumber);
 
         try
         {

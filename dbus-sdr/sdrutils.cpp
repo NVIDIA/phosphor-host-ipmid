@@ -80,6 +80,16 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
     static std::shared_ptr<SensorSubTree> sensorTreePtr;
     static uint16_t sensorUpdatedIndex = 0;
     std::shared_ptr<sdbusplus::asio::connection> dbus = getSdBus();
+    if (!dbus) {
+        auto io = std::make_shared<boost::asio::io_context>();
+        setIoContext(io);
+        sd_bus* bus;
+        sd_bus_default_system(&bus);
+        auto sdbusp = std::make_shared<sdbusplus::asio::connection>(*io, bus);
+        setSdBus(sdbusp);
+        dbus = getSdBus();
+    }
+
     static sdbusplus::bus::match_t sensorAdded(
         *dbus,
         "type='signal',member='InterfacesAdded',arg0path='/xyz/openbmc_project/"
@@ -416,6 +426,16 @@ uint8_t getSensorTypeFromPath(const std::string& path)
     } // else default 0x0 RESERVED
 
     return sensorType;
+}
+
+std::string getSensorTypeStringPath(const std::string& path)
+{
+    uint8_t sensorType = getSensorTypeFromPath(path);
+    if (sensorType >= sensorTypeString.size())
+    {
+        return std::string();
+    }
+    return sensorTypeString[sensorType];
 }
 
 uint16_t getSensorNumberFromPath(const std::string& path)
