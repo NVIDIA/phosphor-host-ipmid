@@ -68,7 +68,7 @@ static constexpr const std::array<const char*, 45> sensorTypeString = {
     "Reserved",
     "Temperature", "Voltage", "Current", "Fan",
     "Physical Chassis Security", "Platform Security Violation Attempt", "Processor",
-    "Power Supply / Converter", "PowerUnit", "Cooling Device", "Other Units-based Sensor",
+    "Power Supply / Converter", "PowerUnit", "CoolingDevice", "Other Units-based Sensor",
     "Memory", "Drive Slot/Bay", "POST Memory Resize",
     "System Firmware Progress", "Event Logging Disabled", "Watchdog",
     "System Event", "Critical Interrupt", "Button/Switch",
@@ -79,7 +79,7 @@ static constexpr const std::array<const char*, 45> sensorTypeString = {
     "System ACPI PowerState", "Watchdog", "Platform Alert",
     "Entity Presence", "Monitor ASIC/IC", "LAN",
     "Management Subsystem Health", "Battery", "Session Audit",
-    "Version Change", "FRU State"};
+    "Version Change", "FRUState"};
 
 namespace details
 {
