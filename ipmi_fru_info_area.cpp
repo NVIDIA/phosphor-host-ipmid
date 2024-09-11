@@ -249,7 +249,8 @@ void appendMfgDate(const PropertyMap& propMap, FruAreaData& data)
             std::copy(fru_raw, fru_raw + 3, std::back_inserter(data));
             return;
         }
-        std::fprintf(stderr, "MgfDate invalid date: %llu secs since UNIX epoch\n",
+        std::fprintf(stderr,
+                     "MgfDate invalid date: %llu secs since UNIX epoch\n",
                      static_cast<long long unsigned int>(raw));
     }
     // Blank date

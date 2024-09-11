@@ -2,12 +2,12 @@
 
 #include "storagehandler.hpp"
 
+#include "dbus-sdr/sdrutils.hpp"
 #include "fruread.hpp"
 #include "read_fru_data.hpp"
 #include "selutility.hpp"
 #include "sensorhandler.hpp"
 #include "storageaddsel.hpp"
-#include "dbus-sdr/sdrutils.hpp"
 
 #include <arpa/inet.h>
 #include <systemd/sd-bus.h>
@@ -53,7 +53,8 @@ constexpr auto TIME_INTERFACE = "xyz.openbmc_project.Time.EpochTime";
 constexpr auto BMC_TIME_PATH = "/xyz/openbmc_project/time/bmc";
 constexpr auto DBUS_PROPERTIES = "org.freedesktop.DBus.Properties";
 constexpr auto PROPERTY_ELAPSED = "Elapsed";
-static constexpr auto capacityInterface = "xyz.openbmc_project.Logging.Capacity";
+static constexpr auto capacityInterface =
+    "xyz.openbmc_project.Logging.Capacity";
 constexpr auto logWatchPath = "/xyz/openbmc_project/logging";
 constexpr auto logBasePath = "/xyz/openbmc_project/logging/entry";
 constexpr auto logEntryIntf = "xyz.openbmc_project.Logging.Entry";
@@ -385,10 +386,11 @@ ipmi_ret_t getSELEntry(ipmi_netfn_t, ipmi_cmd_t, ipmi_request_t request,
 
         std::memcpy(response, &record.nextRecordID,
                     sizeof(record.nextRecordID));
-        std::memcpy(static_cast<uint8_t*>(response) +
-                        sizeof(record.nextRecordID),
-                    reinterpret_cast<uint8_t*>(&record.event.eventRecord.recordID) + requestData->offset,
-                    readLength);
+        std::memcpy(
+            static_cast<uint8_t*>(response) + sizeof(record.nextRecordID),
+            reinterpret_cast<uint8_t*>(&record.event.eventRecord.recordID) +
+                requestData->offset,
+            readLength);
         *data_len = sizeof(record.nextRecordID) + readLength;
     }
 
@@ -705,13 +707,13 @@ ipmi::RspType<uint16_t // recordID of the Added SEL entry
 
         bool assert = (eventDir & 0x80) ? false : true;
 
-        recordID = report<SELCreated>(Created::RECORD_TYPE(recordType),
-                                      Created::GENERATOR_ID(generatorID),
-                                      Created::SENSOR_DATA(selDataStr.c_str()),
-                                      Created::EVENT_DIR(assert),
-                                      Created::SENSOR_PATH(objpath.c_str()),
-                                      Created::SENSOR_TYPE(sensorTypeString[sensorType]),
-                                      Created::SENSOR_NUMBER(sensorNumber));
+        recordID = report<SELCreated>(
+            Created::RECORD_TYPE(recordType),
+            Created::GENERATOR_ID(generatorID),
+            Created::SENSOR_DATA(selDataStr.c_str()),
+            Created::EVENT_DIR(assert), Created::SENSOR_PATH(objpath.c_str()),
+            Created::SENSOR_TYPE(sensorTypeString[sensorType]),
+            Created::SENSOR_NUMBER(sensorNumber));
     }
 #ifdef OPEN_POWER_SUPPORT
     else if (recordType == procedureType)
@@ -886,7 +888,8 @@ ipmi::RspType<uint8_t> ipmiStorageSetErrorInfoCap(size_t capacity)
     {
         auto service = ipmi::getService(bus, capacityInterface, logWatchPath);
         auto method = bus.new_method_call(service.c_str(), logWatchPath,
-                                          capacityInterface, "SetInfoLogCapacity");
+                                          capacityInterface,
+                                          "SetInfoLogCapacity");
         method.append(capacity);
         bus.call_noreply(method);
     }

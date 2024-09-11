@@ -6,7 +6,6 @@
 #include <array>
 #include <fstream>
 
-
 using phosphor::logging::commit;
 using phosphor::logging::elog;
 using phosphor::logging::entry;
@@ -241,7 +240,8 @@ void deleteObjectIfExists(sdbusplus::bus_t& bus, const std::string& service,
         if (strcmp(e.name(),
                    "xyz.openbmc_project.Common.Error.InternalFailure") != 0 &&
             strcmp(e.name(), "org.freedesktop.DBus.Error.UnknownObject") != 0 &&
-            strcmp(e.name(), "xyz.openbmc_project.Common.Error.NotAllowed") != 0)
+            strcmp(e.name(), "xyz.openbmc_project.Common.Error.NotAllowed") !=
+                0)
         {
             // We want to rethrow real errors
             throw;
@@ -281,7 +281,8 @@ void createIfAddr(sdbusplus::bus_t& bus, const ChannelParams& params,
  *  @return The address and prefix if found
  */
 
-auto getIfAddr4ByIdx(sdbusplus::bus_t& bus, const ChannelParams& params, uint8_t idx)
+auto getIfAddr4ByIdx(sdbusplus::bus_t& bus, const ChannelParams& params,
+                     uint8_t idx)
 {
     return getIfAddr<AF_INET>(bus, params, idx, originsV4);
 }
@@ -1179,29 +1180,33 @@ RspType<message::Payload> getLan(Context::ptr ctx, uint4_t channelBits,
             stdplus::In4Addr addr{};
             // get the IPv4 dhcp state for the interface
             auto dhcp = channelCall<getEthProp<bool>>(channel, "DHCP4");
-	    // The OpenBMC project has added support for IP aliasing,
-	    // which allows multiple IP addresses to be set on a single interface.
-	    // However, the IPMI protocol only supports a single IP address for IPv4.
-	    // To maintain backward compatibility, the following policy has been implemented:
-	    //   - IPv4 DHCP Enabled: IPMI will select the IP address assigned by the DHCP server found on the channel.
-	    //   - IPv4 DHCP Disabled: IPMI will select the first static IP address found on the channel.
+            // The OpenBMC project has added support for IP aliasing,
+            // which allows multiple IP addresses to be set on a single
+            // interface. However, the IPMI protocol only supports a single IP
+            // address for IPv4. To maintain backward compatibility, the
+            // following policy has been implemented:
+            //   - IPv4 DHCP Enabled: IPMI will select the IP address assigned
+            //   by the DHCP server found on the channel.
+            //   - IPv4 DHCP Disabled: IPMI will select the first static IP
+            //   address found on the channel.
             while (ifaddr)
             {
-		// check if the address origin match the dhcp state
-		if ((dhcp && ifaddr->origin == IP::AddressOrigin::DHCP) ||
-                    (dhcp == false && ifaddr->origin == IP::AddressOrigin::Static))
-		{
+                // check if the address origin match the dhcp state
+                if ((dhcp && ifaddr->origin == IP::AddressOrigin::DHCP) ||
+                    (dhcp == false &&
+                     ifaddr->origin == IP::AddressOrigin::Static))
+                {
                     // address found escape while
                     addr = ifaddr->address;
-		    break;
-		}
-		else
-		{
+                    break;
+                }
+                else
+                {
                     // move to the next index
-		    idx++;
+                    idx++;
                     ifaddr = channelCall<getIfAddr4ByIdx>(channel, idx);
-		    continue;
-		}
+                    continue;
+                }
             }
             ret.pack(stdplus::raw::asView<char>(addr));
             return responseSuccess(std::move(ret));

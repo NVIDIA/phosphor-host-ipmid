@@ -21,9 +21,7 @@
 #include "dbus-sdr/sdrutils.hpp"
 #include "dbus-sdr/sensorutils.hpp"
 #include "dbus-sdr/storagecommands.hpp"
-#include "config.h"
-#include <algorithm>
-#include <array>
+
 #include <boost/algorithm/string.hpp>
 #include <boost/container/flat_map.hpp>
 #include <ipmid/api.hpp>
@@ -92,7 +90,7 @@ static constexpr uint8_t bmcI2CAddr = 0x20;
 static constexpr uint8_t systemSoftwareId = 0x01;
 static constexpr uint8_t noneLunUsed = 0;
 static constexpr uint8_t systemFirmwareEntityId = 0x22;
-static constexpr uint8_t logicalContainerEntity= 0x1;
+static constexpr uint8_t logicalContainerEntity = 0x1;
 
 constexpr size_t maxSDRTotalSize =
     76; // Largest SDR Record Size (type 01) + SDR Overheader Size
@@ -220,7 +218,7 @@ static constexpr const char* sensorInterface =
     "xyz.openbmc_project.Sensor.Value";
 static constexpr const char* bootProgressInterface =
     "xyz.openbmc_project.State.Boot.Progress";
-	
+
 std::map<DbusInterface,
          std::map<DbusInterface,
                   std::map<DbusProperty,
@@ -577,11 +575,12 @@ static std::optional<double>
 }
 void splitCamelCase(const std::string word, std::vector<std::string>& subWords)
 {
-    std::string str="";
+    std::string str = "";
     str.push_back(word[0]);
-    for(size_t i = 1; i < word.size(); i++)
+    for (size_t i = 1; i < word.size(); i++)
     {
-        if(word[i-1]<='z' && word[i-1]>='a' && word[i]<='Z' && word[i] >='A')
+        if (word[i - 1] <= 'z' && word[i - 1] >= 'a' && word[i] <= 'Z' &&
+            word[i] >= 'A')
         {
             subWords.push_back(str);
             str = "";
@@ -591,37 +590,42 @@ void splitCamelCase(const std::string word, std::vector<std::string>& subWords)
     subWords.push_back(str);
 }
 
-std::string algoStringShortner(const std::string& input) {
+std::string algoStringShortner(const std::string& input)
+{
     std::string result;
     std::vector<std::string> words;
     std::vector<std::string> subWords;
     std::vector<size_t> delimiterPositions;
-    std::string delimiters = "_ -";  // Add more delimiters as needed    
+    std::string delimiters = "_ -"; // Add more delimiters as needed
     int allowed_min_char_length = FULL_RECORD_ID_STR_MAX_LENGTH;
     // Step 1: Split the given name into sub words using predefined delimiters
-    boost::split(words, input, boost::is_any_of(delimiters), boost::token_compress_on);
-    
-    for(size_t i=0; i<words.size(); i++)
+    boost::split(words, input, boost::is_any_of(delimiters),
+                 boost::token_compress_on);
+
+    for (size_t i = 0; i < words.size(); i++)
     {
         splitCamelCase(words[i], subWords);
     }
     // Record delimiter positions
     size_t currentPosition = 0;
-    for (const auto& word : subWords) {
+    for (const auto& word : subWords)
+    {
         delimiterPositions.push_back(currentPosition);
         currentPosition += word.size();
     }
-    std::string init_result = boost::algorithm::join(subWords,"");
+    std::string init_result = boost::algorithm::join(subWords, "");
     // Step 2: Decrease threshold until it reaches 1
-    for (int threshold = allowed_min_char_length; threshold > 0; threshold--) 
+    for (int threshold = allowed_min_char_length; threshold > 0; threshold--)
     {
-        for (size_t i = 0; i < subWords.size(); ++i) 
-        {            
-            subWords[i].resize(std::min(subWords[i].size(),static_cast<size_t>(threshold)));
-            // 3.3: Stop the abbreviation process if the total length is less than 16 chars
-            result = boost::algorithm::join(subWords, "");      
-            if (result.size() <= FULL_RECORD_ID_STR_MAX_LENGTH) 
-            {          
+        for (size_t i = 0; i < subWords.size(); ++i)
+        {
+            subWords[i].resize(
+                std::min(subWords[i].size(), static_cast<size_t>(threshold)));
+            // 3.3: Stop the abbreviation process if the total length is less
+            // than 16 chars
+            result = boost::algorithm::join(subWords, "");
+            if (result.size() <= FULL_RECORD_ID_STR_MAX_LENGTH)
+            {
                 return result;
             }
         }
@@ -629,14 +633,13 @@ std::string algoStringShortner(const std::string& input) {
 
     // Step 3: Remove sub words until total length is less than 16 chars
     size_t index = 0;
-    while (index < subWords.size() && init_result.size() >= 16) 
+    while (index < subWords.size() && init_result.size() >= 16)
     {
         init_result.erase(delimiterPositions[index], subWords[index].size());
         ++index;
     }
     return init_result;
 }
-
 
 // Extract file name from sensor path as the sensors SDR ID. Simplify the name
 // if it is too long.
@@ -768,24 +771,22 @@ uint8_t getDiscreteStatus(const ipmi::DbusInterfaceMap& sensorMap)
                                 {
                                     assertions |= (typeMap.second);
                                 }
-                                }
-                                if (std::holds_alternative<std::string>(
-                                        typeMap.first))
+                            }
+                            if (std::holds_alternative<std::string>(
+                                    typeMap.first))
+                            {
+                                auto statusProp =
+                                    statusObject->second.find(dbusProp.first);
+                                if (statusProp != statusObject->second.end())
                                 {
-                                    auto statusProp = statusObject->second.find(
-                                        dbusProp.first);
-                                    if (statusProp !=
-                                        statusObject->second.end())
+                                    if (std::get<std::string>(
+                                            statusProp->second) ==
+                                        std::get<std::string>(typeMap.first))
                                     {
-                                        if (std::get<std::string>(
-                                                statusProp->second) ==
-                                            std::get<std::string>(
-                                                typeMap.first))
-                                        {
-                                            assertions |= typeMap.second;
-                                            }
+                                        assertions |= typeMap.second;
                                     }
                                 }
+                            }
                         }
                     }
                 }
@@ -1310,15 +1311,18 @@ ipmi::RspType<> ipmiSenSetSensorThresholds(
     double max = 0;
     double min = 0;
     getSensorMaxMin(sensorMap, max, min);
-    if (min < 0 ){
-        if( upperNonCritical > maxThresholdValueNegativeCase || upperCritical > maxThresholdValueNegativeCase || upperNonRecoverable > maxThresholdValueNegativeCase){
-             
+    if (min < 0)
+    {
+        if (upperNonCritical > maxThresholdValueNegativeCase ||
+            upperCritical > maxThresholdValueNegativeCase ||
+            upperNonRecoverable > maxThresholdValueNegativeCase)
+        {
             phosphor::logging::log<phosphor::logging::level::ERR>(
-            "min is less than 0 , upper threshold must be < 128");
+                "min is less than 0 , upper threshold must be < 128");
             return ipmi::responseResponseError();
         }
     }
-    
+
     int16_t mValue = 0;
     int16_t bValue = 0;
     int8_t rExp = 0;
@@ -2235,12 +2239,13 @@ bool constructDiscreteSdr(ipmi::Context::ptr ctx, uint16_t sensorNum,
         return false;
     }
     // entity instance 0 as the initialized value is unspecified in spec..
-    record.body.entity_instance = 0; 
+    record.body.entity_instance = 0;
     // follow the association chain to get the parent board's entityid and
     // entityInstance
     auto& ipmiDecoratorPaths = getIpmiDecoratorPaths(ctx);
-    updateIpmiFromAssociation(path, ipmiDecoratorPaths.value_or(std::unordered_set<std::string>()), sensorMap, record.body.entity_id,
-                              record.body.entity_instance);
+    updateIpmiFromAssociation(
+        path, ipmiDecoratorPaths.value_or(std::unordered_set<std::string>()),
+        sensorMap, record.body.entity_id, record.body.entity_instance);
 
     record.body.sensor_type = getSensorTypeFromPath(path);
     record.body.event_reading_type = getSensorEventTypeFromPath(path);
@@ -2283,7 +2288,6 @@ void constructBootProgressHeaderKey(uint16_t sensorNum, uint16_t recordID,
     record.body.entity_instance = logicalContainerEntity;
 }
 
-
 /**
  * @brief Constructs the SDRinfo for boot progress sensor
  *
@@ -2293,8 +2297,7 @@ void constructBootProgressHeaderKey(uint16_t sensorNum, uint16_t recordID,
  * @param record - compactrecord data struct reference
  * @return none
  */
-void constructBootProgressSdr(uint16_t sensorNum,
-                              uint16_t recordID,
+void constructBootProgressSdr(uint16_t sensorNum, uint16_t recordID,
                               const std::string& path,
                               get_sdr::SensorDataEventRecord& record)
 {
@@ -2307,9 +2310,11 @@ void constructBootProgressSdr(uint16_t sensorNum,
     // either sizeof name or 16 bytes as per IPMI spec
     int nameSize = std::min(name.size(), sizeof(record.body.id_string));
     record.body.id_string_info = nameSize;
-    //Accroding to table 42- sensor type code
-    record.body.sensor_type = static_cast<uint8_t>(SensorTypeCodes::systemFirmwareProgress);
-    record.body.event_reading_type = static_cast<uint8_t>(SensorEventTypeCodes::sensorSpecified);
+    // Accroding to table 42- sensor type code
+    record.body.sensor_type =
+        static_cast<uint8_t>(SensorTypeCodes::systemFirmwareProgress);
+    record.body.event_reading_type =
+        static_cast<uint8_t>(SensorEventTypeCodes::sensorSpecified);
     std::strncpy(record.body.id_string, name.c_str(), nameSize);
 
     // Remember the sensor name, as determined for this sensor number
@@ -2624,9 +2629,9 @@ static int getSensorDataRecord(
             break;
         }
     }
-	   
-    if (std::find(interfaces.begin(), interfaces.end(), sensor::bootProgressInterface) !=
-        interfaces.end())
+
+    if (std::find(interfaces.begin(), interfaces.end(),
+                  sensor::bootProgressInterface) != interfaces.end())
     {
         get_sdr::SensorDataEventRecord record = {0};
 
@@ -2641,11 +2646,10 @@ static int getSensorDataRecord(
             constructBootProgressSdr(sensorNum, recordID, path, record);
         }
         recordData.insert(recordData.end(), (uint8_t*)&record,
-                            ((uint8_t*)&record) + sizeof(record));
+                          ((uint8_t*)&record) + sizeof(record));
         return 0;
-
     }
-   
+
     return 0;
 }
 
@@ -2838,7 +2842,9 @@ ipmi::RspType<uint8_t,  // sdr version
         SdrRepositoryInfoOps::overflow); // write not supported
 
     auto& ipmiDecoratorPaths = getIpmiDecoratorPaths(ctx);
-    while (!getSensorDataRecord(ctx, ipmiDecoratorPaths.value_or(std::unordered_set<std::string>()), record, recordID++))
+    while (!getSensorDataRecord(
+        ctx, ipmiDecoratorPaths.value_or(std::unordered_set<std::string>()),
+        record, recordID++))
     {
         get_sdr::SensorDataRecordHeader* hdr =
             reinterpret_cast<get_sdr::SensorDataRecordHeader*>(record.data());
@@ -2871,12 +2877,12 @@ ipmi::RspType<uint8_t,  // sdr version
         }
     }
 
-    uint16_t freeSpace =
-        maxFreeSpace - ((fullSdrCount * type1RecordSize) +
-                        (compactSdrCount * type2RecordSize) +
-                        (type11SdrCount * fruRecordSize) +
-                        (ipmi::storage::type12Count * fruRecordSize) +
-			(fruCount * fruRecordSize));
+    uint16_t freeSpace = maxFreeSpace -
+                         ((fullSdrCount * type1RecordSize) +
+                          (compactSdrCount * type2RecordSize) +
+                          (type11SdrCount * fruRecordSize) +
+                          (ipmi::storage::type12Count * fruRecordSize) +
+                          (fruCount * fruRecordSize));
 
     operationSupport |=
         static_cast<uint8_t>(SdrRepositoryInfoOps::allocCommandSupported);

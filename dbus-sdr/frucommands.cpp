@@ -1,5 +1,6 @@
 #include "dbus-sdr/sdrutils.hpp"
 #include "dbus-sdr/storagecommands.hpp"
+
 #include <boost/algorithm/string.hpp>
 #include <boost/container/flat_map.hpp>
 #include <boost/process.hpp>
@@ -636,8 +637,9 @@ ipmi_ret_t getFruSdrs([[maybe_unused]] ipmi::Context::ptr ctx, size_t index,
     if (name.empty())
     {
         std::vector<std::string> nameProperties = {
-            "PRODUCT_PRODUCT_NAME",  "BOARD_PRODUCT_NAME",   "PRODUCT_PART_NUMBER",
-            "BOARD_PART_NUMBER",     "PRODUCT_MANUFACTURER", "BOARD_MANUFACTURER",
+            "PRODUCT_PRODUCT_NAME",  "BOARD_PRODUCT_NAME",
+            "PRODUCT_PART_NUMBER",   "BOARD_PART_NUMBER",
+            "PRODUCT_MANUFACTURER",  "BOARD_MANUFACTURER",
             "PRODUCT_SERIAL_NUMBER", "BOARD_SERIAL_NUMBER"};
 
         for (const std::string& prop : nameProperties)

@@ -1,22 +1,25 @@
+#include "config.h"
+
 #include "commonselutility.hpp"
 #include "dbus-sdr/sdrutils.hpp"
 #include "dbus-sdr/storagecommands.hpp"
 #include "xyz/openbmc_project/Logging/Entry/server.hpp"
 
-#include <filesystem>
 #include <ipmid/api.hpp>
 #include <ipmid/utils.hpp>
 #include <phosphor-logging/elog-errors.hpp>
 #include <xyz/openbmc_project/Common/error.hpp>
 #include <xyz/openbmc_project/Logging/SEL/error.hpp>
-#include "config.h"
+
+#include <filesystem>
 #include <fstream>
 
 constexpr auto selEraseTimestamp = "/var/lib/ipmi/sel_erase_time";
 constexpr auto selAddTimestamp = "/var/lib/ipmi/sel_add_time";
 static constexpr auto logObjPath = "/xyz/openbmc_project/logging";
 static constexpr auto logInterface = "xyz.openbmc_project.Logging.Create";
-static constexpr auto capacityInterface = "xyz.openbmc_project.Logging.Capacity";
+static constexpr auto capacityInterface =
+    "xyz.openbmc_project.Logging.Capacity";
 constexpr auto dbusProperty = "org.freedesktop.DBus.Properties";
 using ErrLvl = sdbusplus::xyz::openbmc_project::Logging::server::Entry::Level;
 auto sevLvl = ErrLvl::Informational;
@@ -78,8 +81,8 @@ GetSELEntryResponse createSELEntry(const std::string& objPath)
 
     uint16_t recordId;
     entryDataMap entryData;
-    std::chrono::milliseconds chronoTimeStamp =
-        getEntryData(objPath, entryData, recordId);
+    std::chrono::milliseconds chronoTimeStamp = getEntryData(objPath, entryData,
+                                                             recordId);
 
     record.event.eventRecord.recordID = recordId;
     additionalDataMap m;
@@ -311,7 +314,6 @@ void initSELCache()
     selCacheMapInitialized = true;
 }
 
-
 /** @brief implements the delete SEL entry command
  * @request
  *   - reservationID; // reservation ID.
@@ -324,7 +326,6 @@ ipmi::RspType<uint16_t // deleted record ID
               >
     deleteSELEntry(uint16_t reservationID, uint16_t selRecordID)
 {
-
     namespace fs = std::filesystem;
 
     if (!checkSELReservation(reservationID))
@@ -341,7 +342,7 @@ ipmi::RspType<uint16_t // deleted record ID
         // In case the initSELCache() fails, try it again
         initSELCache();
     }
-   if (selCacheMap.empty())
+    if (selCacheMap.empty())
     {
         return ipmi::responseSensorInvalid();
     }
@@ -427,14 +428,14 @@ ipmi::RspType<uint8_t // erase status
         return ipmi::responseSuccess(
             static_cast<uint8_t>(ipmi::sel::eraseComplete));
     }
- // Per the IPMI spec, need to cancel any reservation when the SEL is cleared
+    // Per the IPMI spec, need to cancel any reservation when the SEL is cleared
     cancelSELReservation();
 
     sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
     auto service = ipmi::getService(bus, ipmi::sel::logIntf, ipmi::sel::logObj);
-    auto method =
-        bus.new_method_call(service.c_str(), ipmi::sel::logObj,
-                            ipmi::sel::logIntf, ipmi::sel::logDeleteAllMethod);
+    auto method = bus.new_method_call(service.c_str(), ipmi::sel::logObj,
+                                      ipmi::sel::logIntf,
+                                      ipmi::sel::logDeleteAllMethod);
     try
     {
         bus.call_noreply(method);
@@ -453,21 +454,22 @@ template <typename TP>
 std::time_t to_time_t(TP tp)
 {
     using namespace std::chrono;
-    auto sctp = time_point_cast<system_clock::duration>(tp - TP::clock::now()
-              + system_clock::now());
+    auto sctp = time_point_cast<system_clock::duration>(tp - TP::clock::now() +
+                                                        system_clock::now());
     return system_clock::to_time_t(sctp);
 }
 
 static int getFileTimestamp(const std::filesystem::path& file)
 {
-      std::error_code ec;
-      std::filesystem::file_time_type ftime = std::filesystem::last_write_time(file,ec);
-      if(ec)
-      {
-         return ::ipmi::sel::invalidTimeStamp;
-      }
+    std::error_code ec;
+    std::filesystem::file_time_type ftime =
+        std::filesystem::last_write_time(file, ec);
+    if (ec)
+    {
+        return ::ipmi::sel::invalidTimeStamp;
+    }
 
-      return to_time_t(ftime);
+    return to_time_t(ftime);
 }
 
 /** @brief implements the get SEL Info command
@@ -512,7 +514,8 @@ ipmi::RspType<uint8_t,  // SEL revision.
 
     constexpr uint8_t selVersion = ipmi::sel::selVersion;
     constexpr uint16_t maxDefineEntries = MAX_SEL_ENTRIES;
-    uint16_t freeSpace = (maxDefineEntries - entries) * ipmi::sel::selRecordSize;
+    uint16_t freeSpace = (maxDefineEntries - entries) *
+                         ipmi::sel::selRecordSize;
     constexpr uint3_t reserved{0};
 
     return ipmi::responseSuccess(
@@ -521,7 +524,7 @@ ipmi::RspType<uint8_t,  // SEL revision.
         ipmi::sel::operationSupport::reserveSel,
         ipmi::sel::operationSupport::partialAddSelEntry,
         ipmi::sel::operationSupport::deleteSel, reserved,
-         ipmi::sel::operationSupport::overflow);
+        ipmi::sel::operationSupport::overflow);
 }
 
 using systemEventType = std::tuple<
@@ -539,10 +542,11 @@ ipmi::RspType<uint16_t, // Next Record ID
               uint16_t, // Record ID
               uint8_t,  // Record Type
               std::variant<systemEventType>>
-ipmiGetSELEntry(uint16_t reservationID, uint16_t selRecordID,
-                        [[maybe_unused]] uint8_t offset, [[maybe_unused]] uint8_t readLength)
+    ipmiGetSELEntry(uint16_t reservationID, uint16_t selRecordID,
+                    [[maybe_unused]] uint8_t offset,
+                    [[maybe_unused]] uint8_t readLength)
 {
-    if (reservationID != 0 )
+    if (reservationID != 0)
     {
         if (!checkSELReservation(reservationID))
         {
@@ -558,16 +562,17 @@ ipmiGetSELEntry(uint16_t reservationID, uint16_t selRecordID,
 
     if (selCacheMap.empty())
     {
-        return ipmi::responseSensorInvalid();;
+        return ipmi::responseSensorInvalid();
+        ;
     }
 
     SELCacheMap::const_iterator iter;
 
-   if ( selRecordID == ipmi::sel::firstEntry)
-   {
-           iter = selCacheMap.begin();
-   }
-   else if (selRecordID == ipmi::sel::lastEntry)
+    if (selRecordID == ipmi::sel::firstEntry)
+    {
+        iter = selCacheMap.begin();
+    }
+    else if (selRecordID == ipmi::sel::lastEntry)
     {
         if (selCacheMap.size() > 1)
         {
@@ -624,9 +629,11 @@ ipmiGetSELEntry(uint16_t reservationID, uint16_t selRecordID,
 
 ipmi::RspType<uint16_t // recordID of the Added SEL entry
               >
-    ipmiStorageAddSEL(uint16_t recordID, uint8_t recordType, [[maybe_unused]] uint32_t timeStamp,
-                      uint16_t generatorID, [[maybe_unused]] uint8_t evmRev, [[maybe_unused]] uint8_t sensorType,
-                      uint8_t sensorNumber, uint8_t eventDir,
+    ipmiStorageAddSEL(uint16_t recordID, uint8_t recordType,
+                      [[maybe_unused]] uint32_t timeStamp, uint16_t generatorID,
+                      [[maybe_unused]] uint8_t evmRev,
+                      [[maybe_unused]] uint8_t sensorType, uint8_t sensorNumber,
+                      uint8_t eventDir,
                       std::array<uint8_t, eventDataSize> eventData)
 {
     static constexpr auto systemRecordType = 0x02;
@@ -708,7 +715,8 @@ ipmi::RspType<uint8_t> ipmiStorageSetErrorInfoCap(size_t capacity)
     {
         auto service = ipmi::getService(bus, capacityInterface, logObjPath);
         auto method = bus.new_method_call(service.c_str(), logObjPath,
-                                          capacityInterface, "SetInfoLogCapacity");
+                                          capacityInterface,
+                                          "SetInfoLogCapacity");
         method.append(capacity);
         bus.call_noreply(method);
     }
@@ -750,7 +758,6 @@ ipmi::RspType<size_t> ipmiStorageGetErrorInfoCap()
 
 void registerStorageFunctions()
 {
-
     selCacheMapInitialized = false;
 
     // <Add SEL Entry>
@@ -778,7 +785,7 @@ void registerStorageFunctions()
                           ipmi::storage::cmdClearSel, ipmi::Privilege::Operator,
                           clearSEL);
 
-   // <Get SEL Time>
+    // <Get SEL Time>
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
                           ipmi::storage::cmdGetSelTime, ipmi::Privilege::User,
                           ipmiStorageGetSELTime);
@@ -786,12 +793,14 @@ void registerStorageFunctions()
     // <Set SEL Error Info Entry Capacity>
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
                           ipmi::storage::cmdSetErrorInfoCap,
-                          ipmi::Privilege::Operator, ipmiStorageSetErrorInfoCap);
+                          ipmi::Privilege::Operator,
+                          ipmiStorageSetErrorInfoCap);
 
     // <Get SEL Error Info Entry Capacity>
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
                           ipmi::storage::cmdGetErrorInfoCap,
-                          ipmi::Privilege::Operator, ipmiStorageGetErrorInfoCap);
+                          ipmi::Privilege::Operator,
+                          ipmiStorageGetErrorInfoCap);
 
     /*Note:
      * <Set SEL Time> and  <Reserve SEl>

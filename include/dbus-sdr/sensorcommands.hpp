@@ -294,11 +294,11 @@ struct IPMIThresholds
 };
 namespace dcmi
 {
-    constexpr auto groupExtIpmi = 0xdc;
+constexpr auto groupExtIpmi = 0xdc;
 
-    constexpr auto cmdGetSensorInfo = 0x07;
+constexpr auto cmdGetSensorInfo = 0x07;
 
-}
+} // namespace dcmi
 
 namespace dcmi
 {

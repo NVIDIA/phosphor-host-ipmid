@@ -62,24 +62,54 @@ static constexpr uint8_t reservedSensorNumber = 0xFF;
 static constexpr uint8_t sysEntityInstance = 0x01;
 static constexpr uint8_t eidReserved = 0x00;
 
-// Sensor Type string is defined according to the SensorType field in LogEntry schema
-// https://redfish.dmtf.org/schemas/v1/LogEntry.v1_16_1.json
+// Sensor Type string is defined according to the SensorType field in LogEntry
+// schema https://redfish.dmtf.org/schemas/v1/LogEntry.v1_16_1.json
 static constexpr const std::array<const char*, 45> sensorTypeString = {
     "Reserved",
-    "Temperature", "Voltage", "Current", "Fan",
-    "Physical Chassis Security", "Platform Security Violation Attempt", "Processor",
-    "Power Supply / Converter", "PowerUnit", "CoolingDevice", "Other Units-based Sensor",
-    "Memory", "Drive Slot/Bay", "POST Memory Resize",
-    "System Firmware Progress", "Event Logging Disabled", "Watchdog",
-    "System Event", "Critical Interrupt", "Button/Switch",
-    "Module/Board", "Microcontroller/Coprocessor", "Add-in Card",
-    "Chassis", "ChipSet", "Other FRU", "Cable/Interconnect",
-    "Terminator", "SystemBoot/Restart", "Boot Error",
-    "BaseOSBoot/InstallationStatus", "OS Stop/Shutdown", "Slot/Connector",
-    "System ACPI PowerState", "Watchdog", "Platform Alert",
-    "Entity Presence", "Monitor ASIC/IC", "LAN",
-    "Management Subsystem Health", "Battery", "Session Audit",
-    "Version Change", "FRUState"};
+    "Temperature",
+    "Voltage",
+    "Current",
+    "Fan",
+    "Physical Chassis Security",
+    "Platform Security Violation Attempt",
+    "Processor",
+    "Power Supply / Converter",
+    "PowerUnit",
+    "CoolingDevice",
+    "Other Units-based Sensor",
+    "Memory",
+    "Drive Slot/Bay",
+    "POST Memory Resize",
+    "System Firmware Progress",
+    "Event Logging Disabled",
+    "Watchdog",
+    "System Event",
+    "Critical Interrupt",
+    "Button/Switch",
+    "Module/Board",
+    "Microcontroller/Coprocessor",
+    "Add-in Card",
+    "Chassis",
+    "ChipSet",
+    "Other FRU",
+    "Cable/Interconnect",
+    "Terminator",
+    "SystemBoot/Restart",
+    "Boot Error",
+    "BaseOSBoot/InstallationStatus",
+    "OS Stop/Shutdown",
+    "Slot/Connector",
+    "System ACPI PowerState",
+    "Watchdog",
+    "Platform Alert",
+    "Entity Presence",
+    "Monitor ASIC/IC",
+    "LAN",
+    "Management Subsystem Health",
+    "Battery",
+    "Session Audit",
+    "Version Change",
+    "FRUState"};
 
 namespace details
 {
@@ -396,11 +426,11 @@ const static boost::container::flat_map<
          {"cable", std::make_pair(SensorTypeCodes::cable,
                                   SensorEventTypeCodes::sensorSpecified)},
          {"reboot", std::make_pair(SensorTypeCodes::systemBoot,
-                                  SensorEventTypeCodes::sensorSpecified)},
+                                   SensorEventTypeCodes::sensorSpecified)},
          {"shutdown", std::make_pair(SensorTypeCodes::systemShutdown,
-                                  SensorEventTypeCodes::sensorSpecified)},
+                                     SensorEventTypeCodes::sensorSpecified)},
          {"software", std::make_pair(SensorTypeCodes::versionChange,
-                                  SensorEventTypeCodes::sensorSpecified)},
+                                     SensorEventTypeCodes::sensorSpecified)},
          {"eventlogging",
           std::make_pair(SensorTypeCodes::event_log,
                          SensorEventTypeCodes::sensorSpecified)},
@@ -414,7 +444,7 @@ const static boost::container::flat_map<
          {"entity", std::make_pair(SensorTypeCodes::entity,
                                    SensorEventTypeCodes::sensorSpecified)},
          {"energy", std::make_pair(SensorTypeCodes::other,
-                                  SensorEventTypeCodes::threshold)}}};
+                                   SensorEventTypeCodes::threshold)}}};
 std::string getSensorTypeStringFromPath(const std::string& path);
 
 uint8_t getSensorTypeFromPath(const std::string& path);
@@ -450,6 +480,6 @@ void updateIpmiFromAssociation(
     const DbusInterfaceMap& sensorMap, uint8_t& entityId,
     uint8_t& entityInstance);
 
-std::string getSelEventMessage(const std::string& sensorPath,  
+std::string getSelEventMessage(const std::string& sensorPath,
                                std::array<uint8_t, eventDataSize>& eventData);
 } // namespace ipmi

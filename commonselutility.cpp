@@ -1,14 +1,15 @@
 #include "commonselutility.hpp"
 
-#include <charconv>
-#include <chrono>
-#include <filesystem>
 #include <ipmid/api.hpp>
 #include <ipmid/types.hpp>
 #include <ipmid/utils.hpp>
 #include <phosphor-logging/elog-errors.hpp>
-#include <vector>
 #include <xyz/openbmc_project/Common/error.hpp>
+
+#include <charconv>
+#include <chrono>
+#include <filesystem>
+#include <vector>
 
 using namespace phosphor::logging;
 using InternalFailure =
@@ -34,7 +35,7 @@ std::pair<std::string, std::string> parseEntry(const std::string& entry)
     return {key, val};
 }
 
-//Parse SEL data and stored in additionalDataMap
+// Parse SEL data and stored in additionalDataMap
 additionalDataMap parseAdditionalData(const AdditionalData& data)
 {
     std::map<std::string, std::string> ret;
@@ -46,7 +47,7 @@ additionalDataMap parseAdditionalData(const AdditionalData& data)
     return ret;
 }
 
-//convert required SEL data in to integer
+// convert required SEL data in to integer
 int convert(const std::string_view& str, int base)
 {
     int ret;
@@ -102,7 +103,6 @@ std::chrono::milliseconds getEntryData(const std::string& objPath,
                                        entryDataMap& entryData,
                                        uint16_t& recordId)
 {
-
     sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
     auto service = ipmi::getService(bus, logEntryIntf, objPath);
 
@@ -155,8 +155,8 @@ std::chrono::seconds getEntryTimeStamp(const std::string& objPath)
     using namespace std::string_literals;
     static const auto propTimeStamp = "Timestamp"s;
 
-    auto methodCall =
-        bus.new_method_call(service.c_str(), objPath.c_str(), propIntf, "Get");
+    auto methodCall = bus.new_method_call(service.c_str(), objPath.c_str(),
+                                          propIntf, "Get");
     methodCall.append(logEntryIntf);
     methodCall.append(propTimeStamp);
 
@@ -192,7 +192,7 @@ void readLoggingObjectPaths(ObjectPaths& paths)
         auto reply = bus.call(mapperCall);
         reply.read(paths);
     }
-    catch (const sdbusplus::exception_t & e)
+    catch (const sdbusplus::exception_t& e)
     {
         if (strcmp(e.name(),
                    "xyz.openbmc_project.Common.Error.ResourceNotFound"))
@@ -203,14 +203,14 @@ void readLoggingObjectPaths(ObjectPaths& paths)
 
     std::sort(paths.begin(), paths.end(),
               [](const std::string& a, const std::string& b) {
-                  namespace fs = std::filesystem;
-                  fs::path pathA(a);
-                  fs::path pathB(b);
-                  auto idA = std::stoul(pathA.filename().string());
-                  auto idB = std::stoul(pathB.filename().string());
+        namespace fs = std::filesystem;
+        fs::path pathA(a);
+        fs::path pathB(b);
+        auto idA = std::stoul(pathA.filename().string());
+        auto idB = std::stoul(pathB.filename().string());
 
-                  return idA < idB;
-              });
+        return idA < idB;
+    });
 }
 } // namespace sel
 } // namespace ipmi

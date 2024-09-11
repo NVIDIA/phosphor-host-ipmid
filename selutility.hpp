@@ -1,6 +1,7 @@
 #pragma once
 
 #include "commonselutility.hpp"
+
 #include <ipmid/types.hpp>
 
 namespace ipmi

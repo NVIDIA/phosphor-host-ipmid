@@ -28,7 +28,8 @@ namespace internal
 {
 
 void constructSEL(uint8_t recordType, std::chrono::milliseconds timestamp,
-                  const additionalDataMap& m, [[maybe_unused]] const entryDataMap& entryData,
+                  const additionalDataMap& m,
+                  [[maybe_unused]] const entryDataMap& entryData,
                   GetSELEntryResponse& record)
 {
     if (recordType != systemEventRecord)
@@ -83,8 +84,8 @@ GetSELEntryResponse
     GetSELEntryResponse record{};
     uint16_t recordId;
     entryDataMap entryData;
-    std::chrono::milliseconds chronoTimeStamp =
-        getEntryData(objPath, entryData, recordId);
+    std::chrono::milliseconds chronoTimeStamp = getEntryData(objPath, entryData,
+                                                             recordId);
 
     bool isFromSELLogger = false;
     additionalDataMap m;

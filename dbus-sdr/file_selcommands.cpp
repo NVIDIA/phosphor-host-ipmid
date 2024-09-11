@@ -14,6 +14,8 @@
 // limitations under the License.
 */
 
+#include "config.h"
+
 #include "commonselutility.hpp"
 #include "dbus-sdr/sdrutils.hpp"
 #include "dbus-sdr/storagecommands.hpp"
@@ -21,19 +23,19 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/container/flat_map.hpp>
 #include <boost/process.hpp>
-#include <filesystem>
-#include <fstream>
-#include <functional>
-#include <iostream>
 #include <ipmid/api.hpp>
 #include <ipmid/message.hpp>
 #include <ipmid/types.hpp>
 #include <phosphor-logging/log.hpp>
 #include <sdbusplus/message/types.hpp>
 #include <sdbusplus/timer.hpp>
+
+#include <filesystem>
+#include <fstream>
+#include <functional>
+#include <iostream>
 #include <stdexcept>
 #include <string_view>
-#include "config.h"
 
 static constexpr bool DEBUG = false;
 
@@ -260,9 +262,9 @@ using oemTsEventType = std::tuple<
 using oemEventType =
     std::array<uint8_t, dynamic_sensors::ipmi::sel::oemEventSize>; // Event Data
 
-ipmi::RspType<uint16_t, // Next Record ID
-              uint16_t, // Record ID
-              uint8_t,  // Record Type
+ipmi::RspType<uint16_t,                   // Next Record ID
+              uint16_t,                   // Record ID
+              uint8_t,                    // Record Type
               std::variant<systemEventType, oemTsEventType,
                            oemEventType>> // Record Content
     ipmiStorageGetSELEntry(uint16_t reservationID, uint16_t targetID,
@@ -543,7 +545,6 @@ ipmi::RspType<uint32_t> ipmiStorageGetSELTime()
 
 void registerStorageFunctions()
 {
-
     // <Get SEL Info>
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
                           ipmi::storage::cmdGetSelInfo, ipmi::Privilege::User,
