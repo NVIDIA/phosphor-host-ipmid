@@ -375,6 +375,11 @@ bool getSensorNumMap(std::shared_ptr<SensorNumMap>& sensorNumMap)
         }
         sensorNum = sensorIndex;
     }
+    // if no sensors in the sensor tree return false
+    if (sensorIndex == 0)
+    {
+        return sensorNumMapUpated;
+    }
     sensorNumMap = sensorNumMapPtr;
     sensorNumMapUpated = true;
     return sensorNumMapUpated;
