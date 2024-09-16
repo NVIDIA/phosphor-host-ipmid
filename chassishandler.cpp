@@ -129,7 +129,7 @@ static constexpr const char* resetButtonPath =
 constexpr auto hostStatePath = "/xyz/openbmc_project/state/host0";
 constexpr auto hostStateIntf = "xyz.openbmc_project.State.Host";
 constexpr auto IPMICommand =
-    "xyz.openbmc_project.State.Host.LastPowerOnCause.IPMICommand";
+    "xyz.openbmc_project.State.Host.RestartCause.RemoteCommand";
 
 // Phosphor Host State manager
 namespace State = sdbusplus::server::xyz::openbmc_project::state;
@@ -871,10 +871,10 @@ int initiateHostStateTransition(ipmi::Context::ptr& ctx,
         transition == State::Host::Transition::Reboot)
     {
         ec = ipmi::setDbusProperty(ctx, service, hostStatePath, hostStateIntf,
-                                   "LastPowerOnCause", IPMICommand);
+                                   "RestartCause", IPMICommand);
         if (ec)
         {
-            log<level::ERR>("Failed to set LastPowerOnCause",
+            log<level::ERR>("Failed to set RestartCause",
                             entry("EXCEPTION=%s, REQUEST=%s",
                                   ec.message().c_str(), request.c_str()));
         }
@@ -1087,7 +1087,7 @@ bool isLastPowerOnViaIPMI()
     {
         auto service = ipmi::getService(*bus, hostStateIntf, hostStatePath);
         ipmi::Value PowerCause = ipmi::getDbusProperty(
-            *bus, service, hostStatePath, hostStateIntf, "LastPowerOnCause");
+            *bus, service, hostStatePath, hostStateIntf, "RestartCause");
         if (std::get<std::string>(PowerCause) == IPMICommand)
         {
             return true;
@@ -1095,7 +1095,7 @@ bool isLastPowerOnViaIPMI()
     }
     catch (const std::exception& e)
     {
-        log<level::ERR>("Fail to get LastPowerOnCause property",
+        log<level::ERR>("Fail to get RestartCause property",
                         entry("ERROR=%s", e.what()));
     }
     return false;
