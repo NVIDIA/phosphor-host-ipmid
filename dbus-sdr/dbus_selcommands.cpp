@@ -46,8 +46,14 @@ using InternalFailure =
     sdbusplus::xyz::openbmc_project::Common::Error::InternalFailure;
 using namespace phosphor::logging;
 
+// SEL record number
 using SELRecordID = uint16_t;
-using SELEntry = ipmi::sel::SELEventRecordFormat;
+// Phosphor-logging path name ID
+/// For example this xyz/openbmc_project/logging/entry/60267 will be stored as
+/// 60267
+using LogID = uint32_t;
+// <phosphor-log ID, SEL record information entry>
+using SELEntry = std::pair<LogID, ipmi::sel::SELEventRecordFormat>;
 using SELCacheMap = std::map<SELRecordID, SELEntry>;
 
 SELCacheMap selCacheMap __attribute__((init_priority(101)));
@@ -59,7 +65,7 @@ std::unique_ptr<sdbusplus::bus::match::match> selRemovedMatch
 std::unique_ptr<sdbusplus::bus::match::match> selUpdatedMatch
     __attribute__((init_priority(101)));
 
-inline uint16_t getLoggingId(const std::string& p)
+inline uint32_t getLoggingId(const std::string& p)
 {
     namespace fs = std::filesystem;
     fs::path entryPath(p);
@@ -182,7 +188,12 @@ std::optional<std::pair<uint16_t, SELEntry>>
         auto id = getLoggingId(p);
         ipmi::sel::GetSELEntryResponse record{};
         record = ipmi::sel::internal::createSELEntry(p);
-        return std::pair<uint16_t, SELEntry>({id, std::move(record.event)});
+        uint16_t selRecordID = record.event.eventRecord.recordID;
+        // Returning a pair of
+        // <SELEntry ID number, <phosphor-logging ID number, SEL record
+        // information entry>>
+        return std::make_pair(selRecordID,
+                              std::make_pair(id, std::move(record.event)));
     }
     catch (const std::exception& e)
     {
@@ -192,7 +203,7 @@ std::optional<std::pair<uint16_t, SELEntry>>
     return std::nullopt;
 }
 
-std::string getLoggingObjPath(uint16_t id)
+std::string getLoggingObjPath(uint32_t id)
 {
     return std::string(ipmi::sel::logBasePath) + "/" + std::to_string(id);
 }
@@ -244,7 +255,10 @@ void selRemovedCallback(sdbusplus::message::message& m)
     try
     {
         std::string p = objPath;
-        selCacheMap.erase(getLoggingId(p));
+        uint16_t selId =
+            ipmi::sel::internal::convertSelIdToU16(getLoggingId(p));
+        ;
+        selCacheMap.erase(selId);
         saveTimeStamp(selEraseTimestamp);
     }
     catch (const std::invalid_argument& e)
@@ -370,8 +384,8 @@ ipmi::RspType<uint16_t // deleted record ID
 
     sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
     std::string service;
-
-    auto objPath = getLoggingObjPath(iter->first);
+    ;
+    auto objPath = getLoggingObjPath(iter->second.first);
     try
     {
         service = ipmi::getService(bus, ipmi::sel::logDeleteIntf, objPath);
@@ -594,7 +608,7 @@ ipmi::RspType<uint16_t, // Next Record ID
         }
     }
 
-    ipmi::sel::GetSELEntryResponse record{0, iter->second};
+    ipmi::sel::GetSELEntryResponse record{0, iter->second.second};
 
     // Identify the next SEL record ID
     ++iter;

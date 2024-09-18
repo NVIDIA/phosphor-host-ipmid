@@ -96,6 +96,20 @@ void constructOEMSEL(uint8_t recordType, std::chrono::milliseconds timestamp,
     }
 }
 
+// The SEL record ID is based on the phosphor-logging object path name,
+// The path name is a number of uint32, need to convert it to uint16
+// according to the IPMI spec
+uint16_t convertSelIdToU16(uint32_t id)
+{
+    if (id >= std::numeric_limits<uint16_t>::max())
+    {
+        return static_cast<uint16_t>(id % std::numeric_limits<uint16_t>::max() +
+                                     1);
+    }
+
+    return static_cast<uint16_t>(id);
+}
+
 /* Retrive entry data from dbus object such as entry ID,
  * Timestamp and recordID.
  */
@@ -128,9 +142,11 @@ std::chrono::milliseconds getEntryData(const std::string& objPath,
         log<level::ERR>("Error in reading Id of logging entry");
         elog<InternalFailure>();
     }
-
+#ifdef FEATURE_DYNAMIC_SENSORS
+    recordId = convertSelIdToU16(std::get<uint32_t>(iterId->second));
+#else
     recordId = static_cast<uint16_t>(std::get<uint32_t>(iterId->second));
-
+#endif
     // Read Timestamp from the log entry.
     static constexpr auto propTimeStamp = "Timestamp";
     auto iterTimeStamp = entryData.find(propTimeStamp);

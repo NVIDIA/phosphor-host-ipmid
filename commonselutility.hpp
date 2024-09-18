@@ -221,6 +221,10 @@ additionalDataMap parseAdditionalData(const AdditionalData& data);
 std::vector<uint8_t> convertVec(const std::string_view& str);
 int convert(const std::string_view& str, int base = 10);
 
+// Convert from phosphor-logging object path name (uint32) to SEL record ID
+// uint16
+uint16_t convertSelIdToU16(uint32_t id);
+
 /* Retrive entry data from dbus object such as entry ID,
  * Timestamp and recordID.
  */
