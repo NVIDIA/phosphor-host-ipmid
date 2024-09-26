@@ -88,3 +88,6 @@ option('max-sel-entries', type: 'integer', value: 2000, description: 'Max SEL Re
 
 # System interface ID
 option('system-interface-id', type: 'integer', value: 15, description: 'System interface id')
+
+# Host connection to the BMC
+option('host-connected', type: 'feature', value: 'enabled', description: 'Prevent call to host, when it is not connected')

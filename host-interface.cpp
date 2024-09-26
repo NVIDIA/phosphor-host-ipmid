@@ -74,6 +74,7 @@ void Host::commandStatusHandler(IpmiCmdData cmd, bool status)
 
 Host::FirmwareCondition Host::currentFirmwareCondition() const
 {
+#ifdef HOST_CONNECTED
     // shared object used to wait for host response
     auto hostCondition =
         std::make_shared<std::optional<Host::FirmwareCondition>>();
@@ -118,6 +119,9 @@ Host::FirmwareCondition Host::currentFirmwareCondition() const
 
     log<level::DEBUG>("currentFirmwareCondition: hostCondition is ready!");
     return hostCondition.get()->value();
+#else
+    return FirmwareCondition::Running;
+#endif
 }
 
 } // namespace command

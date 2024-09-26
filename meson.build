@@ -100,6 +100,7 @@ feature_map = {
   'sensors-cache'              : '-DFEATURE_SENSORS_CACHE',
   'dynamic-storages-only'      : '-DFEATURE_DYNAMIC_STORAGES_ONLY',
   'dynamic-sensors-remove-exceeded-scale' : '-DENABLE_DYNAMIC_SENSORS_REMOVE_EXCEEDED_SCALE',
+  'host-connected'              : '-DHOST_CONNECTED',
 }
 
 foreach option_key, option_value : feature_map
