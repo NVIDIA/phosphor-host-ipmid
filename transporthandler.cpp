@@ -1227,11 +1227,38 @@ RspType<message::Payload> getLan(Context::ptr ctx, uint4_t channelBits,
         }
         case LanParam::SubnetMask:
         {
-            auto ifaddr = channelCall<getIfAddr4>(channel);
+            uint8_t idx = 0;
+            auto ifaddr = channelCall<getIfAddr4ByIdx>(channel, idx);
             uint8_t prefix = AddrFamily<AF_INET>::defaultPrefix;
-            if (ifaddr)
+            // get the IPv4 dhcp state for the interface
+            auto dhcp = channelCall<getEthProp<bool>>(channel, "DHCP4");
+            // The OpenBMC project has added support for IP aliasing,
+            // which allows multiple IP addresses to be set on a single
+            // interface. However, the IPMI protocol only supports a single IP
+            // address for IPv4. To maintain backward compatibility, the
+            // following policy has been implemented:
+            //   - IPv4 DHCP Enabled: IPMI will select the IP address assigned
+            //   by the DHCP server found on the channel.
+            //   - IPv4 DHCP Disabled: IPMI will select the first static IP
+            //   address found on the channel.
+            while (ifaddr)
             {
-                prefix = ifaddr->prefix;
+                // check if the address origin match the dhcp state
+                if ((dhcp && ifaddr->origin == IP::AddressOrigin::DHCP) ||
+                    (dhcp == false &&
+                     ifaddr->origin == IP::AddressOrigin::Static))
+                {
+                    // assign the prefix
+                    prefix = ifaddr->prefix;
+                    break;
+                }
+                else
+                {
+                    // move to the next interface
+                    idx++;
+                    ifaddr = channelCall<getIfAddr4ByIdx>(channel, idx);
+                    continue;
+                }
             }
             auto netmask = stdplus::pfxToMask<stdplus::In4Addr>(prefix);
             ret.pack(stdplus::raw::asView<char>(netmask));
