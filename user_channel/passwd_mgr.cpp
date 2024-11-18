@@ -26,6 +26,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <boost/crc.hpp>
 #include <phosphor-logging/log.hpp>
 
 #include <cerrno>
@@ -108,11 +109,11 @@ SecureString PasswdMgr::getPasswdByUserName(const std::string& userName)
 int PasswdMgr::updateUserEntry(const std::string& userName,
                                const std::string& newUserName)
 {
-    std::time_t updatedTime = getUpdatedFileTime();
-    // Check file time stamp to know passwdMapList is up-to-date.
+    uint32_t CRC = getUpdatedFileCRC();
+    // Check file checksum to know passwdMapList is up-to-date.
     // If not up-to-date, then updatePasswdSpecialFile will read and
     // check the user entry existance.
-    if (fileLastUpdatedTime == updatedTime && updatedTime != -EIO)
+    if (fileLastUpdatedCRC == CRC && CRC != 0)
     {
         if (passwdMapList.find(userName) == passwdMapList.end())
         {
@@ -134,8 +135,8 @@ int PasswdMgr::updateUserEntry(const std::string& userName,
 
 void PasswdMgr::checkAndReload(void)
 {
-    std::time_t updatedTime = getUpdatedFileTime();
-    if (fileLastUpdatedTime != updatedTime && updatedTime != -1)
+    uint32_t CRC = getUpdatedFileCRC();
+    if (CRC == 0 || CRC != fileLastUpdatedCRC)
     {
         log<level::DEBUG>("Reloading password map list");
         passwdMapList.clear();
@@ -272,8 +273,8 @@ void PasswdMgr::initPasswordMap(void)
         }
     }
 
-    // Update the timestamp
-    fileLastUpdatedTime = getUpdatedFileTime();
+    // Update checksum
+    fileLastUpdatedCRC = getUpdatedFileCRC();
     return;
 }
 
@@ -597,15 +598,26 @@ int PasswdMgr::updatePasswdSpecialFile(const std::string& userName,
     return 0;
 }
 
-std::time_t PasswdMgr::getUpdatedFileTime()
+uint32_t PasswdMgr::getUpdatedFileCRC()
 {
-    struct stat fileStat = {};
-    if (stat(passwdFileName, &fileStat) != 0)
+    std::ifstream file(passwdFileName, std::ios::binary);
+    if (!file)
     {
-        log<level::DEBUG>("Error - Getting passwd file time stamp");
-        return -EIO;
+        log<level::DEBUG>("Error in opening file ipmi password file");
+        return 0;
     }
-    return fileStat.st_mtime;
+
+    // Create a CRC32 calculator
+    boost::crc_32_type crc32;
+
+    char buffer[4096];
+    while (file.read(buffer, sizeof(buffer)) || file.gcount() > 0)
+    {
+        // Process each chunk read into the buffer
+        crc32.process_bytes(buffer, file.gcount());
+    }
+
+    return crc32.checksum();
 }
 
 } // namespace ipmi

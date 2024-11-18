@@ -65,7 +65,7 @@ class PasswdMgr
     using UserName = std::string;
     using Password = SecureString;
     std::unordered_map<UserName, Password> passwdMapList;
-    std::time_t fileLastUpdatedTime;
+    uint32_t fileLastUpdatedCRC;
 
     /** @brief restrict file permission
      *
@@ -124,11 +124,11 @@ class PasswdMgr
                            uint8_t* mac, size_t* macLen, uint8_t* outBytes,
                            size_t* outBytesLen);
 
-    /** @brief  returns updated file time of passwd file entry.
+    /** @brief  returns updated file checksum of passwd file entry.
      *
-     * @return timestamp or -1 for error.
+     * @return checksum or 0 for error.
      */
-    std::time_t getUpdatedFileTime();
+    uint32_t getUpdatedFileCRC();
 };
 
 } // namespace ipmi

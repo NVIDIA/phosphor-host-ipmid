@@ -250,8 +250,6 @@ class ChannelConfig
     std::unique_ptr<boost::interprocess::named_recursive_mutex> channelMutex{
         nullptr};
     std::array<ChannelProperties, maxIpmiChannels> channelData;
-    std::time_t nvFileLastUpdatedTime;
-    std::time_t voltFileLastUpdatedTime;
     boost::interprocess::file_lock mutexCleanupLock;
     sdbusplus::bus_t bus;
     bool signalHndlrObjectState = false;
@@ -289,17 +287,17 @@ class ChannelConfig
      */
     int readChannelVolatileData();
 
-    /** @brief function to check and reload persistent channel data
+    /** @brief function to reload persistent channel data
      *
      *  @return 0 for success, -errno for failure.
      */
-    int checkAndReloadNVData();
+    int reloadNVData();
 
-    /** @brief function to check and reload volatile channel data
+    /** @brief function to reload volatile channel data
      *
      *  @return 0 for success, -errno for failure.
      */
-    int checkAndReloadVolatileData();
+    int reloadVolatileData();
 
     /** @brief function to sync channel privilege with system network channel
      * privilege
@@ -420,15 +418,6 @@ class ChannelConfig
      */
     void processChAccessPropChange(const std::string& path,
                                    const DbusChObjProperties& chProperties);
-
-    /** @brief function to retrieve last modification time for the named file
-     *
-     *  @param[in] fileName - the name of the file for which to acquire
-     *  timestamp data
-     *
-     *  @return time the file was last modified
-     */
-    std::time_t getUpdatedFileTime(const std::string& fileName);
 
     /** @brief function to convert the DBus path to a network channel name
      *

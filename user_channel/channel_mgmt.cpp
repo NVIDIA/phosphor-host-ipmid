@@ -259,8 +259,8 @@ void ChannelConfig::processChAccessPropChange(
     // Update both volatile & Non-volatile, if there is mismatch.
     // as property change other than IPMI, has to update both volatile &
     // non-volatile data.
-    checkAndReloadVolatileData();
-    checkAndReloadNVData();
+    reloadVolatileData();
+    reloadNVData();
     if (channelData[chNum].chAccess.chNonVolatileData.privLimit != intfPriv)
     {
         // Update NV data
@@ -463,7 +463,7 @@ Cc ChannelConfig::getChannelAccessData(const uint8_t chNum,
         return ccActionNotSupportedForChannel;
     }
 
-    if (checkAndReloadVolatileData() != 0)
+    if (reloadVolatileData() != 0)
     {
         return ccUnspecifiedError;
     }
@@ -507,7 +507,7 @@ Cc ChannelConfig::setChannelAccessData(const uint8_t chNum,
     boost::interprocess::scoped_lock<boost::interprocess::named_recursive_mutex>
         channelLock{*channelMutex};
 
-    if (checkAndReloadVolatileData() != 0)
+    if (reloadVolatileData() != 0)
     {
         return ccUnspecifiedError;
     }
@@ -562,7 +562,7 @@ Cc ChannelConfig::getChannelAccessPersistData(const uint8_t chNum,
         return ccActionNotSupportedForChannel;
     }
 
-    if (checkAndReloadNVData() != 0)
+    if (reloadNVData() != 0)
     {
         return ccUnspecifiedError;
     }
@@ -606,7 +606,7 @@ Cc ChannelConfig::setChannelAccessPersistData(const uint8_t chNum,
     boost::interprocess::scoped_lock<boost::interprocess::named_recursive_mutex>
         channelLock{*channelMutex};
 
-    if (checkAndReloadNVData() != 0)
+    if (reloadNVData() != 0)
     {
         return ccUnspecifiedError;
     }
@@ -707,17 +707,6 @@ Cc ChannelConfig::getChannelEnabledAuthType(const uint8_t chNum,
     authType = EAuthType::none;
 
     return ccSuccess;
-}
-
-std::time_t ChannelConfig::getUpdatedFileTime(const std::string& fileName)
-{
-    struct stat fileStat;
-    if (stat(fileName.c_str(), &fileStat) != 0)
-    {
-        log<level::DEBUG>("Error in getting last updated time stamp");
-        return -EIO;
-    }
-    return fileStat.st_mtime;
 }
 
 EChannelAccessMode
@@ -1090,8 +1079,6 @@ int ChannelConfig::readChannelVolatileData()
         throw std::runtime_error("Corrupted volatile channel access file");
     }
 
-    // Update the timestamp
-    voltFileLastUpdatedTime = getUpdatedFileTime(channelVolatileDataFilename);
     return 0;
 }
 
@@ -1157,8 +1144,6 @@ int ChannelConfig::readChannelPersistData()
         throw std::runtime_error("Corrupted nv channel access file");
     }
 
-    // Update the timestamp
-    nvFileLastUpdatedTime = getUpdatedFileTime(channelNvDataFilename);
     return 0;
 }
 
@@ -1206,8 +1191,6 @@ int ChannelConfig::writeChannelVolatileData()
         return -EIO;
     }
 
-    // Update the timestamp
-    voltFileLastUpdatedTime = getUpdatedFileTime(channelVolatileDataFilename);
     return 0;
 }
 
@@ -1257,47 +1240,37 @@ int ChannelConfig::writeChannelPersistData()
         return -EIO;
     }
 
-    // Update the timestamp
-    nvFileLastUpdatedTime = getUpdatedFileTime(channelNvDataFilename);
     return 0;
 }
 
-int ChannelConfig::checkAndReloadNVData()
+int ChannelConfig::reloadNVData()
 {
-    std::time_t updateTime = getUpdatedFileTime(channelNvDataFilename);
     int ret = 0;
-    if (updateTime != nvFileLastUpdatedTime || updateTime == -EIO)
+    try
     {
-        try
-        {
-            ret = readChannelPersistData();
-        }
-        catch (const std::exception& e)
-        {
-            log<level::ERR>("Exception caught in readChannelPersistData.",
-                            entry("MSG=%s", e.what()));
-            ret = -EIO;
-        }
+        ret = readChannelPersistData();
+    }
+    catch (const std::exception& e)
+    {
+        log<level::ERR>("Exception caught in readChannelPersistData.",
+                        entry("MSG=%s", e.what()));
+        ret = -EIO;
     }
     return ret;
 }
 
-int ChannelConfig::checkAndReloadVolatileData()
+int ChannelConfig::reloadVolatileData()
 {
-    std::time_t updateTime = getUpdatedFileTime(channelVolatileDataFilename);
     int ret = 0;
-    if (updateTime != voltFileLastUpdatedTime || updateTime == -EIO)
+    try
     {
-        try
-        {
-            ret = readChannelVolatileData();
-        }
-        catch (const std::exception& e)
-        {
-            log<level::ERR>("Exception caught in readChannelVolatileData.",
-                            entry("MSG=%s", e.what()));
-            ret = -EIO;
-        }
+        ret = readChannelVolatileData();
+    }
+    catch (const std::exception& e)
+    {
+        log<level::ERR>("Exception caught in readChannelVolatileData.",
+                        entry("MSG=%s", e.what()));
+        ret = -EIO;
     }
     return ret;
 }

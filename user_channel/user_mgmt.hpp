@@ -317,11 +317,11 @@ class UserAccess
      */
     void writeUserData();
 
-    /** @brief Funtion which checks and reload configuration file data if
+    /** @brief Funtion which reloads configuration file data if
      * needed.
      *
      */
-    void checkAndReloadUserData();
+    void reloadUserData();
 
     /** @brief provides user details from D-Bus user property data
      *
@@ -380,16 +380,9 @@ class UserAccess
     std::vector<std::string> availablePrivileges;
     std::vector<std::string> availableGroups;
     sdbusplus::bus_t bus;
-    std::timespec fileLastUpdatedTime;
     bool signalHndlrObject = false;
     boost::interprocess::file_lock sigHndlrLock;
     boost::interprocess::file_lock mutexCleanupLock;
-
-    /** @brief function to get user configuration file timestamp
-     *
-     *  @return time stamp or -EIO for failure
-     */
-    std::timespec getUpdatedFileTime();
 
     /** @brief function to available system privileges and groups
      *

@@ -361,7 +361,7 @@ void userUpdatedSignalHandler(UserAccess& usrAccess, sdbusplus::message_t& msg)
 
     boost::interprocess::scoped_lock<boost::interprocess::named_recursive_mutex>
         userLock{*(usrAccess.userMutex)};
-    usrAccess.checkAndReloadUserData();
+    usrAccess.reloadUserData();
 
     if (signal == propertiesChangedSignal)
     {
@@ -476,13 +476,13 @@ UserAccess::UserAccess() : bus(ipmid_get_sd_bus_connection())
 
 UserInfo* UserAccess::getUserInfo(const uint8_t userId)
 {
-    checkAndReloadUserData();
+    reloadUserData();
     return &usersTbl.user[userId];
 }
 
 void UserAccess::setUserInfo(const uint8_t userId, UserInfo* userInfo)
 {
-    checkAndReloadUserData();
+    reloadUserData();
     std::copy(reinterpret_cast<uint8_t*>(userInfo),
               reinterpret_cast<uint8_t*>(userInfo) + sizeof(*userInfo),
               reinterpret_cast<uint8_t*>(&usersTbl.user[userId]));
@@ -949,7 +949,7 @@ uint8_t UserAccess::getUserId(const std::string& userName)
 {
     boost::interprocess::scoped_lock<boost::interprocess::named_recursive_mutex>
         userLock{*userMutex};
-    checkAndReloadUserData();
+    reloadUserData();
     // user index 0 is reserved, starts with 1
     size_t usrIndex = 1;
     for (; usrIndex <= ipmiMaxUsers; ++usrIndex)
@@ -1348,8 +1348,7 @@ void UserAccess::readUserData()
 
     log<level::DEBUG>("User data read from IPMI data file");
     iUsrData.close();
-    // Update the timestamp
-    fileLastUpdatedTime = getUpdatedFileTime();
+
     return;
 }
 
@@ -1430,8 +1429,7 @@ void UserAccess::writeUserData()
         log<level::ERR>("Error in renaming temporary IPMI user data file");
         throw std::runtime_error("Error in renaming IPMI user data file");
     }
-    // Update the timestamp
-    fileLastUpdatedTime = getUpdatedFileTime();
+
     return;
 }
 
@@ -1508,24 +1506,19 @@ void UserAccess::deleteUserIndex(const size_t& usrIdx)
     return;
 }
 
-void UserAccess::checkAndReloadUserData()
+void UserAccess::reloadUserData()
 {
-    std::timespec updateTime = getUpdatedFileTime();
-    if ((updateTime.tv_sec != fileLastUpdatedTime.tv_sec ||
-         updateTime.tv_nsec != fileLastUpdatedTime.tv_nsec) ||
-        (updateTime.tv_sec == 0 && updateTime.tv_nsec == 0))
-    {
-        std::fill(reinterpret_cast<uint8_t*>(&usersTbl),
-                  reinterpret_cast<uint8_t*>(&usersTbl) + sizeof(usersTbl), 0);
-        readUserData();
-    }
+    std::fill(reinterpret_cast<uint8_t*>(&usersTbl),
+              reinterpret_cast<uint8_t*>(&usersTbl) + sizeof(usersTbl), 0);
+    readUserData();
+
     return;
 }
 
 UsersTbl* UserAccess::getUsersTblPtr()
 {
     // reload data before using it.
-    checkAndReloadUserData();
+    reloadUserData();
     return &usersTbl;
 }
 
@@ -1563,17 +1556,6 @@ void UserAccess::getSystemPrivAndGroups()
     }
     // TODO: Implement Supported Privilege & Groups verification logic
     return;
-}
-
-std::timespec UserAccess::getUpdatedFileTime()
-{
-    struct stat fileStat;
-    if (stat(ipmiUserDataFile, &fileStat) != 0)
-    {
-        log<level::DEBUG>("Error in getting last updated time stamp");
-        return std::timespec{0, 0};
-    }
-    return fileStat.st_mtim;
 }
 
 void UserAccess::getUserProperties(const DbusUserObjProperties& properties,
