@@ -1,3 +1,20 @@
+/*
+ * SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES.
+ * All rights reserved. SPDX-License-Identifier: Apache-2.0
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "transporthandler.hpp"
 
 #include <stdplus/net/addr/subnet.hpp>
@@ -539,7 +556,6 @@ void createVLAN(sdbusplus::bus_t& bus, ChannelParams& params, uint16_t vlan)
     {
         return;
     }
-
     auto req = bus.new_method_call(params.service.c_str(), PATH_ROOT.c_str(),
                                    INTF_VLAN_CREATE, "VLAN");
     req.append(params.ifname, static_cast<uint32_t>(vlan));
@@ -583,15 +599,31 @@ void reconfigureVLAN(sdbusplus::bus_t& bus, ChannelParams& params,
     ObjectLookupCache neighbors(bus, params, INTF_NEIGHBOR);
     auto neighbor4 = findGatewayNeighbor<AF_INET>(bus, params, neighbors);
     auto neighbor6 = findGatewayNeighbor<AF_INET6>(bus, params, neighbors);
+    // parentIntParams  - if VLAN is created those are the parameters  of the
+    // physical interface
     ChannelParams parentIntParams = params;
     deconfigureChannel(bus, params);
-    createVLAN(bus, params, vlan);
-
-    // Re-establish the saved settings
-    setEthProp(bus, parentIntParams, "DHCP4", dhcp4);
-    setEthProp(bus, parentIntParams, "DHCP6", dhcp6);
-    setEthProp(bus, parentIntParams, "IPv6AcceptRA", ra);
-
+    // If VLAN is been created (vlan !=0)
+    // reconstruct the VLAN
+    if (vlan != 0)
+    {
+        createVLAN(bus, params, vlan);
+        /*Re-establish the saved settings
+        Now params are the VLAN parameters  and
+        parentIntParams  are the are the parameters
+        of the physical interface
+        Set the ETH properties of the physical interface:
+         */
+        setEthProp(bus, parentIntParams, "DHCP4", dhcp4);
+        setEthProp(bus, parentIntParams, "DHCP6", dhcp6);
+        setEthProp(bus, parentIntParams, "IPv6AcceptRA", ra);
+    }
+    /*
+    If VALN is crated:
+        Set the ETH properties of the VLAN interface
+    If not :
+        Set the ETH properties of the physical interface
+    */
     setEthProp(bus, params, "DHCP4", dhcp4);
     setEthProp(bus, params, "DHCP6", dhcp6);
     setEthProp(bus, params, "IPv6AcceptRA", ra);
