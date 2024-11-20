@@ -1369,9 +1369,12 @@ RspType<message::Payload> getLan(Context::ptr ctx, uint4_t channelBits,
         case LanParam::IPv6RouterControl:
         {
             std::bitset<8> control;
-            control[IPv6RouterControlFlag::Dynamic] =
-                channelCall<getEthProp<bool>>(channel, "IPv6AcceptRA");
-            control[IPv6RouterControlFlag::Static] = 1;
+
+            bool enableRA = channelCall<getEthProp<bool>>(channel,
+                                                          "IPv6AcceptRA");
+            bool enableDHCP6 = channelCall<getEthProp<bool>>(channel, "DHCP6");
+            control[IPv6RouterControlFlag::Dynamic] = enableRA;
+            control[IPv6RouterControlFlag::Static] = !(enableDHCP6 && enableRA);
             ret.pack(control);
             return responseSuccess(std::move(ret));
         }
