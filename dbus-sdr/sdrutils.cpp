@@ -166,6 +166,9 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
     static constexpr const std::array bootProgressInterfaces = {
         "xyz.openbmc_project.State.Boot.Progress"};
 
+    static constexpr const std::array processorInterfaces = {
+        "xyz.openbmc_project.Inventory.Item.CpuCore"};
+
     bool sensorRez = lbdUpdateSensorTree("/xyz/openbmc_project/sensors",
                                          sensorInterfaces);
 #ifdef FEATURE_HYBRID_SENSORS
@@ -315,6 +318,10 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
     // Add boot progress sensor
     (void)lbdUpdateSensorTree("/xyz/openbmc_project/state",
                               bootProgressInterfaces);
+
+    // Add processor sensor
+    (void)lbdUpdateSensorTree("/xyz/openbmc_project/state",
+                              processorInterfaces);
 
     subtree = sensorTreePtr;
     sensorUpdatedIndex++;

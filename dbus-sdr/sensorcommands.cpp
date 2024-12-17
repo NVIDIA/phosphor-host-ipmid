@@ -90,6 +90,7 @@ static constexpr uint8_t bmcI2CAddr = 0x20;
 static constexpr uint8_t systemSoftwareId = 0x01;
 static constexpr uint8_t noneLunUsed = 0;
 static constexpr uint8_t systemFirmwareEntityId = 0x22;
+static constexpr uint8_t processorEntityId = 0x03;
 static constexpr uint8_t logicalContainerEntity = 0x1;
 
 constexpr size_t maxSDRTotalSize =
@@ -218,6 +219,8 @@ static constexpr const char* sensorInterface =
     "xyz.openbmc_project.Sensor.Value";
 static constexpr const char* bootProgressInterface =
     "xyz.openbmc_project.State.Boot.Progress";
+static constexpr const char* cpuInterface =
+    "xyz.openbmc_project.Inventory.Item.CpuCore";
 
 std::map<DbusInterface,
          std::map<DbusInterface,
@@ -2269,9 +2272,10 @@ bool constructDiscreteSdr(ipmi::Context::ptr ctx, uint16_t sensorNum,
     return true;
 }
 
-// Construct type 3 SDR header and key for boot progress SDR
-void constructBootProgressHeaderKey(uint16_t sensorNum, uint16_t recordID,
-                                    get_sdr::SensorDataEventRecord& record)
+// Construct header key based on paramters
+void constructCommonSensorHeaderKey(uint16_t sensorNum, uint16_t recordID,
+                                    get_sdr::SensorDataEventRecord& record,
+                                    uint8_t entityId, uint8_t ownerId)
 {
     get_sdr::header::set_record_id(
         recordID, reinterpret_cast<get_sdr::SensorDataRecordHeader*>(&record));
@@ -2280,11 +2284,11 @@ void constructBootProgressHeaderKey(uint16_t sensorNum, uint16_t recordID,
     record.header.record_type = get_sdr::SENSOR_DATA_EVENT_RECORD;
     record.header.record_length = sizeof(get_sdr::SensorDataEventRecord) -
                                   sizeof(get_sdr::SensorDataRecordHeader);
-    record.key.owner_id = systemSoftwareId;
+    record.key.owner_id = ownerId;
     record.key.owner_lun = noneLunUsed;
     record.key.sensor_number = static_cast<uint8_t>(sensorNum);
 
-    record.body.entity_id = systemFirmwareEntityId;
+    record.body.entity_id = entityId;
     record.body.entity_instance = logicalContainerEntity;
 }
 
@@ -2295,14 +2299,19 @@ void constructBootProgressHeaderKey(uint16_t sensorNum, uint16_t recordID,
  * @param recordID - SDR record ID
  * @param path - sensor dbus object path
  * @param record - compactrecord data struct reference
+ * @param type - sensor type
+ * @param entityId - sensor entity id
+ * @param ownerId - sensor owner id
  * @return none
  */
-void constructBootProgressSdr(uint16_t sensorNum, uint16_t recordID,
+void constructCommonSensorSdr(uint16_t sensorNum, uint16_t recordID,
                               const std::string& path,
-                              get_sdr::SensorDataEventRecord& record)
+                              get_sdr::SensorDataEventRecord& record,
+                              uint8_t type, uint8_t entityId, uint8_t ownerId)
 {
     uint8_t sensorNumber = static_cast<uint8_t>(sensorNum);
-    constructBootProgressHeaderKey(sensorNum, recordID, record);
+    constructCommonSensorHeaderKey(sensorNum, recordID, record, entityId,
+                                   ownerId);
     // populate sensor name from path
     auto name = sensor::parseSdrIdFromPath(path);
     record.body.entity_instance = getEntityInstanceFromName(name);
@@ -2311,8 +2320,7 @@ void constructBootProgressSdr(uint16_t sensorNum, uint16_t recordID,
     int nameSize = std::min(name.size(), sizeof(record.body.id_string));
     record.body.id_string_info = nameSize;
     // Accroding to table 42- sensor type code
-    record.body.sensor_type =
-        static_cast<uint8_t>(SensorTypeCodes::systemFirmwareProgress);
+    record.body.sensor_type = type;
     record.body.event_reading_type =
         static_cast<uint8_t>(SensorEventTypeCodes::sensorSpecified);
     std::strncpy(record.body.id_string, name.c_str(), nameSize);
@@ -2639,11 +2647,40 @@ static int getSensorDataRecord(
         // key part to avoid additional DBus transaction.
         if (readBytes <= sizeof(record.header) + sizeof(record.key))
         {
-            constructBootProgressHeaderKey(sensorNum, recordID, record);
+            constructCommonSensorHeaderKey(sensorNum, recordID, record,
+                                           systemFirmwareEntityId,
+                                           systemSoftwareId);
         }
         else
         {
-            constructBootProgressSdr(sensorNum, recordID, path, record);
+            constructCommonSensorSdr(
+                sensorNum, recordID, path, record,
+                static_cast<uint8_t>(SensorTypeCodes::systemFirmwareProgress),
+                systemFirmwareEntityId, systemSoftwareId);
+        }
+        recordData.insert(recordData.end(), (uint8_t*)&record,
+                          ((uint8_t*)&record) + sizeof(record));
+        return 0;
+    }
+
+    if (std::find(interfaces.begin(), interfaces.end(), sensor::cpuInterface) !=
+        interfaces.end())
+    {
+        get_sdr::SensorDataEventRecord record = {0};
+
+        // If the request doesn't read SDR body, construct only header and
+        // key part to avoid additional DBus transaction.
+        if (readBytes <= sizeof(record.header) + sizeof(record.key))
+        {
+            constructCommonSensorHeaderKey(sensorNum, recordID, record,
+                                           processorEntityId, bmcI2CAddr);
+        }
+        else
+        {
+            constructCommonSensorSdr(
+                sensorNum, recordID, path, record,
+                static_cast<uint8_t>(SensorTypeCodes::processor),
+                processorEntityId, bmcI2CAddr);
         }
         recordData.insert(recordData.end(), (uint8_t*)&record,
                           ((uint8_t*)&record) + sizeof(record));
