@@ -143,7 +143,7 @@ namespace chassis
 {
 namespace internal
 {
-
+constexpr auto timeoutOverRideProperty = "BootValidTimeoutOverride";
 constexpr auto bootSettingsPath = "/xyz/openbmc_project/control/host0/boot";
 constexpr auto bootEnableIntf = "xyz.openbmc_project.Object.Enable";
 constexpr auto bootModeIntf = "xyz.openbmc_project.Control.Boot.Mode";
@@ -157,6 +157,8 @@ constexpr auto powerRestoreIntf =
     "xyz.openbmc_project.Control.Power.RestorePolicy";
 
 constexpr auto bootFlagIntf = "xyz.openbmc_project.Control.Boot.Flags";
+constexpr auto bootValidFlagClearIntf =
+    "xyz.openbmc_project.Control.Boot.BootSettingsExpiryOverride";
 constexpr auto bootInstanceIntf = "xyz.openbmc_project.Control.Boot.Instance";
 constexpr auto bootInstanceTypeIntf =
     "xyz.openbmc_project.Control.Boot.InstanceType";
@@ -1999,6 +2001,65 @@ static ipmi::Cc setBootFlag(ipmi::Context::ptr& ctx, const std::string& flag,
     return ipmi::ccUnspecifiedError;
 }
 
+/** @brief Get the property value for boot flags
+ *  @param[in] ctx - context pointer
+ *  @param[in] flag - flag name
+ *  @param[out] value - value
+ *  @return On failure return IPMI error.
+ */
+static ipmi::Cc getBootFlagTimeoutDis(ipmi::Context::ptr& ctx, bool& value)
+{
+    using namespace chassis::internal;
+    std::string service;
+    boost::system::error_code ec = getService(ctx, bootValidFlagClearIntf,
+                                              bootSettingsPath, service);
+    if (!ec)
+    {
+        ec = ipmi::getDbusProperty(ctx, service, bootSettingsPath,
+                                   bootValidFlagClearIntf,
+                                   timeoutOverRideProperty, value);
+        if (!ec)
+        {
+            return ipmi::ccSuccess;
+        }
+    }
+    log<level::ERR>(
+        ("Error in Flag " + std::string(timeoutOverRideProperty) + " Get")
+            .c_str(),
+        entry("ERROR=%s", ec.message().c_str()));
+    return ipmi::ccUnspecifiedError;
+}
+
+/** @brief Set the property value for boot flags
+ *  @param[in] ctx - context pointer
+ *  @param[in] flag - flag name
+ *  @param[in] value - value
+ *  @return On failure return IPMI error.
+ */
+static ipmi::Cc setBootFlagTimeoutDis(ipmi::Context::ptr& ctx,
+                                      const bool& value)
+{
+    using namespace chassis::internal;
+    std::string service;
+    boost::system::error_code ec = getService(ctx, bootValidFlagClearIntf,
+                                              bootSettingsPath, service);
+    if (!ec)
+    {
+        ec = ipmi::setDbusProperty(ctx, service, bootSettingsPath,
+                                   bootValidFlagClearIntf,
+                                   timeoutOverRideProperty, value);
+        if (!ec)
+        {
+            return ipmi::ccSuccess;
+        }
+    }
+    log<level::ERR>(
+        ("Error in Flag " + std::string(timeoutOverRideProperty) + " Set")
+            .c_str(),
+        entry("ERROR=%s", ec.message().c_str()));
+    return ipmi::ccUnspecifiedError;
+}
+
 /** @brief Get the property value for console redirection
  *  @param[in] ctx - context pointer
  *  @param[out] redirection - console redirection value
@@ -2377,6 +2438,16 @@ ipmi::RspType<ipmi::message::Payload>
     if (types::enum_cast<BootOptionParameter>(bootOptionParameter) ==
         BootOptionParameter::bootFlagValidClr)
     {
+        bool bootFlagTimeoutDis = false;
+        getBootFlagTimeoutDis(ctx, bootFlagTimeoutDis);
+        if (bootFlagTimeoutDis)
+        {
+            bootFlagValidBitClr |= (1 << 3); // Set the 3rd bit to 1
+        }
+        else
+        {
+            bootFlagValidBitClr &= ~(1 << 3); // Clear the 3rd bit to 0
+        }
         response.pack(bootOptionParameter, reserved1,
                       uint5_t{bootFlagValidBitClr}, uint3_t{});
         return ipmi::responseSuccess(std::move(response));
@@ -2661,7 +2732,6 @@ ipmi::RspType<> ipmiChassisSetSysBootOptions(ipmi::Context::ptr ctx,
      * Parameter #5 means boot flags. Please refer to 28.13 of ipmi doc.
      * This is the only parameter used by petitboot.
      */
-
     if (types::enum_cast<BootOptionParameter>(parameterSelector) ==
         BootOptionParameter::bootFlags)
     {
@@ -2969,7 +3039,16 @@ ipmi::RspType<> ipmiChassisSetSysBootOptions(ipmi::Context::ptr ctx,
             return ipmi::responseInvalidFieldRequest();
         }
         // store boot flag valid bits clear value
+
         bootFlagValidBitClr = static_cast<uint8_t>(bootFlagValidClr);
+        bool bootFlagTimeoutDis = false;
+        // Check if the 3rd bit (timeout override) is 1 or 0.
+        // true - timeout is disables boot valid flag will not be set to false
+        // after 60 seconds. false - timeout is Enable boot valid flag will be
+        // set to false after 60 seconds.
+        if (uint5_t{bootFlagValidBitClr} & (1 << 3))
+            bootFlagTimeoutDis = true;
+        setBootFlagTimeoutDis(ctx, bootFlagTimeoutDis);
         log<level::INFO>(
             "ipmiChassisSetSysBootOptions: bootFlagValidBits parameter set "
             "successfully",
