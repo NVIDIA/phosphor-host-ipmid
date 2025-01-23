@@ -1093,7 +1093,7 @@ ipmi::RspType<uint16_t, // current power
     constexpr uint6_t reserved1 = 0;
     constexpr bool measurementActive = true;
     constexpr bool reserved2 = false;
-    auto timestamp = static_cast<uint32_t>(time(nullptr));
+    auto timestamp = time(nullptr);
     return ipmi::responseSuccess(power, power, power, power, timestamp,
                                  samplePeriod, reserved1, measurementActive,
                                  reserved2);

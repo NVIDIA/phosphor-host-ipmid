@@ -1261,8 +1261,14 @@ void UserAccess::readUserData()
                 "Corrupted IPMI user data file - invalid user info");
         }
         std::string userName = userInfo[jsonUserName].get<std::string>();
+
+        // Zero-fill the userName array to ensure null termination
+        std::memset(usersTbl.user[usrIndex].userName, 0, ipmiMaxUserName);
+
+        // Copy up to ipmiMaxUserName - 1 characters from userName to prevent
+        // overflow
         std::strncpy(reinterpret_cast<char*>(usersTbl.user[usrIndex].userName),
-                     userName.c_str(), ipmiMaxUserName);
+                     userName.c_str(), ipmiMaxUserName - 1);
 
         std::vector<std::string> privilege =
             userInfo[jsonPriv].get<std::vector<std::string>>();

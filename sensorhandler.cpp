@@ -670,8 +670,15 @@ get_sdr::GetSensorThresholdsResponse
     constexpr auto criticalThreshIntf =
         "xyz.openbmc_project.Sensor.Threshold.Critical";
 
-    const auto iter = ipmi::sensor::sensors.find(sensorNum);
-    const auto info = iter->second;
+    const auto& iter = ipmi::sensor::sensors.find(sensorNum);
+    // Check if the sensor was found
+    if (iter == ipmi::sensor::sensors.end())
+    {
+        // Sensor not found, return default response
+        return resp;
+    }
+
+    const auto& info = iter->second;
 
     std::string service;
     boost::system::error_code ec;
