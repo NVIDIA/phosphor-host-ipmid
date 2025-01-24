@@ -312,6 +312,9 @@ std::map<DbusInterface,
         {"xyz.openbmc_project.Inventory.Item.GPU",
          {{oemType, {{oemType, {{oemType, 0}}}}}}}};
 
+std::list<std::string> discreteInterfaceEventOnly = {
+    "xyz.openbmc_project.Inventory.Item.PowerSupplyEvent"};
+
 } // namespace sensor
 
 static void getSensorMaxMin(const DbusInterfaceMap& sensorMap, double& max,
@@ -2685,6 +2688,32 @@ static int getSensorDataRecord(
         recordData.insert(recordData.end(), (uint8_t*)&record,
                           ((uint8_t*)&record) + sizeof(record));
         return 0;
+    }
+
+    for (auto& it : sensor::discreteInterfaceEventOnly)
+    {
+        if (std::find(interfaces.begin(), interfaces.end(), it) !=
+            interfaces.end())
+        {
+            get_sdr::SensorDataEventRecord record = {0};
+
+            // If the request doesn't read SDR body, construct only header and
+            // key part to avoid additional DBus transaction.
+            if (readBytes <= sizeof(record.header) + sizeof(record.key))
+            {
+                constructCommonSensorHeaderKey(sensorNum, recordID, record,
+                                               eidReserved, bmcI2CAddr);
+            }
+            else
+            {
+                uint8_t sensor_type = getSensorTypeFromPath(path);
+                constructCommonSensorSdr(sensorNum, recordID, path, record,
+                                         sensor_type, eidReserved, bmcI2CAddr);
+            }
+            recordData.insert(recordData.end(), (uint8_t*)&record,
+                              ((uint8_t*)&record) + sizeof(record));
+            break;
+        }
     }
 
     return 0;

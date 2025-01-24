@@ -163,6 +163,8 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
         "xyz.openbmc_project.Control.PowerSupplyRedundancy",
         "xyz.openbmc_project.Inventory.Item.SEL",
         "xyz.openbmc_project.Inventory.Item.GPU"};
+    static constexpr const std::array discreteInterfacesEventOnly = {
+        "xyz.openbmc_project.Inventory.Item.PowerSupplyEvent"};
     static constexpr const std::array bootProgressInterfaces = {
         "xyz.openbmc_project.State.Boot.Progress"};
 
@@ -318,11 +320,12 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
     // Add boot progress sensor
     (void)lbdUpdateSensorTree("/xyz/openbmc_project/state",
                               bootProgressInterfaces);
-
     // Add processor sensor
     (void)lbdUpdateSensorTree("/xyz/openbmc_project/state",
                               processorInterfaces);
-
+    // Add discrete sensors that returns Event-Only Record
+    (void)lbdUpdateSensorTree("/xyz/openbmc_project/sensors/motherboard",
+                              discreteInterfacesEventOnly);
     subtree = sensorTreePtr;
     sensorUpdatedIndex++;
     // The SDR is being regenerated, wipe the old stats
