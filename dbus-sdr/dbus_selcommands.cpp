@@ -13,7 +13,8 @@
 
 #include <filesystem>
 #include <fstream>
-constexpr auto DEFALUT_SENSOR_NUMBER = 0xffff;
+constexpr auto DEFALUT_SENSOR_NUMBER = 0xff;
+constexpr auto INVALID_SENSOR_NUMBER = 0xffff;
 constexpr auto MAX_ALLOWED_SEL_ENTRIES = 4000;
 // The SELs are limited by IPMITOOL to 64KB. Each SEL entry
 // is 16 bytes, meaning a maximum of 4000 SELs is allowed.
@@ -118,9 +119,9 @@ GetSELEntryResponse createSELEntry(const std::string& objPath)
     }
     // Default values when there is no matched sensor
     record.event.eventRecord.sensorType = 0;
-    record.event.eventRecord.sensorNum = 0xFF;
+    record.event.eventRecord.sensorNum = DEFALUT_SENSOR_NUMBER;
     record.event.eventRecord.eventType = 0;
-    uint16_t sensorNumTmp = DEFALUT_SENSOR_NUMBER;
+    uint16_t sensorNumTmp = INVALID_SENSOR_NUMBER;
     std::string sensorPath("");
     auto iter = m.find(strSensorPath);
     if (iter != m.end())
@@ -132,23 +133,35 @@ GetSELEntryResponse createSELEntry(const std::string& objPath)
         log<level::ERR>("Event not from matched sensor, Hence logging it with "
                         "default values");
     }
-
+    iter = m.find(strSensorNumber);
+    if (iter != m.end())
+    {
+        // Get the sensor number from the SEL dbus object
+        record.event.eventRecord.sensorNum =
+            static_cast<uint8_t>(convert(iter->second));
+    }
     if (!sensorPath.empty())
     {
         try
         {
-            sensorNumTmp = getSensorNumberFromPath(sensorPath);
-            // if the sensor dbus tree is not loaded the BMC can’t restore the
-            //  SELs
-            if (sensorNumTmp == DEFALUT_SENSOR_NUMBER)
+            // Get a new number if the SEL is a valid sensor with a sensor
+            // number different from 0xff
+            if (record.event.eventRecord.sensorNum != DEFALUT_SENSOR_NUMBER)
             {
-                log<level::ERR>(
-                    "Sensor D-bus tree is not yet loaded please try again later");
-                elog<InternalFailure>();
-            }
-            else
-            {
-                record.event.eventRecord.sensorNum = sensorNumTmp;
+                sensorNumTmp = getSensorNumberFromPath(sensorPath);
+                // if the sensor dbus tree is not loaded the BMC can’t restore
+                // the
+                //  SELs
+                if (sensorNumTmp == INVALID_SENSOR_NUMBER)
+                {
+                    log<level::ERR>(
+                        "Sensor D-bus tree is not yet loaded please try again later");
+                    elog<InternalFailure>();
+                }
+                else
+                {
+                    record.event.eventRecord.sensorNum = sensorNumTmp;
+                }
             }
             record.event.eventRecord.eventType =
                 getSensorEventTypeFromPath(sensorPath);
