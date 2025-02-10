@@ -544,16 +544,23 @@ ipmi_ret_t getFruSdrs([[maybe_unused]] ipmi::Context::ptr ctx, size_t index,
     {
         return IPMI_CC_RESPONSE_ERROR;
     }
-    auto findProductName = fruData->find("BOARD_PRODUCT_NAME");
-    auto findBoardName = fruData->find("PRODUCT_PRODUCT_NAME");
-    if (findProductName != fruData->end())
+
+    std::vector<std::string> nameProperties = {
+        "PRODUCT_PRODUCT_NAME",  "BOARD_PRODUCT_NAME",   "PRODUCT_PART_NUMBER",
+        "BOARD_PART_NUMBER",     "PRODUCT_MANUFACTURER", "BOARD_MANUFACTURER",
+        "PRODUCT_SERIAL_NUMBER", "BOARD_SERIAL_NUMBER"};
+    // Iterate through the list of property names
+
+    for (const std::string& prop : nameProperties)
     {
-        propertyName = std::get<std::string>(findProductName->second);
+        auto findProp = fruData->find(prop);
+        if (findProp != fruData->end())
+        {
+            propertyName = std::get<std::string>(findProp->second);
+            break;
+        }
     }
-    else if (findBoardName != fruData->end())
-    {
-        propertyName = std::get<std::string>(findBoardName->second);
-    }
+
     std::string name;
 
 #ifdef USING_ENTITY_MANAGER_DECORATORS
@@ -669,26 +676,6 @@ ipmi_ret_t getFruSdrs([[maybe_unused]] ipmi::Context::ptr ctx, size_t index,
     }
 
 #endif
-
-    if (name.empty())
-    {
-        std::vector<std::string> nameProperties = {
-            "PRODUCT_PRODUCT_NAME",  "BOARD_PRODUCT_NAME",
-            "PRODUCT_PART_NUMBER",   "BOARD_PART_NUMBER",
-            "PRODUCT_MANUFACTURER",  "BOARD_MANUFACTURER",
-            "PRODUCT_SERIAL_NUMBER", "BOARD_SERIAL_NUMBER"};
-
-        for (const std::string& prop : nameProperties)
-        {
-            auto findProp = fruData->find(prop);
-            if (findProp != fruData->end())
-            {
-                name = std::get<std::string>(findProp->second);
-                break;
-            }
-        }
-    }
-
     if (name.empty())
     {
         if (propertyName.empty())
