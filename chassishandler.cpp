@@ -1896,6 +1896,40 @@ static ipmi::Cc setBootEnable(ipmi::Context::ptr& ctx, const bool& enable)
     return ipmi::ccUnspecifiedError;
 }
 
+/** @brief flips the boot valid flag value and then reverts it
+ *  @param[in] ctx - context pointer
+ *  @return On failure return IPMI error.
+ */
+
+static ipmi::Cc resetBootValid(ipmi::Context::ptr& ctx)
+{
+    ipmi::Cc rc;
+    bool bootValidFlag = false;
+
+    rc = getBootEnable(ctx, bootValidFlag);
+    if (rc != ipmi::ccSuccess)
+    {
+        return ipmi::ccUnspecifiedError;
+    }
+    // if boot valid flag  value is already  false
+    //  do nothing
+    if (!bootValidFlag)
+    {
+        return ipmi::ccSuccess;
+    }
+    rc = setBootEnable(ctx, !bootValidFlag);
+    if (rc != ipmi::ccSuccess)
+    {
+        return ipmi::ccUnspecifiedError;
+    }
+    rc = setBootEnable(ctx, bootValidFlag);
+    if (rc != ipmi::ccSuccess)
+    {
+        return ipmi::ccUnspecifiedError;
+    }
+    return ipmi::ccSuccess;
+}
+
 /** @brief Get the property value for boot override one-time
  *  @param[in] ctx - context pointer
  *  @param[out] onetime - boot override one-time
@@ -2806,14 +2840,11 @@ ipmi::RspType<> ipmiChassisSetSysBootOptions(ipmi::Context::ptr ctx,
             {
                 permanent = false;
             }
-
             rc = setBootOneTime(ctx, !permanent);
-
             if (rc != ipmi::ccSuccess)
             {
                 return ipmi::response(rc);
             }
-
             rc = setBootEnable(ctx, validFlag);
             if (rc != ipmi::ccSuccess)
             {
@@ -3053,6 +3084,13 @@ ipmi::RspType<> ipmiChassisSetSysBootOptions(ipmi::Context::ptr ctx,
             "ipmiChassisSetSysBootOptions: bootFlagValidBits parameter set "
             "successfully",
             entry("value=0x%x", bootFlagValidBitClr));
+        // if timeout is on reset the vlaue of boot valid to enable the timeout
+        // mechanism.
+        if (!bootFlagTimeoutDis)
+        {
+            resetBootValid(ctx);
+        }
+
         return ipmi::responseSuccess();
     }
     else
