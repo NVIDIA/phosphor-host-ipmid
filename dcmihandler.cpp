@@ -8,7 +8,7 @@
 #include <ipmid/utils.hpp>
 #include <nlohmann/json.hpp>
 #include <phosphor-logging/elog-errors.hpp>
-#include <phosphor-logging/log.hpp>
+#include <phosphor-logging/lg2.hpp>
 #include <sdbusplus/bus.hpp>
 #include <xyz/openbmc_project/Common/error.hpp>
 #include <xyz/openbmc_project/Network/EthernetInterface/server.hpp>
@@ -76,14 +76,14 @@ nlohmann::json parseJSONConfig(const std::string& configFile)
     std::ifstream jsonFile(configFile);
     if (!jsonFile.is_open())
     {
-        log<level::ERR>("Temperature readings JSON file not found");
+        lg2::error("Temperature readings JSON file not found");
         elog<InternalFailure>();
     }
 
     auto data = nlohmann::json::parse(jsonFile, nullptr, false);
     if (data.is_discarded())
     {
-        log<level::ERR>("Temperature readings JSON parser failure");
+        lg2::error("Temperature readings JSON parser failure");
         elog<InternalFailure>();
     }
 
@@ -107,8 +107,8 @@ bool isDCMIPowerMgmtSupported()
 std::optional<uint32_t> getPcap(ipmi::Context::ptr& ctx)
 {
     std::string service{};
-    boost::system::error_code ec = ipmi::getService(ctx, pcapInterface,
-                                                    pcapPath, service);
+    boost::system::error_code ec =
+        ipmi::getService(ctx, pcapInterface, pcapPath, service);
     if (ec.value())
     {
         return std::nullopt;
@@ -118,8 +118,7 @@ std::optional<uint32_t> getPcap(ipmi::Context::ptr& ctx)
                                powerCapProp, pcap);
     if (ec.value())
     {
-        log<level::ERR>("Error in getPcap prop",
-                        entry("ERROR=%s", ec.message().c_str()));
+        lg2::error("Error in getPcap prop: {ERROR}", "ERROR", ec.message());
         elog<InternalFailure>();
         return std::nullopt;
     }
@@ -129,8 +128,8 @@ std::optional<uint32_t> getPcap(ipmi::Context::ptr& ctx)
 std::optional<bool> getPcapEnabled(ipmi::Context::ptr& ctx)
 {
     std::string service{};
-    boost::system::error_code ec = ipmi::getService(ctx, pcapInterface,
-                                                    pcapPath, service);
+    boost::system::error_code ec =
+        ipmi::getService(ctx, pcapInterface, pcapPath, service);
     if (ec.value())
     {
         return std::nullopt;
@@ -140,7 +139,7 @@ std::optional<bool> getPcapEnabled(ipmi::Context::ptr& ctx)
                                powerCapEnableProp, pcapEnabled);
     if (ec.value())
     {
-        log<level::ERR>("Error in getPcap prop");
+        lg2::error("Error in getPcap prop");
         elog<InternalFailure>();
         return std::nullopt;
     }
@@ -150,8 +149,8 @@ std::optional<bool> getPcapEnabled(ipmi::Context::ptr& ctx)
 bool setPcap(ipmi::Context::ptr& ctx, const uint32_t powerCap)
 {
     std::string service{};
-    boost::system::error_code ec = ipmi::getService(ctx, pcapInterface,
-                                                    pcapPath, service);
+    boost::system::error_code ec =
+        ipmi::getService(ctx, pcapInterface, pcapPath, service);
     if (ec.value())
     {
         return false;
@@ -161,8 +160,7 @@ bool setPcap(ipmi::Context::ptr& ctx, const uint32_t powerCap)
                                powerCapProp, powerCap);
     if (ec.value())
     {
-        log<level::ERR>("Error in setPcap property",
-                        entry("ERROR=%s", ec.message().c_str()));
+        lg2::error("Error in setPcap property: {ERROR}", "ERROR", ec.message());
         elog<InternalFailure>();
         return false;
     }
@@ -172,8 +170,8 @@ bool setPcap(ipmi::Context::ptr& ctx, const uint32_t powerCap)
 bool setPcapEnable(ipmi::Context::ptr& ctx, bool enabled)
 {
     std::string service{};
-    boost::system::error_code ec = ipmi::getService(ctx, pcapInterface,
-                                                    pcapPath, service);
+    boost::system::error_code ec =
+        ipmi::getService(ctx, pcapInterface, pcapPath, service);
     if (ec.value())
     {
         return false;
@@ -183,8 +181,8 @@ bool setPcapEnable(ipmi::Context::ptr& ctx, bool enabled)
                                powerCapEnableProp, enabled);
     if (ec.value())
     {
-        log<level::ERR>("Error in setPcapEnabled property",
-                        entry("ERROR=%s", ec.message().c_str()));
+        lg2::error("Error in setPcapEnabled property: {ERROR}", "ERROR",
+                   ec.message());
         elog<InternalFailure>();
         return false;
     }
@@ -204,13 +202,13 @@ std::optional<std::string> readAssetTag(ipmi::Context::ptr& ctx)
     }
 
     std::string assetTag{};
-    ec = ipmi::getDbusProperty(ctx, objectInfo.second, objectInfo.first,
-                               dcmi::assetTagIntf, dcmi::assetTagProp,
-                               assetTag);
+    ec =
+        ipmi::getDbusProperty(ctx, objectInfo.second, objectInfo.first,
+                              dcmi::assetTagIntf, dcmi::assetTagProp, assetTag);
     if (ec.value())
     {
-        log<level::ERR>("Error in reading asset tag",
-                        entry("ERROR=%s", ec.message().c_str()));
+        lg2::error("Error in reading asset tag: {ERROR}", "ERROR",
+                   ec.message());
         elog<InternalFailure>();
         return std::nullopt;
     }
@@ -230,13 +228,13 @@ bool writeAssetTag(ipmi::Context::ptr& ctx, const std::string& assetTag)
         return false;
     }
 
-    ec = ipmi::setDbusProperty(ctx, objectInfo.second, objectInfo.first,
-                               dcmi::assetTagIntf, dcmi::assetTagProp,
-                               assetTag);
+    ec =
+        ipmi::setDbusProperty(ctx, objectInfo.second, objectInfo.first,
+                              dcmi::assetTagIntf, dcmi::assetTagProp, assetTag);
     if (ec.value())
     {
-        log<level::ERR>("Error in writing asset tag",
-                        entry("ERROR=%s", ec.message().c_str()));
+        lg2::error("Error in writing asset tag: {ERROR}", "ERROR",
+                   ec.message());
         elog<InternalFailure>();
         return false;
     }
@@ -246,8 +244,8 @@ bool writeAssetTag(ipmi::Context::ptr& ctx, const std::string& assetTag)
 std::optional<std::string> getHostName(ipmi::Context::ptr& ctx)
 {
     std::string service{};
-    boost::system::error_code ec = ipmi::getService(ctx, networkConfigIntf,
-                                                    networkConfigObj, service);
+    boost::system::error_code ec =
+        ipmi::getService(ctx, networkConfigIntf, networkConfigObj, service);
     if (ec.value())
     {
         return std::nullopt;
@@ -257,7 +255,7 @@ std::optional<std::string> getHostName(ipmi::Context::ptr& ctx)
                                networkConfigIntf, hostNameProp, hostname);
     if (ec.value())
     {
-        log<level::ERR>("Error fetching hostname");
+        lg2::error("Error fetching hostname");
         elog<InternalFailure>();
         return std::nullopt;
     }
@@ -405,7 +403,7 @@ ipmi::RspType<> setPowerLimit(ipmi::Context::ptr& ctx, uint16_t reserved1,
 {
     if (!dcmi::isDCMIPowerMgmtSupported())
     {
-        log<level::ERR>("DCMI Power management is unsupported!");
+        lg2::error("DCMI Power management is unsupported!");
         return ipmi::responseInvalidCommand();
     }
 
@@ -422,7 +420,7 @@ ipmi::RspType<> setPowerLimit(ipmi::Context::ptr& ctx, uint16_t reserved1,
         return ipmi::responseUnspecifiedError();
     }
 
-    log<level::INFO>("Set Power Cap", entry("POWERCAP=%u", powerLimit));
+    lg2::info("Set Power Cap: {POWERCAP}", "POWERCAP", powerLimit);
 
     return ipmi::responseSuccess();
 }
@@ -432,7 +430,7 @@ ipmi::RspType<> applyPowerLimit(ipmi::Context::ptr& ctx, bool enabled,
 {
     if (!dcmi::isDCMIPowerMgmtSupported())
     {
-        log<level::ERR>("DCMI Power management is unsupported!");
+        lg2::error("DCMI Power management is unsupported!");
         return ipmi::responseInvalidCommand();
     }
     if (reserved1 || reserved2)
@@ -445,8 +443,8 @@ ipmi::RspType<> applyPowerLimit(ipmi::Context::ptr& ctx, bool enabled,
         return ipmi::responseUnspecifiedError();
     }
 
-    log<level::INFO>("Set Power Cap Enable",
-                     entry("POWERCAPENABLE=%u", static_cast<uint8_t>(enabled)));
+    lg2::info("Set Power Cap Enable: {POWERCAPENABLE}", "POWERCAPENABLE",
+              enabled);
 
     return ipmi::responseSuccess();
 }
@@ -581,9 +579,9 @@ ipmi::RspType<uint8_t,          // length
     return ipmi::responseSuccess(nameSize, data);
 }
 
-ipmi::RspType<uint8_t> setMgmntCtrlIdStr(ipmi::Context::ptr& ctx,
-                                         uint8_t offset, uint8_t count,
-                                         std::vector<char> data)
+ipmi::RspType<uint8_t>
+    setMgmntCtrlIdStr(ipmi::Context::ptr& ctx, uint8_t offset, uint8_t count,
+                      std::vector<char> data)
 {
     if ((offset > dcmi::maxCtrlIdStrLen) || (count > dcmi::maxBytes) ||
         ((offset + count) > dcmi::maxCtrlIdStrLen))
@@ -640,14 +638,14 @@ ipmi::RspType<ipmi::message::Payload> getDCMICapabilities(uint8_t parameter)
     std::ifstream dcmiCapFile(dcmi::gDCMICapabilitiesConfig);
     if (!dcmiCapFile.is_open())
     {
-        log<level::ERR>("DCMI Capabilities file not found");
+        lg2::error("DCMI Capabilities file not found");
         return ipmi::responseUnspecifiedError();
     }
 
     auto data = nlohmann::json::parse(dcmiCapFile, nullptr, false);
     if (data.is_discarded())
     {
-        log<level::ERR>("DCMI Capabilities JSON parser failure");
+        lg2::error("DCMI Capabilities JSON parser failure");
         return ipmi::responseUnspecifiedError();
     }
 
@@ -691,8 +689,8 @@ ipmi::RspType<ipmi::message::Payload> getDCMICapabilities(uint8_t parameter)
                 data.value("FlushEntireSELUponRollOver", 0);
             bool recordLevelSELFlushUponRollOver =
                 data.value("RecordLevelSELFlushUponRollOver", 0);
-            uint12_t numberOfSELEntries = data.value("NumberOfSELEntries",
-                                                     0xcac);
+            uint12_t numberOfSELEntries =
+                data.value("NumberOfSELEntries", 0xcac);
             uint8_t tempMonitoringSamplingFreq =
                 data.value("TempMonitoringSamplingFreq", 0);
             payload.pack(numberOfSELEntries, reserved1,
@@ -728,7 +726,7 @@ ipmi::RspType<ipmi::message::Payload> getDCMICapabilities(uint8_t parameter)
         }
         default:
         {
-            log<level::ERR>("Invalid input parameter");
+            lg2::error("Invalid input parameter");
             return ipmi::responseInvalidFieldRequest();
         }
     }
@@ -741,9 +739,9 @@ namespace dcmi
 namespace temp_readings
 {
 
-std::tuple<bool, bool, uint8_t> readTemp(ipmi::Context::ptr& ctx,
-                                         const std::string& dbusService,
-                                         const std::string& dbusPath)
+std::tuple<bool, bool, uint8_t>
+    readTemp(ipmi::Context::ptr& ctx, const std::string& dbusService,
+             const std::string& dbusPath)
 {
     // Read the temperature value from d-bus object. Need some conversion.
     // As per the interface xyz.openbmc_project.Sensor.Value, the
@@ -758,8 +756,8 @@ std::tuple<bool, bool, uint8_t> readTemp(ipmi::Context::ptr& ctx,
     {
         return std::make_tuple(false, false, 0);
     }
-    auto temperature = std::visit(ipmi::VariantToDoubleVisitor(),
-                                  result.at("Value"));
+    auto temperature =
+        std::visit(ipmi::VariantToDoubleVisitor(), result.at("Value"));
     double absTemp = std::abs(temperature);
 
     auto findFactor = result.find("Scale");
@@ -845,14 +843,14 @@ ipmi::RspType<uint8_t,                // total instances for entity id
     auto it = dcmi::entityIdToName.find(entityId);
     if (it == dcmi::entityIdToName.end())
     {
-        log<level::ERR>("Unknown Entity ID", entry("ENTITY_ID=%d", entityId));
+        lg2::error("Unknown Entity ID: {ENTITY_ID}", "ENTITY_ID", entityId);
         return ipmi::responseInvalidFieldRequest();
     }
 
     if (sensorType != dcmi::temperatureSensorType)
     {
-        log<level::ERR>("Invalid sensor type",
-                        entry("SENSOR_TYPE=%d", sensorType));
+        lg2::error("Invalid sensor type: {SENSOR_TYPE}", "SENSOR_TYPE",
+                   sensorType);
         return ipmi::responseInvalidFieldRequest();
     }
 
@@ -935,9 +933,8 @@ ipmi::RspType<> setDCMIConfParams(ipmi::Context::ptr& ctx, uint8_t parameter,
     return ipmi::responseSuccess();
 }
 
-ipmi::RspType<ipmi::message::Payload> getDCMIConfParams(ipmi::Context::ptr& ctx,
-                                                        uint8_t parameter,
-                                                        uint8_t setSelector)
+ipmi::RspType<ipmi::message::Payload> getDCMIConfParams(
+    ipmi::Context::ptr& ctx, uint8_t parameter, uint8_t setSelector)
 {
     if (setSelector)
     {
@@ -992,36 +989,39 @@ static std::optional<uint16_t> readPower(ipmi::Context::ptr& ctx)
     std::string objectPath;
     if (!sensorFile.is_open())
     {
-        log<level::ERR>("Power reading configuration file not found",
-                        entry("POWER_SENSOR_FILE=%s", POWER_READING_SENSOR));
+        lg2::error(
+            "Power reading configuration file not found: {POWER_SENSOR_FILE}",
+            "POWER_SENSOR_FILE", std::string_view{POWER_READING_SENSOR});
         return std::nullopt;
     }
 
     auto data = nlohmann::json::parse(sensorFile, nullptr, false);
     if (data.is_discarded())
     {
-        log<level::ERR>("Error in parsing configuration file",
-                        entry("POWER_SENSOR_FILE=%s", POWER_READING_SENSOR));
+        lg2::error("Error in parsing configuration file: {POWER_SENSOR_FILE}",
+                   "POWER_SENSOR_FILE", std::string_view{POWER_READING_SENSOR});
         return std::nullopt;
     }
 
     objectPath = data.value("path", "");
     if (objectPath.empty())
     {
-        log<level::ERR>("Power sensor D-Bus object path is empty",
-                        entry("POWER_SENSOR_FILE=%s", POWER_READING_SENSOR));
+        lg2::error(
+            "Power sensor D-Bus object path is empty: {POWER_SENSOR_FILE}",
+            "POWER_SENSOR_FILE", std::string_view{POWER_READING_SENSOR});
         return std::nullopt;
     }
 
     // Return default value if failed to read from D-Bus object
     std::string service{};
-    boost::system::error_code ec = ipmi::getService(ctx, dcmi::sensorValueIntf,
-                                                    objectPath, service);
+    boost::system::error_code ec =
+        ipmi::getService(ctx, dcmi::sensorValueIntf, objectPath, service);
     if (ec.value())
     {
-        log<level::ERR>("Failed to fetch service for D-Bus object",
-                        entry("OBJECT_PATH=%s", objectPath.c_str()),
-                        entry("INTERFACE=%s", dcmi::sensorValueIntf));
+        lg2::error("Failed to fetch service for D-Bus object, "
+                   "object path: {OBJECT_PATH}, interface: {INTERFACE}",
+                   "OBJECT_PATH", objectPath, "INTERFACE",
+                   dcmi::sensorValueIntf);
         return std::nullopt;
     }
 
@@ -1031,9 +1031,10 @@ static std::optional<uint16_t> readPower(ipmi::Context::ptr& ctx)
                                dcmi::sensorValueProp, value);
     if (ec.value())
     {
-        log<level::ERR>("Failure to read power value from D-Bus object",
-                        entry("OBJECT_PATH=%s", objectPath.c_str()),
-                        entry("INTERFACE=%s", dcmi::sensorValueIntf));
+        lg2::error("Failed to read power value from D-Bus object, "
+                   "object path: {OBJECT_PATH}, interface: {INTERFACE}",
+                   "OBJECT_PATH", objectPath, "INTERFACE",
+                   dcmi::sensorValueIntf);
         return std::nullopt;
     }
     auto power = static_cast<uint16_t>(value);
@@ -1055,7 +1056,7 @@ ipmi::RspType<uint16_t, // current power
 {
     if (!dcmi::isDCMIPowerMgmtSupported())
     {
-        log<level::ERR>("DCMI Power management is unsupported!");
+        lg2::error("DCMI Power management is unsupported!");
         return ipmi::responseInvalidCommand();
     }
     if (reserved)
@@ -1104,10 +1105,9 @@ namespace dcmi
 namespace sensor_info
 {
 
-std::tuple<std::vector<uint16_t>, uint8_t> read(const std::string& type,
-                                                uint8_t instance,
-                                                const nlohmann::json& config,
-                                                uint8_t count)
+std::tuple<std::vector<uint16_t>, uint8_t>
+    read(const std::string& type, uint8_t instance,
+         const nlohmann::json& config, uint8_t count)
 {
     std::vector<uint16_t> responses{};
 
@@ -1149,14 +1149,14 @@ ipmi::RspType<uint8_t,              // total available instances
     auto it = dcmi::entityIdToName.find(entityId);
     if (it == dcmi::entityIdToName.end())
     {
-        log<level::ERR>("Unknown Entity ID", entry("ENTITY_ID=%d", entityId));
+        lg2::error("Unknown Entity ID: {ENTITY_ID}", "ENTITY_ID", entityId);
         return ipmi::responseInvalidFieldRequest();
     }
 
     if (sensorType != dcmi::temperatureSensorType)
     {
-        log<level::ERR>("Invalid sensor type",
-                        entry("SENSOR_TYPE=%d", sensorType));
+        lg2::error("Invalid sensor type: {SENSOR_TYPE}", "SENSOR_TYPE",
+                   sensorType);
         return ipmi::responseInvalidFieldRequest();
     }
 

@@ -27,7 +27,7 @@
 #include <unistd.h>
 
 #include <boost/crc.hpp>
-#include <phosphor-logging/log.hpp>
+#include <phosphor-logging/lg2.hpp>
 
 #include <cerrno>
 #include <cstring>
@@ -60,8 +60,6 @@ struct MetaPassStruct
     size_t macSize;
 };
 
-using namespace phosphor::logging;
-
 PasswdMgr::PasswdMgr()
 {
     restrictFilesPermission();
@@ -78,7 +76,7 @@ void PasswdMgr::restrictFilesPermission(void)
         {
             if (chmod(passwdFileName, S_IRUSR | S_IWUSR) == -1)
             {
-                log<level::DEBUG>("Error setting chmod for ipmi_pass file");
+                lg2::debug("Error setting chmod for ipmi_pass file");
             }
         }
     }
@@ -89,7 +87,7 @@ void PasswdMgr::restrictFilesPermission(void)
         {
             if (chmod(encryptKeyFileName, S_IRUSR | S_IWUSR) == -1)
             {
-                log<level::DEBUG>("Error setting chmod for ipmi_pass file");
+                lg2::debug("Error setting chmod for ipmi_pass file");
             }
         }
     }
@@ -117,7 +115,7 @@ int PasswdMgr::updateUserEntry(const std::string& userName,
     {
         if (passwdMapList.find(userName) == passwdMapList.end())
         {
-            log<level::DEBUG>("User not found");
+            lg2::debug("User not found");
             return 0;
         }
     }
@@ -125,11 +123,11 @@ int PasswdMgr::updateUserEntry(const std::string& userName,
     // Write passwdMap to Encryted file
     if (updatePasswdSpecialFile(userName, newUserName) != 0)
     {
-        log<level::DEBUG>("Passwd file update failed");
+        lg2::debug("Passwd file update failed");
         return -EIO;
     }
 
-    log<level::DEBUG>("Passwd file updated successfully");
+    lg2::debug("Passwd file updated successfully");
     return 0;
 }
 
@@ -138,25 +136,23 @@ void PasswdMgr::checkAndReload(void)
     uint32_t CRC = getUpdatedFileCRC();
     if (CRC == 0 || CRC != fileLastUpdatedCRC)
     {
-        log<level::DEBUG>("Reloading password map list");
+        lg2::debug("Reloading password map list");
         passwdMapList.clear();
         initPasswordMap();
     }
 }
 
-int PasswdMgr::encryptDecryptData(bool doEncrypt, const EVP_CIPHER* cipher,
-                                  uint8_t* key, size_t keyLen, uint8_t* iv,
-                                  size_t ivLen, uint8_t* inBytes,
-                                  size_t inBytesLen, uint8_t* mac,
-                                  size_t* macLen, unsigned char* outBytes,
-                                  size_t* outBytesLen)
+int PasswdMgr::encryptDecryptData(
+    bool doEncrypt, const EVP_CIPHER* cipher, uint8_t* key, size_t keyLen,
+    uint8_t* iv, size_t ivLen, uint8_t* inBytes, size_t inBytesLen,
+    uint8_t* mac, size_t* macLen, unsigned char* outBytes, size_t* outBytesLen)
 {
     if (cipher == NULL || key == NULL || iv == NULL || inBytes == NULL ||
         outBytes == NULL || mac == NULL || inBytesLen == 0 ||
         (size_t)EVP_CIPHER_key_length(cipher) > keyLen ||
         (size_t)EVP_CIPHER_iv_length(cipher) > ivLen)
     {
-        log<level::DEBUG>("Error Invalid Inputs");
+        lg2::debug("Error Invalid Inputs");
         return -EINVAL;
     }
 
@@ -166,17 +162,17 @@ int PasswdMgr::encryptDecryptData(bool doEncrypt, const EVP_CIPHER* cipher,
         std::array<uint8_t, EVP_MAX_MD_SIZE> calMac;
         size_t calMacLen = calMac.size();
         // calculate MAC for the encrypted message.
-        if (NULL == HMAC(EVP_sha256(), key, keyLen, inBytes, inBytesLen,
-                         calMac.data(),
-                         reinterpret_cast<unsigned int*>(&calMacLen)))
+        if (NULL ==
+            HMAC(EVP_sha256(), key, keyLen, inBytes, inBytesLen, calMac.data(),
+                 reinterpret_cast<unsigned int*>(&calMacLen)))
         {
-            log<level::DEBUG>("Error: Failed to calculate MAC");
+            lg2::debug("Error: Failed to calculate MAC");
             return -EIO;
         }
         if (!((calMacLen == *macLen) &&
               (std::memcmp(calMac.data(), mac, calMacLen) == 0)))
         {
-            log<level::DEBUG>("Authenticated message doesn't match");
+            lg2::debug("Authenticated message doesn't match");
             return -EBADMSG;
         }
     }
@@ -186,7 +182,7 @@ int PasswdMgr::encryptDecryptData(bool doEncrypt, const EVP_CIPHER* cipher,
 
     if (!ctx)
     {
-        log<level::DEBUG>("Error: EVP_CIPHER_CTX is NULL");
+        lg2::debug("Error: EVP_CIPHER_CTX is NULL");
         return -ENOMEM;
     }
 
@@ -197,8 +193,7 @@ int PasswdMgr::encryptDecryptData(bool doEncrypt, const EVP_CIPHER* cipher,
                                    static_cast<int>(doEncrypt));
     if (!retval)
     {
-        log<level::DEBUG>("EVP_CipherInit_ex failed",
-                          entry("RET_VAL=%d", retval));
+        lg2::debug("EVP_CipherInit_ex failed: {RET_VAL}", "RET_VAL", retval);
         return -EIO;
     }
 
@@ -207,23 +202,21 @@ int PasswdMgr::encryptDecryptData(bool doEncrypt, const EVP_CIPHER* cipher,
                                    inBytes, inBytesLen)))
     {
         outLen += outEVPLen;
-        if ((retval = EVP_CipherFinal(ctx.get(), outBytes + outLen,
-                                      &outEVPLen)))
+        if ((retval =
+                 EVP_CipherFinal(ctx.get(), outBytes + outLen, &outEVPLen)))
         {
             outLen += outEVPLen;
             *outBytesLen = outLen;
         }
         else
         {
-            log<level::DEBUG>("EVP_CipherFinal fails",
-                              entry("RET_VAL=%d", retval));
+            lg2::debug("EVP_CipherFinal fails: {RET_VAL}", "RET_VAL", retval);
             return -EIO;
         }
     }
     else
     {
-        log<level::DEBUG>("EVP_CipherUpdate fails",
-                          entry("RET_VAL=%d", retval));
+        lg2::debug("EVP_CipherUpdate fails: {RET_VAL}", "RET_VAL", retval);
         return -EIO;
     }
 
@@ -233,7 +226,7 @@ int PasswdMgr::encryptDecryptData(bool doEncrypt, const EVP_CIPHER* cipher,
         if (NULL == HMAC(EVP_sha256(), key, keyLen, outBytes, *outBytesLen, mac,
                          reinterpret_cast<unsigned int*>(macLen)))
         {
-            log<level::DEBUG>("Failed to create authentication");
+            lg2::debug("Failed to create authentication");
             return -EIO;
         }
     }
@@ -247,7 +240,7 @@ void PasswdMgr::initPasswordMap(void)
 
     if (readPasswdFileData(dataBuf) != 0)
     {
-        log<level::DEBUG>("Error in reading the encrypted pass file");
+        lg2::debug("Error in reading the encrypted pass file");
         return;
     }
 
@@ -284,20 +277,20 @@ int PasswdMgr::readPasswdFileData(SecureString& outBytes)
     std::ifstream keyFile(encryptKeyFileName, std::ios::in | std::ios::binary);
     if (!keyFile.is_open())
     {
-        log<level::DEBUG>("Error in opening encryption key file");
+        lg2::debug("Error in opening encryption key file");
         return -EIO;
     }
     keyFile.read(reinterpret_cast<char*>(keyBuff.data()), keyBuff.size());
     if (keyFile.fail())
     {
-        log<level::DEBUG>("Error in reading encryption key file");
+        lg2::debug("Error in reading encryption key file");
         return -EIO;
     }
 
     std::ifstream passwdFile(passwdFileName, std::ios::in | std::ios::binary);
     if (!passwdFile.is_open())
     {
-        log<level::DEBUG>("Error in opening ipmi password file");
+        lg2::debug("Error in opening ipmi password file");
         return -EIO;
     }
 
@@ -309,7 +302,7 @@ int PasswdMgr::readPasswdFileData(SecureString& outBytes)
     passwdFile.read(reinterpret_cast<char*>(input.data()), fileSize);
     if (passwdFile.fail())
     {
-        log<level::DEBUG>("Error in reading encryption key file");
+        lg2::debug("Error in reading encryption key file");
         return -EIO;
     }
 
@@ -318,7 +311,7 @@ int PasswdMgr::readPasswdFileData(SecureString& outBytes)
     if (std::strncmp(metaData->signature, META_PASSWD_SIG,
                      sizeof(metaData->signature)))
     {
-        log<level::DEBUG>("Error signature mismatch in password file");
+        lg2::debug("Error signature mismatch in password file");
         return -EBADMSG;
     }
 
@@ -326,7 +319,7 @@ int PasswdMgr::readPasswdFileData(SecureString& outBytes)
     // If data is empty i.e no password map then return success
     if (inBytesLen == 0)
     {
-        log<level::DEBUG>("Empty password file");
+        lg2::debug("Empty password file");
         return 0;
     }
 
@@ -337,7 +330,7 @@ int PasswdMgr::readPasswdFileData(SecureString& outBytes)
                      input.data() + sizeof(*metaData), metaData->hashSize,
                      key.data(), reinterpret_cast<unsigned int*>(&keyLen)))
     {
-        log<level::DEBUG>("Failed to create MAC for authentication");
+        lg2::debug("Failed to create MAC for authentication");
         return -EIO;
     }
 
@@ -356,7 +349,7 @@ int PasswdMgr::readPasswdFileData(SecureString& outBytes)
                            reinterpret_cast<unsigned char*>(outBytes.data()),
                            &outBytesLen) != 0)
     {
-        log<level::DEBUG>("Error in decryption");
+        lg2::debug("Error in decryption");
         return -EIO;
     }
     // Resize the vector to outBytesLen
@@ -383,7 +376,7 @@ int PasswdMgr::updatePasswdSpecialFile(const std::string& userName,
     // Check user existance and return if not exist.
     if (readPasswdFileData(dataBuf) != 0)
     {
-        log<level::DEBUG>("Error in reading the encrypted pass file");
+        lg2::debug("Error in reading the encrypted pass file");
         return -EIO;
     }
 
@@ -431,7 +424,7 @@ int PasswdMgr::updatePasswdSpecialFile(const std::string& userName,
     }
     if (!isUsrFound)
     {
-        log<level::DEBUG>("User doesn't exist");
+        lg2::debug("User doesn't exist");
         return 0;
     }
 
@@ -440,13 +433,13 @@ int PasswdMgr::updatePasswdSpecialFile(const std::string& userName,
     std::ifstream keyFile(encryptKeyFileName, std::ios::in | std::ios::binary);
     if (!keyFile.good())
     {
-        log<level::DEBUG>("Error in opening encryption key file");
+        lg2::debug("Error in opening encryption key file");
         return -EIO;
     }
     keyFile.read(reinterpret_cast<char*>(keyBuff.data()), keyBuff.size());
     if (keyFile.fail())
     {
-        log<level::DEBUG>("Error in reading encryption key file");
+        lg2::debug("Error in reading encryption key file");
         return -EIO;
     }
     keyFile.close();
@@ -455,7 +448,7 @@ int PasswdMgr::updatePasswdSpecialFile(const std::string& userName,
     struct stat st = {};
     if (stat(passwdFileName, &st) != 0)
     {
-        log<level::DEBUG>("Error in getting password file fstat()");
+        lg2::debug("Error in getting password file fstat()");
         return -EIO;
     }
 
@@ -469,7 +462,7 @@ int PasswdMgr::updatePasswdSpecialFile(const std::string& userName,
     int fd = mkstemp((char*)tempFileName.data());
     if (fd == -1)
     {
-        log<level::DEBUG>("Error creating temp file");
+        lg2::debug("Error creating temp file");
         return -EIO;
     }
 
@@ -481,14 +474,14 @@ int PasswdMgr::updatePasswdSpecialFile(const std::string& userName,
     if ((temp)() == NULL)
     {
         close(fd);
-        log<level::DEBUG>("Error creating temp file");
+        lg2::debug("Error creating temp file");
         return -EIO;
     }
 
     // Set the file mode as read-write for owner only
     if (fchmod(fileno((temp)()), S_IRUSR | S_IWUSR) < 0)
     {
-        log<level::DEBUG>("Error setting fchmod for temp file");
+        lg2::debug("Error setting fchmod for temp file");
         return -EIO;
     }
 
@@ -506,21 +499,21 @@ int PasswdMgr::updatePasswdSpecialFile(const std::string& userName,
     // encryption.
     if (RAND_bytes(hash.data(), hashLen) != 1)
     {
-        log<level::DEBUG>("Hash genertion failed, bailing out");
+        lg2::debug("Hash genertion failed, bailing out");
         return -EIO;
     }
-    if (NULL == HMAC(digest, keyBuff.data(), keyBuff.size(), hash.data(),
-                     hashLen, key.data(),
-                     reinterpret_cast<unsigned int*>(&keyLen)))
+    if (NULL ==
+        HMAC(digest, keyBuff.data(), keyBuff.size(), hash.data(), hashLen,
+             key.data(), reinterpret_cast<unsigned int*>(&keyLen)))
     {
-        log<level::DEBUG>("Failed to create MAC for authentication");
+        lg2::debug("Failed to create MAC for authentication");
         return -EIO;
     }
 
     // Generate IV values
     if (RAND_bytes(iv.data(), ivLen) != 1)
     {
-        log<level::DEBUG>("UV genertion failed, bailing out");
+        lg2::debug("UV genertion failed, bailing out");
         return -EIO;
     }
 
@@ -534,7 +527,7 @@ int PasswdMgr::updatePasswdSpecialFile(const std::string& userName,
                 reinterpret_cast<unsigned char*>(inBytes.data()), inBytesLen,
                 mac.data(), &macLen, outBytes.data(), &outBytesLen) != 0)
         {
-            log<level::DEBUG>("Error while encrypting the data");
+            lg2::debug("Error while encrypting the data");
             return -EIO;
         }
         outBytes[outBytesLen] = 0;
@@ -551,38 +544,37 @@ int PasswdMgr::updatePasswdSpecialFile(const std::string& userName,
 
     if (fwrite(&metaData, 1, sizeof(metaData), (temp)()) != sizeof(metaData))
     {
-        log<level::DEBUG>("Error in writing meta data");
+        lg2::debug("Error in writing meta data");
         return -EIO;
     }
 
     if (fwrite(&hash[0], 1, hashLen, (temp)()) != hashLen)
     {
-        log<level::DEBUG>("Error in writing hash data");
+        lg2::debug("Error in writing hash data");
         return -EIO;
     }
 
     if (fwrite(&iv[0], 1, ivLen, (temp)()) != ivLen)
     {
-        log<level::DEBUG>("Error in writing IV data");
+        lg2::debug("Error in writing IV data");
         return -EIO;
     }
 
     if (fwrite(&outBytes[0], 1, outBytesLen, (temp)()) != outBytesLen)
     {
-        log<level::DEBUG>("Error in writing encrypted data");
+        lg2::debug("Error in writing encrypted data");
         return -EIO;
     }
 
     if (fwrite(&mac[0], 1, macLen, (temp)()) != macLen)
     {
-        log<level::DEBUG>("Error in writing MAC data");
+        lg2::debug("Error in writing MAC data");
         return -EIO;
     }
 
     if (fflush((temp)()))
     {
-        log<level::DEBUG>(
-            "File fflush error while writing entries to special file");
+        lg2::debug("File fflush error while writing entries to special file");
         return -EIO;
     }
 
@@ -591,7 +583,7 @@ int PasswdMgr::updatePasswdSpecialFile(const std::string& userName,
     // Rename the tmp  file to actual file
     if (std::rename(strTempFileName.data(), passwdFileName) != 0)
     {
-        log<level::DEBUG>("Failed to rename tmp file to ipmi-pass");
+        lg2::debug("Failed to rename tmp file to ipmi-pass");
         return -EIO;
     }
 
@@ -603,8 +595,8 @@ uint32_t PasswdMgr::getUpdatedFileCRC()
     std::ifstream file(passwdFileName, std::ios::binary);
     if (!file)
     {
-        log<level::DEBUG>("Error in opening file ipmi password file");
-        return 0;
+        lg2::debug("Error - Getting passwd file time stamp");
+        return -EIO;
     }
 
     // Create a CRC32 calculator

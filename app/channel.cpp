@@ -8,7 +8,7 @@
 #include <ipmid/types.hpp>
 #include <ipmid/utils.hpp>
 #include <phosphor-logging/elog-errors.hpp>
-#include <phosphor-logging/log.hpp>
+#include <phosphor-logging/lg2.hpp>
 #include <xyz/openbmc_project/Common/error.hpp>
 
 #include <fstream>
@@ -43,14 +43,14 @@ std::pair<std::vector<uint8_t>, std::vector<uint8_t>> getCipherRecords()
     std::ifstream jsonFile(configFile);
     if (!jsonFile.is_open())
     {
-        log<level::ERR>("Channel Cipher suites file not found");
+        lg2::error("Channel Cipher suites file not found");
         elog<InternalFailure>();
     }
 
     auto data = Json::parse(jsonFile, nullptr, false);
     if (data.is_discarded())
     {
-        log<level::ERR>("Parsing channel cipher suites JSON failed");
+        lg2::error("Parsing channel cipher suites JSON failed");
         elog<InternalFailure>();
     }
 
@@ -131,7 +131,7 @@ ipmi::RspType<uint8_t,             // Channel Number
     }
     if (!ipmi::isValidPayloadType(static_cast<ipmi::PayloadType>(payloadType)))
     {
-        log<level::DEBUG>("Get channel cipher suites - Invalid payload type");
+        lg2::debug("Get channel cipher suites - Invalid payload type");
         constexpr uint8_t ccPayloadTypeNotSupported = 0x80;
         return ipmi::response(ccPayloadTypeNotSupported);
     }
@@ -140,8 +140,8 @@ ipmi::RspType<uint8_t,             // Channel Number
     {
         try
         {
-            std::tie(cipherRecords,
-                     supportedAlgorithms) = cipher::getCipherRecords();
+            std::tie(cipherRecords, supportedAlgorithms) =
+                cipher::getCipherRecords();
             recordInit = true;
         }
         catch (const std::exception& e)
@@ -150,8 +150,8 @@ ipmi::RspType<uint8_t,             // Channel Number
         }
     }
 
-    const std::vector<uint8_t>& records = algoSelectBit ? cipherRecords
-                                                        : supportedAlgorithms;
+    const std::vector<uint8_t>& records =
+        algoSelectBit ? cipherRecords : supportedAlgorithms;
     static constexpr auto respSize = 16;
 
     // Session support is available in active LAN channels.
@@ -159,7 +159,7 @@ ipmi::RspType<uint8_t,             // Channel Number
          ipmi::EChannelSessSupported::none) ||
         !(ipmi::doesDeviceExist(rspChannel)))
     {
-        log<level::DEBUG>("Get channel cipher suites - Device does not exist");
+        lg2::debug("Get channel cipher suites - Device does not exist");
         return ipmi::responseInvalidFieldRequest();
     }
 
@@ -167,8 +167,8 @@ ipmi::RspType<uint8_t,             // Channel Number
     // set of 16 and so on.
 
     // Calculate the number of record data bytes to be returned.
-    auto start = std::min(static_cast<size_t>(listIndex) * respSize,
-                          records.size());
+    auto start =
+        std::min(static_cast<size_t>(listIndex) * respSize, records.size());
     auto end = std::min((static_cast<size_t>(listIndex) * respSize) + respSize,
                         records.size());
     auto size = end - start;

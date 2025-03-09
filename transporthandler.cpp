@@ -1,16 +1,14 @@
 #include "transporthandler.hpp"
 
+#include <ipmid/utils.hpp>
+#include <phosphor-logging/lg2.hpp>
 #include <stdplus/net/addr/subnet.hpp>
 #include <stdplus/raw.hpp>
 
 #include <array>
 #include <fstream>
 
-using phosphor::logging::commit;
 using phosphor::logging::elog;
-using phosphor::logging::entry;
-using phosphor::logging::level;
-using phosphor::logging::log;
 using sdbusplus::error::xyz::openbmc_project::common::InternalFailure;
 using sdbusplus::error::xyz::openbmc_project::common::InvalidArgument;
 using sdbusplus::server::xyz::openbmc_project::network::EthernetInterface;
@@ -27,14 +25,14 @@ std::vector<uint8_t> getCipherList()
     std::ifstream jsonFile(cipher::configFile);
     if (!jsonFile.is_open())
     {
-        log<level::ERR>("Channel Cipher suites file not found");
+        lg2::error("Channel Cipher suites file not found");
         elog<InternalFailure>();
     }
 
     auto data = Json::parse(jsonFile, nullptr, false);
     if (data.is_discarded())
     {
-        log<level::ERR>("Parsing channel cipher suites JSON failed");
+        lg2::error("Parsing channel cipher suites JSON failed");
         elog<InternalFailure>();
     }
 
@@ -73,8 +71,8 @@ bool ifnameInPath(std::string_view ifname, std::string_view path)
            (path.size() == is || path[is] == '/' || path[is] == '_');
 }
 
-std::optional<ChannelParams> maybeGetChannelParams(sdbusplus::bus_t& bus,
-                                                   uint8_t channel)
+std::optional<ChannelParams>
+    maybeGetChannelParams(sdbusplus::bus_t& bus, uint8_t channel)
 {
     auto ifname = getChannelName(channel);
     if (ifname.empty())
@@ -83,13 +81,9 @@ std::optional<ChannelParams> maybeGetChannelParams(sdbusplus::bus_t& bus,
     }
 
     // Enumerate all VLAN + ETHERNET interfaces
-    auto req = bus.new_method_call(MAPPER_BUS_NAME, MAPPER_OBJ, MAPPER_INTF,
-                                   "GetSubTree");
-    req.append(std::string_view(PATH_ROOT), 0,
-               std::vector<std::string>{INTF_VLAN, INTF_ETHERNET});
-    auto reply = bus.call(req);
-    ObjectTree objs;
-    reply.read(objs);
+    std::vector<std::string> interfaces = {INTF_VLAN, INTF_ETHERNET};
+    ipmi::ObjectTree objs =
+        ipmi::getSubTree(bus, interfaces, std::string{PATH_ROOT});
 
     ChannelParams params;
     for (const auto& [path, impls] : objs)
@@ -149,33 +143,11 @@ ChannelParams getChannelParams(sdbusplus::bus_t& bus, uint8_t channel)
     auto params = maybeGetChannelParams(bus, channel);
     if (!params)
     {
-        log<level::ERR>("Failed to get channel params",
-                        entry("CHANNEL=%" PRIu8, channel));
+        lg2::error("Failed to get channel params: {CHANNEL}", "CHANNEL",
+                   channel);
         elog<InternalFailure>();
     }
     return std::move(*params);
-}
-
-/** @brief Wraps the phosphor logging method to insert some additional metadata
- *
- *  @param[in] params - The parameters for the channel
- *  ...
- */
-template <auto level, typename... Args>
-auto logWithChannel(const ChannelParams& params, Args&&... args)
-{
-    return log<level>(std::forward<Args>(args)...,
-                      entry("CHANNEL=%d", params.id),
-                      entry("IFNAME=%s", params.ifname.c_str()));
-}
-template <auto level, typename... Args>
-auto logWithChannel(const std::optional<ChannelParams>& params, Args&&... args)
-{
-    if (params)
-    {
-        return logWithChannel<level>(*params, std::forward<Args>(args)...);
-    }
-    return log<level>(std::forward<Args>(args)...);
 }
 
 /** @brief Get / Set the Property value from phosphor-networkd EthernetInterface
@@ -262,9 +234,9 @@ template <int family>
 void createIfAddr(sdbusplus::bus_t& bus, const ChannelParams& params,
                   typename AddrFamily<family>::addr address, uint8_t prefix)
 {
-    auto newreq = bus.new_method_call(params.service.c_str(),
-                                      params.logicalPath.c_str(),
-                                      INTF_IP_CREATE, "IP");
+    auto newreq =
+        bus.new_method_call(params.service.c_str(), params.logicalPath.c_str(),
+                            INTF_IP_CREATE, "IP");
     std::string protocol =
         sdbusplus::common::xyz::openbmc_project::network::convertForMessage(
             AddrFamily<family>::protocol);
@@ -295,7 +267,36 @@ auto getIfAddr4ByIdx(sdbusplus::bus_t& bus, const ChannelParams& params,
  */
 auto getIfAddr4(sdbusplus::bus_t& bus, const ChannelParams& params)
 {
-    return getIfAddr<AF_INET>(bus, params, 0, originsV4);
+    std::optional<IfAddr<AF_INET>> ifaddr4 = std::nullopt;
+    IP::AddressOrigin src;
+
+    try
+    {
+        src = std::get<bool>(
+                  getDbusProperty(bus, params.service, params.logicalPath,
+                                  INTF_ETHERNET, "DHCP4"))
+                  ? IP::AddressOrigin::DHCP
+                  : IP::AddressOrigin::Static;
+    }
+    catch (const sdbusplus::exception_t& e)
+    {
+        lg2::error("Failed to get IPv4 source");
+        return ifaddr4;
+    }
+
+    for (uint8_t i = 0; i < MAX_IPV4_ADDRESSES; ++i)
+    {
+        ifaddr4 = getIfAddr<AF_INET>(bus, params, i, originsV4);
+        if (ifaddr4 && src == ifaddr4->origin)
+        {
+            break;
+        }
+        else
+        {
+            ifaddr4 = std::nullopt;
+        }
+    }
+    return ifaddr4;
 }
 
 /** @brief Reconfigures the IPv4 address info configured for the interface
@@ -312,16 +313,18 @@ void reconfigureIfAddr4(sdbusplus::bus_t& bus, const ChannelParams& params,
     auto ifaddr = getIfAddr4(bus, params);
     if (!ifaddr && !address)
     {
-        log<level::ERR>("Missing address for IPv4 assignment");
+        lg2::error("Missing address for IPv4 assignment");
         elog<InternalFailure>();
     }
     uint8_t fallbackPrefix = AddrFamily<AF_INET>::defaultPrefix;
+    auto addr = stdplus::In4Addr{};
     if (ifaddr)
     {
+        addr = ifaddr->address;
         fallbackPrefix = ifaddr->prefix;
         deleteObjectIfExists(bus, params.service, ifaddr->path);
     }
-    auto addr = address.value_or(ifaddr->address);
+    addr = address.value_or(addr);
     if (addr != stdplus::In4Addr{})
     {
         createIfAddr<AF_INET>(bus, params, addr,
@@ -330,9 +333,9 @@ void reconfigureIfAddr4(sdbusplus::bus_t& bus, const ChannelParams& params,
 }
 
 template <int family>
-std::optional<IfNeigh<family>> findGatewayNeighbor(sdbusplus::bus_t& bus,
-                                                   const ChannelParams& params,
-                                                   ObjectLookupCache& neighbors)
+std::optional<IfNeigh<family>>
+    findGatewayNeighbor(sdbusplus::bus_t& bus, const ChannelParams& params,
+                        ObjectLookupCache& neighbors)
 {
     auto gateway = getGatewayProperty<family>(bus, params);
     if (!gateway)
@@ -344,8 +347,8 @@ std::optional<IfNeigh<family>> findGatewayNeighbor(sdbusplus::bus_t& bus,
 }
 
 template <int family>
-std::optional<IfNeigh<family>> getGatewayNeighbor(sdbusplus::bus_t& bus,
-                                                  const ChannelParams& params)
+std::optional<IfNeigh<family>>
+    getGatewayNeighbor(sdbusplus::bus_t& bus, const ChannelParams& params)
 {
     ObjectLookupCache neighbors(bus, params, INTF_NEIGHBOR);
     return findGatewayNeighbor<family>(bus, params, neighbors);
@@ -358,13 +361,13 @@ void reconfigureGatewayMAC(sdbusplus::bus_t& bus, const ChannelParams& params,
     auto gateway = getGatewayProperty<family>(bus, params);
     if (!gateway)
     {
-        log<level::ERR>("Tried to set Gateway MAC without Gateway");
+        lg2::error("Tried to set Gateway MAC without Gateway");
         elog<InternalFailure>();
     }
 
     ObjectLookupCache neighbors(bus, params, INTF_NEIGHBOR);
-    auto neighbor = findStaticNeighbor<family>(bus, params, *gateway,
-                                               neighbors);
+    auto neighbor =
+        findStaticNeighbor<family>(bus, params, *gateway, neighbors);
     if (neighbor)
     {
         deleteObjectIfExists(bus, params.service, neighbor->path);
@@ -423,9 +426,9 @@ IPv6Source originToSourceType(IP::AddressOrigin origin)
         {
             auto originStr = sdbusplus::common::xyz::openbmc_project::network::
                 convertForMessage(origin);
-            log<level::ERR>(
-                "Invalid IP::AddressOrigin conversion to IPv6Source",
-                entry("ORIGIN=%s", originStr.c_str()));
+            lg2::error("Invalid IP::AddressOrigin conversion to IPv6Source, "
+                       "origin: {ORIGIN}",
+                       "ORIGIN", originStr);
             elog<InternalFailure>();
         }
     }
@@ -482,8 +485,9 @@ uint16_t getVLANProperty(sdbusplus::bus_t& bus, const ChannelParams& params)
         bus, params.service, params.logicalPath, INTF_VLAN, "Id"));
     if ((vlan & VLAN_VALUE_MASK) != vlan)
     {
-        logWithChannel<level::ERR>(params, "networkd returned an invalid vlan",
-                                   entry("VLAN=%" PRIu32, vlan));
+        lg2::error("networkd returned an invalid vlan: {VLAN} "
+                   "(CH={CHANNEL}, IF={IFNAME})",
+                   "CHANNEL", params.id, "IFNAME", params.ifname, "VLAN", vlan);
         elog<InternalFailure>();
     }
     return vlan;
@@ -497,13 +501,9 @@ uint16_t getVLANProperty(sdbusplus::bus_t& bus, const ChannelParams& params)
 void deconfigureChannel(sdbusplus::bus_t& bus, ChannelParams& params)
 {
     // Delete all objects associated with the interface
-    auto objreq = bus.new_method_call(MAPPER_BUS_NAME, MAPPER_OBJ, MAPPER_INTF,
-                                      "GetSubTree");
-    objreq.append(std::string_view(PATH_ROOT), 0,
-                  std::vector<std::string>{DELETE_INTERFACE});
-    auto objreply = bus.call(objreq);
-    ObjectTree objs;
-    objreply.read(objs);
+    ObjectTree objs =
+        ipmi::getSubTree(bus, std::vector<std::string>{DELETE_INTERFACE},
+                         std::string{PATH_ROOT});
     for (const auto& [path, impls] : objs)
     {
         if (!ifnameInPath(params.ifname, path))
@@ -572,8 +572,8 @@ void reconfigureVLAN(sdbusplus::bus_t& bus, ChannelParams& params,
     std::vector<IfAddr<AF_INET6>> ifaddrs6;
     for (uint8_t i = 0; i < MAX_IPV6_STATIC_ADDRESSES; ++i)
     {
-        auto ifaddr6 = findIfAddr<AF_INET6>(bus, params, i, originsV6Static,
-                                            ips);
+        auto ifaddr6 =
+            findIfAddr<AF_INET6>(bus, params, i, originsV6Static, ips);
         if (!ifaddr6)
         {
             break;
@@ -698,9 +698,9 @@ static void unpackFinal(message::Payload& req)
  */
 RspType<> setLanOem(uint8_t channel, uint8_t parameter, message::Payload& req)
     __attribute__((weak));
-RspType<message::Payload> getLanOem(uint8_t channel, uint8_t parameter,
-                                    uint8_t set, uint8_t block)
-    __attribute__((weak));
+RspType<message::Payload>
+    getLanOem(uint8_t channel, uint8_t parameter, uint8_t set, uint8_t block)
+        __attribute__((weak));
 
 RspType<> setLanOem(uint8_t, uint8_t, message::Payload& req)
 {
@@ -742,14 +742,14 @@ RspType<> setLanInt(Context::ptr ctx, uint4_t channelBits, uint4_t reserved1,
         static_cast<uint8_t>(channelBits), ctx->channel);
     if (reserved1 || !isValidChannel(channel))
     {
-        log<level::ERR>("Set Lan - Invalid field in request");
+        lg2::error("Set Lan - Invalid field in request");
         req.trailingOk = true;
         return responseInvalidFieldRequest();
     }
 
     if (!isLanChannel(channel).value_or(false))
     {
-        log<level::ERR>("Set Lan - Not a LAN channel");
+        lg2::error("Set Lan - Not a LAN channel");
         return responseInvalidFieldRequest();
     }
 
@@ -909,6 +909,10 @@ RspType<> setLanInt(Context::ptr ctx, uint4_t channelBits, uint4_t reserved1,
                 lastDisabledVlan[channel] = vlan;
                 vlan = 0;
             }
+            else if (vlan == 0 || vlan == VLAN_VALUE_MASK)
+            {
+                return responseInvalidFieldRequest();
+            }
 
             channelCall<reconfigureVLAN>(channel, vlan);
             return responseSuccess();
@@ -993,8 +997,8 @@ RspType<> setLanInt(Context::ptr ctx, uint4_t channelBits, uint4_t reserved1,
                 return responseReqDataLenInvalid();
             }
             unpackFinal(req);
-            if (std::bitset<8> expected(control &
-                                        std::bitset<8>(reservedRACCBits));
+            if (std::bitset<8> expected(
+                    control & std::bitset<8>(reservedRACCBits));
                 expected.any())
             {
                 return response(ccParamNotSupported);
@@ -1056,9 +1060,9 @@ RspType<> setLanInt(Context::ptr ctx, uint4_t channelBits, uint4_t reserved1,
                 return responseInvalidFieldRequest();
             }
 
-            uint8_t resp = getCipherConfigObject(csPrivFileName,
-                                                 csPrivDefaultFileName)
-                               .setCSPrivilegeLevels(channel, cipherSuitePrivs);
+            uint8_t resp =
+                getCipherConfigObject(csPrivFileName, csPrivDefaultFileName)
+                    .setCSPrivilegeLevels(channel, cipherSuitePrivs);
             if (!resp)
             {
                 return responseSuccess();
@@ -1118,13 +1122,13 @@ RspType<message::Payload> getLan(Context::ptr ctx, uint4_t channelBits,
         static_cast<uint8_t>(channelBits), ctx->channel);
     if (reserved || !isValidChannel(channel))
     {
-        log<level::ERR>("Get Lan - Invalid field in request");
+        lg2::error("Get Lan - Invalid field in request");
         return responseInvalidFieldRequest();
     }
 
     if (!isLanChannel(channel).value_or(false))
     {
-        log<level::ERR>("Set Lan - Not a LAN channel");
+        lg2::error("Set Lan - Not a LAN channel");
         return responseInvalidFieldRequest();
     }
 
@@ -1452,7 +1456,7 @@ RspType<> setSolConfParams(Context::ptr ctx, uint4_t channelBits,
 
     if (!isValidChannel(channel))
     {
-        log<level::ERR>("Set Sol Config - Invalid channel in request");
+        lg2::error("Set Sol Config - Invalid channel in request");
         return responseInvalidFieldRequest();
     }
 
@@ -1461,10 +1465,10 @@ RspType<> setSolConfParams(Context::ptr ctx, uint4_t channelBits,
 
     if (ipmi::getService(ctx, solInterface, solPathWitheEthName, solService))
     {
-        log<level::ERR>("Set Sol Config - Invalid solInterface",
-                        entry("SERVICE=%s", solService.c_str()),
-                        entry("OBJPATH=%s", solPathWitheEthName.c_str()),
-                        entry("INTERFACE=%s", solInterface));
+        lg2::error("Set Sol Config - Invalid solInterface, service: {SERVICE}, "
+                   "object path: {OBJPATH}, interface: {INTERFACE}",
+                   "SERVICE", solService, "OBJPATH", solPathWitheEthName,
+                   "INTERFACE", solInterface);
         return responseInvalidFieldRequest();
     }
 
@@ -1612,11 +1616,9 @@ RspType<> setSolConfParams(Context::ptr ctx, uint4_t channelBits,
     return responseSuccess();
 }
 
-RspType<message::Payload> getSolConfParams(Context::ptr ctx,
-                                           uint4_t channelBits,
-                                           uint3_t /*reserved*/, bool revOnly,
-                                           uint8_t parameter, uint8_t /*set*/,
-                                           uint8_t /*block*/)
+RspType<message::Payload> getSolConfParams(
+    Context::ptr ctx, uint4_t channelBits, uint3_t /*reserved*/, bool revOnly,
+    uint8_t parameter, uint8_t /*set*/, uint8_t /*block*/)
 {
     message::Payload ret;
     constexpr uint8_t current_revision = 0x11;
@@ -1631,7 +1633,7 @@ RspType<message::Payload> getSolConfParams(Context::ptr ctx,
 
     if (!isValidChannel(channel))
     {
-        log<level::ERR>("Get Sol Config - Invalid channel in request");
+        lg2::error("Get Sol Config - Invalid channel in request");
         return responseInvalidFieldRequest();
     }
 
@@ -1640,10 +1642,10 @@ RspType<message::Payload> getSolConfParams(Context::ptr ctx,
 
     if (ipmi::getService(ctx, solInterface, solPathWitheEthName, solService))
     {
-        log<level::ERR>("Set Sol Config - Invalid solInterface",
-                        entry("SERVICE=%s", solService.c_str()),
-                        entry("OBJPATH=%s", solPathWitheEthName.c_str()),
-                        entry("INTERFACE=%s", solInterface));
+        lg2::error("Set Sol Config - Invalid solInterface, service: {SERVICE}, "
+                   "object path: {OBJPATH}, interface: {INTERFACE}",
+                   "SERVICE", solService, "OBJPATH", solPathWitheEthName,
+                   "INTERFACE", solInterface);
         return responseInvalidFieldRequest();
     }
 

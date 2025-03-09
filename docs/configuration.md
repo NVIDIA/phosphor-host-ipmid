@@ -1,4 +1,6 @@
-# Device ID Configuration
+# Configuration
+
+## Device ID Configuration
 
 There is a default dev_id.json file provided by
 meta-phosphor/common/recipes-phosphor/ipmi/phosphor-ipmi-host.bb
@@ -7,9 +9,7 @@ Any target can override the default json file by providing a
 phosphor-ipmi-host.bbappend with an ODM or platform customizable configuration.
 
 For a specific example, see:
-[Witherspoon](https://github.com/openbmc/openbmc/blob/master/
-meta-openbmc-machines/meta-openpower/meta-ibm/meta-witherspoon/
-recipes-phosphor/ipmi/phosphor-ipmi-host.bbappend)
+[Witherspoon](https://github.com/openbmc/openbmc/blob/master/meta-openbmc-machines/meta-openpower/meta-ibm/meta-witherspoon/recipes-phosphor/ipmi/phosphor-ipmi-host.bbappend)
 
 The JSON format for get_device_id:
 
@@ -22,7 +22,7 @@ get_device_id. The data is then cached for future use. If you change the data at
 runtime, simply restart the service to see the new data fetched by a call to
 get_device_id.
 
-# IPMI D-Bus Sensor Filtering
+## IPMI D-Bus Sensor Filtering
 
 Phosphor-ipmi-host provides a compile time option to control how IPMI sensors
 are populated. The default model is for the sensors to be culled from a set of

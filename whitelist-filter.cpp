@@ -2,7 +2,7 @@
 #include <ipmid/api.hpp>
 #include <ipmid/utils.hpp>
 #include <phosphor-logging/elog-errors.hpp>
-#include <phosphor-logging/log.hpp>
+#include <phosphor-logging/lg2.hpp>
 #include <settings.hpp>
 #include <xyz/openbmc_project/Common/error.hpp>
 #include <xyz/openbmc_project/Control/Security/RestrictionMode/server.hpp>
@@ -56,11 +56,11 @@ AllowlistFilter::AllowlistFilter()
 {
     bus = getSdBus();
 
-    log<level::INFO>("Loading allowlist filter");
+    lg2::info("Loading allowlist filter");
     ipmi::registerFilter(ipmi::prioOpenBmcBase,
                          [this](ipmi::message::Request::ptr request) {
-        return filterMessage(request);
-    });
+                             return filterMessage(request);
+                         });
 
     // wait until io->run is going to fetch RestrictionMode
     post_work([this]() { postInit(); });
@@ -84,41 +84,40 @@ void AllowlistFilter::cacheRestrictedMode(
         try
         {
             restrictionModeSetting = dev;
-            restrictionModeService = objects->service(restrictionModeSetting,
-                                                      restrictionModeIntf);
+            restrictionModeService =
+                objects->service(restrictionModeSetting, restrictionModeIntf);
         }
         catch (const std::out_of_range& e)
         {
-            log<level::ERR>(
+            lg2::error(
                 "Could not look up restriction mode interface from cache");
             return;
         }
 
-        bus->async_method_call(
-            [this, index = std::distance(&*std::begin(devices), &dev)](
-                boost::system::error_code ec, ipmi::Value v) {
-            if (ec)
-            {
-                log<level::ERR>("Error in RestrictionMode Get");
-                // Fail-safe to true.
-                restrictedMode[index] = true;
-                return;
-            }
+        std::string mode;
+        try
+        {
+            auto propValue = ipmi::getDbusProperty(
+                *bus, restrictionModeService, restrictionModeSetting,
+                restrictionModeIntf, "RestrictionMode");
+            mode = std::get<std::string>(propValue);
+        }
+        catch (const std::exception& e)
+        {
+            lg2::error("Error in RestrictionMode Get");
+            // Fail-safe to true.
+            size_t index = std::distance(&*std::begin(devices), &dev);
+            restrictedMode[index] = true;
+        }
 
-            auto mode = std::get<std::string>(v);
-            auto restrictionMode =
-                RestrictionMode::convertModesFromString(mode);
+        auto restrictionMode = RestrictionMode::convertModesFromString(mode);
 
-            bool restrictMode =
-                (restrictionMode == RestrictionMode::Modes::Allowlist);
-            restrictedMode.emplace_back(restrictMode);
+        bool restrictMode =
+            (restrictionMode == RestrictionMode::Modes::Allowlist);
+        restrictedMode.emplace_back(restrictMode);
 
-            log<level::INFO>((restrictMode ? "Set restrictedMode = true"
-                                           : "Set restrictedMode = false"));
-        },
-            restrictionModeService, restrictionModeSetting,
-            "org.freedesktop.DBus.Properties", "Get", restrictionModeIntf,
-            "RestrictionMode");
+        lg2::info("Set restrictedMode = {RESTRICTED_MODE}", "RESTRICTED_MODE",
+                  restrictMode);
     }
 }
 
@@ -142,7 +141,7 @@ void AllowlistFilter::handleRestrictedModeChange(
 
     if (it == deviceList.end())
     {
-        log<level::ERR>("Key not found in deviceList ");
+        lg2::error("Key not found in deviceList ");
     }
     else
     {
@@ -159,8 +158,9 @@ void AllowlistFilter::handleRestrictedModeChange(
             bool restrictMode =
                 (restrictionMode == RestrictionMode::Modes::Allowlist);
             restrictedMode[hostId] = restrictMode;
-            log<level::INFO>((restrictMode ? "Updated restrictedMode = true"
-                                           : "Updated restrictedMode = false"));
+
+            lg2::info("Updated restrictedMode = {RESTRICTED_MODE}",
+                      "RESTRICTED_MODE", restrictMode);
         }
     }
 }
@@ -176,7 +176,7 @@ void AllowlistFilter::postInit()
         *bus, std::vector<settings::Interface>({restrictionModeIntf}));
     if (!objects)
     {
-        log<level::ERR>(
+        lg2::error(
             "Failed to create settings object; defaulting to restricted mode");
         return;
     }
@@ -188,8 +188,7 @@ void AllowlistFilter::postInit()
     }
     catch (const std::out_of_range& e)
     {
-        log<level::ERR>(
-            "Could not look up restriction mode interface from cache");
+        lg2::error("Could not look up restriction mode interface from cache");
         return;
     }
 
@@ -211,8 +210,8 @@ void AllowlistFilter::postInit()
 
     modeChangeMatch = std::make_unique<sdbusplus::bus::match_t>(
         *bus, filterStr, [this, deviceList](sdbusplus::message_t& m) {
-        handleRestrictedModeChange(m, deviceList);
-    });
+            handleRestrictedModeChange(m, deviceList);
+        });
 }
 
 /** @brief Filter IPMI messages with RestrictedMode
@@ -235,9 +234,10 @@ ipmi::Cc AllowlistFilter::filterMessage(ipmi::message::Request::ptr request)
                 allowlist.cbegin(), allowlist.cend(),
                 std::make_pair(request->ctx->netFn, request->ctx->cmd)))
         {
-            log<level::ERR>("Net function not allowlisted",
-                            entry("NETFN=0x%X", int(request->ctx->netFn)),
-                            entry("CMD=0x%X", int(request->ctx->cmd)));
+            lg2::error("Net function not allowlisted, "
+                       "NetFn: {NETFN}, Cmd: {CMD}",
+                       "NETFN", lg2::hex, request->ctx->netFn, "CMD", lg2::hex,
+                       request->ctx->cmd);
 
             return ipmi::ccInsufficientPrivilege;
         }

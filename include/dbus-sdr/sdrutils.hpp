@@ -173,9 +173,8 @@ class IPMIStatsEntry
         if ((numStreakRead == 0) && (numReadings != 0))
         {
             std::cerr << "IPMI sensor " << sensorName
-                      << ": Recovered reading, value=" << reading
-                      << " byte=" << raw
-                      << ", Reading counts good=" << numReadings
+                      << ": Recovered reading, value=" << reading << " byte="
+                      << raw << ", Reading counts good=" << numReadings
                       << " miss=" << numMissings
                       << ", Prior miss streak=" << numStreakMiss << "\n";
         }
@@ -379,6 +378,7 @@ enum class SensorTypeCodes : uint8_t
     versionChange = 0x2b,
     watchdog2 = 0x23,
     entity = 0x25,
+    oemC0 = 0xc0,
 };
 
 enum class SensorEventTypeCodes : uint8_t
@@ -464,8 +464,8 @@ namespace ipmi
 std::optional<std::map<std::string, std::vector<std::string>>>
     getObjectInterfaces(const char* path);
 
-std::map<std::string, Value> getEntityManagerProperties(const char* path,
-                                                        const char* interface);
+std::map<std::string, Value>
+    getEntityManagerProperties(const char* path, const char* interface);
 
 std::optional<std::unordered_set<std::string>>&
     getIpmiDecoratorPaths(const std::optional<ipmi::Context::ptr>& ctx);

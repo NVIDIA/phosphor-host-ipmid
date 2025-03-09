@@ -1,6 +1,7 @@
 #include "ipmi_fru_info_area.hpp"
 
 #include <phosphor-logging/elog.hpp>
+#include <phosphor-logging/lg2.hpp>
 
 #include <algorithm>
 #include <ctime>
@@ -38,7 +39,6 @@ static constexpr auto englishLanguageCode = 0x0;
 static constexpr auto typeLengthByteNull = 0x0;
 static constexpr auto endOfCustomFields = 0xC1;
 static constexpr auto commonHeaderFormatSize = 0x8; // size in bytes
-static constexpr auto manufacturingDateSize = 0x3;
 static constexpr auto areaSizeOffset = 0x1;
 static constexpr uint8_t typeASCII = 0xC0;
 static constexpr auto maxRecordAttributeValue = 0x3F;
@@ -46,8 +46,8 @@ static constexpr auto maxRecordAttributeValue = 0x3F;
 static constexpr auto secs_from_1970_1996 = 820454400;
 static constexpr auto maxMfgDateValue = 0xFFFFFF; // 3 Byte length
 static constexpr auto secs_per_min = 60;
-static constexpr auto secsToMaxMfgdate = secs_from_1970_1996 +
-                                         secs_per_min * maxMfgDateValue;
+static constexpr auto secsToMaxMfgdate =
+    secs_from_1970_1996 + secs_per_min * maxMfgDateValue;
 
 // Minimum size of resulting FRU blob.
 // This is also the theoretical maximum size according to the spec:
@@ -117,8 +117,8 @@ void postFormatProcessing(FruAreaData& data)
     padData(data);
 
     // Set size of data info area
-    data.at(areaSizeOffset) = (data.size() + checksumSize) /
-                              (recordUnitOfMeasurement);
+    data.at(areaSizeOffset) =
+        (data.size() + checksumSize) / (recordUnitOfMeasurement);
 
     // Finally add area checksum
     appendDataChecksum(data);
@@ -144,9 +144,9 @@ void appendChassisType(const PropertyMap& propMap, FruAreaData& data)
         }
         catch (const std::exception& e)
         {
-            log<level::ERR>("Could not parse chassis type",
-                            entry("VALUE=%s", value.c_str()),
-                            entry("ERROR=%s", e.what()));
+            lg2::error("Could not parse chassis type, value: {VALUE}, "
+                       "error: {ERROR}",
+                       "VALUE", value, "ERROR", e);
             chassisType = 0;
         }
     }

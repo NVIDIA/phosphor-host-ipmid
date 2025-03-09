@@ -9,7 +9,7 @@
 #include <ipmid-host/cmd.hpp>
 #include <ipmid/api.hpp>
 #include <ipmid/utils.hpp>
-#include <phosphor-logging/log.hpp>
+#include <phosphor-logging/lg2.hpp>
 
 #include <functional>
 #include <memory>
@@ -21,8 +21,6 @@ namespace host
 {
 namespace command
 {
-
-using namespace phosphor::logging;
 
 // When you see Base:: you know we're referencing our base class
 namespace Base = sdbusplus::server::xyz::openbmc_project::control;
@@ -50,14 +48,13 @@ static const std::map<Host::Command, IpmiCmdData> ipmiCommand = {
 // Called at user request
 void Host::execute(Base::Host::Command command)
 {
-    log<level::DEBUG>(
-        "Pushing cmd on to queue",
-        entry("CONTROL_HOST_CMD=%s", convertForMessage(command).c_str()));
+    lg2::debug("Pushing cmd on to queue, control host cmd: {CONTROL_HOST_CMD}",
+               "CONTROL_HOST_CMD", convertForMessage(command));
 
-    auto cmd = std::make_tuple(ipmiCommand.at(command),
-                               std::bind(&Host::commandStatusHandler, this,
-                                         std::placeholders::_1,
-                                         std::placeholders::_2));
+    auto cmd = std::make_tuple(
+        ipmiCommand.at(command),
+        std::bind(&Host::commandStatusHandler, this, std::placeholders::_1,
+                  std::placeholders::_2));
 
     ipmid_send_cmd_to_host(std::move(cmd));
 }
@@ -84,8 +81,9 @@ Host::FirmwareCondition Host::currentFirmwareCondition() const
         auto value = status ? Host::FirmwareCondition::Running
                             : Host::FirmwareCondition::Off;
 
-        log<level::DEBUG>("currentFirmwareCondition:hostAckCallback fired",
-                          entry("CONTROL_HOST_CMD=%i", value));
+        lg2::debug("currentFirmwareCondition:hostAckCallback fired, "
+                   "control host cmd: {CONTROL_HOST_CMD}",
+                   "CONTROL_HOST_CMD", value);
 
         *(hostCondition.get()) = value;
         return;
@@ -99,7 +97,7 @@ Host::FirmwareCondition Host::currentFirmwareCondition() const
 
     // Timer to ensure this function returns something within a reasonable time
     sdbusplus::Timer hostAckTimer([hostCondition]() {
-        log<level::DEBUG>("currentFirmwareCondition: timer expired!");
+        lg2::debug("currentFirmwareCondition: timer expired!");
         *(hostCondition.get()) = Host::FirmwareCondition::Off;
     });
 
@@ -111,13 +109,12 @@ Host::FirmwareCondition Host::currentFirmwareCondition() const
 
     while (!hostCondition.get()->has_value())
     {
-        log<level::DEBUG>(
-            "currentFirmwareCondition: waiting for host response");
+        lg2::debug("currentFirmwareCondition: waiting for host response");
         io->run_for(std::chrono::milliseconds(100));
     }
     hostAckTimer.stop();
 
-    log<level::DEBUG>("currentFirmwareCondition: hostCondition is ready!");
+    lg2::debug("currentFirmwareCondition: hostCondition is ready!");
     return hostCondition.get()->value();
 #else
     return FirmwareCondition::Running;

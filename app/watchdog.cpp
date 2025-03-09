@@ -7,7 +7,7 @@
 #include <ipmid/api.hpp>
 #include <phosphor-logging/elog-errors.hpp>
 #include <phosphor-logging/elog.hpp>
-#include <phosphor-logging/log.hpp>
+#include <phosphor-logging/lg2.hpp>
 #include <xyz/openbmc_project/Common/error.hpp>
 
 #include <bitset>
@@ -68,18 +68,16 @@ ipmi::RspType<> ipmiAppResetWatchdogTimer()
     }
     catch (const std::exception& e)
     {
-        const std::string e_str = std::string("wd_reset: ") + e.what();
-        log<level::ERR>(e_str.c_str());
+        lg2::error("wd_reset: {ERROR}", "ERROR", e);
         return ipmi::responseUnspecifiedError();
     }
     catch (...)
     {
-        log<level::ERR>("wd_reset: Unknown Error");
+        lg2::error("wd_reset: Unknown Error");
         return ipmi::responseUnspecifiedError();
     }
 }
 
-static constexpr uint8_t wd_dont_stop = 0x1 << 6;
 static constexpr uint8_t wd_timeout_action_mask = 0x3;
 
 static constexpr uint8_t wdTimerUseResTimer1 = 0x0;
@@ -193,12 +191,11 @@ static constexpr uint8_t wdExpirationFlagReservedBit7 = 0x7;
  *
  * @return completion code on success.
  **/
-ipmi::RspType<>
-    ipmiSetWatchdogTimer(uint3_t timerUse, uint3_t reserved, bool dontStopTimer,
-                         bool dontLog, uint3_t timeoutAction, uint1_t reserved1,
-                         uint3_t preTimeoutInterrupt, uint1_t reserved2,
-                         uint8_t preTimeoutInterval,
-                         std::bitset<8> expFlagValue, uint16_t initialCountdown)
+ipmi::RspType<> ipmiSetWatchdogTimer(
+    uint3_t timerUse, uint3_t reserved, bool dontStopTimer, bool dontLog,
+    uint3_t timeoutAction, uint1_t reserved1, uint3_t preTimeoutInterrupt,
+    uint1_t reserved2, uint8_t preTimeoutInterval, std::bitset<8> expFlagValue,
+    uint16_t initialCountdown)
 {
     if ((timerUse == wdTimerUseResTimer1) ||
         (timerUse == wdTimerUseResTimer2) ||
@@ -265,13 +262,12 @@ ipmi::RspType<>
     }
     catch (const std::exception& e)
     {
-        const std::string e_str = std::string("wd_set: ") + e.what();
-        log<level::ERR>(e_str.c_str());
+        lg2::error("wd_set: {ERROR}", "ERROR", e);
         return ipmi::responseUnspecifiedError();
     }
     catch (...)
     {
-        log<level::ERR>("wd_set: Unknown Error");
+        lg2::error("wd_set: Unknown Error");
         return ipmi::responseUnspecifiedError();
     }
 }
@@ -345,8 +341,6 @@ IpmiTimerUse wdTimerUseToIpmiTimerUse(WatchdogService::TimerUse wdTimerUse)
         }
     }
 }
-
-static constexpr uint8_t wd_running = 0x1 << 6;
 
 /**@brief The getWatchdogTimer ipmi command.
  *
@@ -431,13 +425,12 @@ ipmi::RspType<uint3_t,        // timerUse - timer use
     }
     catch (const std::exception& e)
     {
-        const std::string e_str = std::string("wd_get: ") + e.what();
-        log<level::ERR>(e_str.c_str());
+        lg2::error("wd_get: {ERROR}", "ERROR", e);
         return ipmi::responseUnspecifiedError();
     }
     catch (...)
     {
-        log<level::ERR>("wd_get: Unknown Error");
+        lg2::error("wd_get: Unknown Error");
         return ipmi::responseUnspecifiedError();
     }
 }

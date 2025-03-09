@@ -19,7 +19,7 @@
 #include <ipmid/api-types.hpp>
 #include <ipmid/message/types.hpp>
 #include <ipmid/types.hpp>
-#include <phosphor-logging/log.hpp>
+#include <phosphor-logging/lg2.hpp>
 #include <sdbusplus/asio/connection.hpp>
 
 #include <algorithm>
@@ -47,10 +47,9 @@ struct Context
             uint8_t lun, Cmd cmd, int channel, int userId, uint32_t sessionId,
             Privilege priv, int rqSA, int hostIdx,
             boost::asio::yield_context& yield) :
-        bus(bus),
-        netFn(netFn), lun(lun), cmd(cmd), channel(channel), userId(userId),
-        sessionId(sessionId), priv(priv), rqSA(rqSA), hostIdx(hostIdx),
-        yield(yield)
+        bus(bus), netFn(netFn), lun(lun), cmd(cmd), channel(channel),
+        userId(userId), sessionId(sessionId), priv(priv), rqSA(rqSA),
+        hostIdx(hostIdx), yield(yield)
     {}
 
     std::shared_ptr<sdbusplus::asio::connection> bus;
@@ -120,11 +119,12 @@ struct Payload
 
     ~Payload()
     {
-        using namespace phosphor::logging;
         if (raw.size() != 0 && std::uncaught_exceptions() == 0 && !trailingOk &&
             !unpackCheck && !unpackError)
         {
-            log<level::ERR>("Failed to check request for full unpack");
+            lg2::error(
+                "Failed to check request for full unpack: raw size: {RAW_SIZE}",
+                "RAW_SIZE", raw.size());
         }
     }
 
@@ -256,8 +256,8 @@ struct Payload
     template <typename Arg, typename... Args>
     int pack(Arg&& arg, Args&&... args)
     {
-        int packRet = details::PackSingle_t<Arg>::op(*this,
-                                                     std::forward<Arg>(arg));
+        int packRet =
+            details::PackSingle_t<Arg>::op(*this, std::forward<Arg>(arg));
         if (packRet)
         {
             return packRet;
@@ -464,8 +464,8 @@ struct Payload
         size_t priorIndex = rawIndex;
         fixed_uint_t<details::bitStreamSize> priorBits = bitStream;
 
-        int ret = std::apply([this](Types&... args) { return unpack(args...); },
-                             t);
+        int ret =
+            std::apply([this](Types&... args) { return unpack(args...); }, t);
         if (ret)
         {
             bitCount = priorBitCount;

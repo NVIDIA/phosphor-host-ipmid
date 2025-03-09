@@ -148,14 +148,14 @@ enum class Mutability
 
 inline Mutability operator|(Mutability lhs, Mutability rhs)
 {
-    return static_cast<Mutability>(static_cast<uint8_t>(lhs) |
-                                   static_cast<uint8_t>(rhs));
+    return static_cast<Mutability>(
+        static_cast<uint8_t>(lhs) | static_cast<uint8_t>(rhs));
 }
 
 inline Mutability operator&(Mutability lhs, Mutability rhs)
 {
-    return static_cast<Mutability>(static_cast<uint8_t>(lhs) &
-                                   static_cast<uint8_t>(rhs));
+    return static_cast<Mutability>(
+        static_cast<uint8_t>(lhs) & static_cast<uint8_t>(rhs));
 }
 
 struct Info
@@ -217,8 +217,10 @@ enum class ThresholdMask
 {
     NON_CRITICAL_LOW_MASK = 0x01,
     CRITICAL_LOW_MASK = 0x02,
+    NON_RECOVERABLE_LOW_MASK = 0x4,
     NON_CRITICAL_HIGH_MASK = 0x08,
     CRITICAL_HIGH_MASK = 0x10,
+    NON_RECOVERABLE_HIGH_MASK = 0x20,
 };
 
 static constexpr uint8_t maxContainedEntities = 4;
@@ -290,7 +292,7 @@ class SecureString : public SecureStringBase
 {
   public:
     using SecureStringBase::basic_string;
-    SecureString(const SecureStringBase& other) : SecureStringBase(other){};
+    SecureString(const SecureStringBase& other) : SecureStringBase(other) {};
     SecureString(SecureString&) = default;
     SecureString(const SecureString&) = default;
     SecureString(SecureString&&) = default;
@@ -309,7 +311,7 @@ class SecureBuffer : public SecureBufferBase
 {
   public:
     using SecureBufferBase::vector;
-    SecureBuffer(const SecureBufferBase& other) : SecureBufferBase(other){};
+    SecureBuffer(const SecureBufferBase& other) : SecureBufferBase(other) {};
     SecureBuffer(SecureBuffer&) = default;
     SecureBuffer(const SecureBuffer&) = default;
     SecureBuffer(SecureBuffer&&) = default;

@@ -243,6 +243,9 @@ enum class IPMINetfnSensorCmds : ipmi_cmd_t
 namespace ipmi
 {
 
+
+uint16_t getNumberOfSensors();
+
 SensorSubTree& getSensorTree()
 {
     static SensorSubTree sensorTree;
@@ -314,4 +317,30 @@ struct sensorInfo
 
 } // namespace dcmi
 
+namespace sensor
+{
+/**
+ * @brief Retrieve the number of sensors that are not included in the list of
+ * sensors published via D-Bus
+ *
+ * @param[in]: ctx: the pointer to the D-Bus context
+ * @return: The number of additional sensors separate from those published
+ * dynamically on D-Bus
+ */
+size_t getOtherSensorsCount(ipmi::Context::ptr ctx);
+
+/**
+ * @brief Retrieve the record data for the sensors not published via D-Bus
+ *
+ * @param[in]: ctx: the pointer to the D-Bus context
+ * @param[in]: recordID: the integer index for the sensor to retrieve
+ * @param[out]: SDR data for the indexed sensor
+ * @return: 0: success
+ *          negative number: error condition
+ */
+int getOtherSensorsDataRecord(ipmi::Context::ptr ctx, uint16_t recordID,
+                              std::vector<uint8_t>& recordData);
+} // namespace sensor
+
 } // namespace ipmi
+

@@ -12,8 +12,6 @@ using Path = std::string;
 using Service = std::string;
 using Interface = std::string;
 
-constexpr auto root = "/";
-
 /** @class Objects
  *  @brief Fetch paths of settings d-bus objects of interest, upon construction
  */
@@ -28,7 +26,7 @@ struct Objects
      */
     Objects(sdbusplus::bus_t& bus, const std::vector<Interface>& filter);
     Objects(const Objects&) = default;
-    Objects& operator=(const Objects&) = default;
+    Objects& operator=(const Objects&) = delete;
     Objects(Objects&&) = delete;
     Objects& operator=(Objects&&) = delete;
     ~Objects() = default;

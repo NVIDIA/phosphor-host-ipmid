@@ -3,21 +3,21 @@
 This document describes OEM Requests to be supported using the OpenBMC OEM
 Number.
 
-### What's in the box?
+## What's in the box?
 
 - Briefly recap OEM Extension layout as described in IPMI Specification.
 - Enumerate Command codes allocated for use with the OpenBMC OEM Number.
 - For each such code, describe the associated messages, including
   representation, function, meaning, limits, and so on.
 
-### OEM Extensions, Block Transfer Transport Example.
+## OEM Extensions, Block Transfer Transport Example
 
 This table and the next briefly recap OEM Extension messages as described in the
 [IPMI Specification](http://www.intel.com/content/www/us/en/servers/ipmi/ipmi-second-gen-interface-spec-v2-rev1-1.html).
 To keep it both simple and concrete, only BT Tansport is described. Please
 consult that specification for the full story.
 
-#### OEM Request
+### OEM Request
 
 Per section 11.1 of IPMI Spec
 
@@ -39,7 +39,7 @@ Notes:
 - Serialize numbers larger than 1 byte LSB first - e.g., represent OEM
   Enterprise Number 49871 as `{0xcf, 0xc2, 0x00}`
 
-#### OEM Response
+### OEM Response
 
 Per section 11.2 of IPMI Spec
 
@@ -54,9 +54,9 @@ Per section 11.2 of IPMI Spec
 |  5 ~ 7  |      | OEN      | 49871 | OEM Enterprise Number                           |
 | 8 ~ n+7 |      | Data     |   -   | n data bytes, encoding depends on Cmd           |
 
-### OpenBMC OEM Cmd Codes
+## OpenBMC OEM Cmd Codes
 
-```
+```c
 /*
  * This is the OpenBMC IANA OEM Number
  */
@@ -74,12 +74,12 @@ These are the Command codes allocated for use with the OpenBMC OEM Number.
 |    4    | fanManualCmd | Manual Fan Controls |
 | 5 ~ 255 | -            | Unallocated         |
 
-### I2C Device Access (Command 2)
+## I2C Device Access (Command 2)
 
 The next subsections describe command and response messages supporting the I2C
 Device Access extension OpenBMC OEM extension (command code 2).
 
-#### I2C Request Message - Overall
+### I2C Request Message - Overall
 
 |  Bytes  | Bits | Identifier    | Description               |
 | :-----: | :--- | :------------ | :------------------------ |
@@ -111,21 +111,21 @@ Notes
 - Depending on options, i2cdetect uses either quick write or 1 byte read;
   default is 1-byte read for eeprom/spd memory ranges, else quick write.
 
-#### I2C Request Message - Step Properties
+### I2C Request Message - Step Properties
 
 | Bytes | Bits | Identifier     | Description                                   |
 | :---: | :--: | :------------- | :-------------------------------------------- |
-|   0   |      | devAndDir      |
+|   0   |      | devAndDir      |                                               |
 |       | 7:1  | dev            | 7-bit I2C device address.                     |
 |       |  0   | isRead         | 1 = read, 0 = write.                          |
-|   1   |      | stepFlags      |
+|   1   |      | stepFlags      |                                               |
 |       |  7   | i2cFlagRecvLen | 1 if block read, else regular; see table.     |
 |       |  6   | i2cFlagNoStart | 1 to suppress I2C start.                      |
 |       | 5:0  |                | Reserved(0)                                   |
 |   2   |      | p              | Count parameter; see table                    |
 | 3:m+2 |      | wrPayload      | Nonempty iff p supplies nonzero m; see table. |
 
-##### Allowed step property combinations
+#### Allowed step property combinations
 
 | is_read | RecvLen |  p  | Size | Description                             |
 | :-----: | :-----: | :-: | :--- | :-------------------------------------- |
@@ -152,7 +152,7 @@ Notes
   - up to 32 bytes of logical payload; and
   - PEC byte.
 
-#### I2C Response Message
+### I2C Response Message
 
 | Bytes | Identifier |  Size  | Description        |
 | :---: | :--------- | :----: | :----------------- |

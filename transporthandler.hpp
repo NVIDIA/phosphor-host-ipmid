@@ -65,8 +65,8 @@ struct ChannelParams
  *  @param[in] channel - The channel id corresponding to an ethernet interface
  *  @return Ethernet interface service and object path if it exists
  */
-std::optional<ChannelParams> maybeGetChannelParams(sdbusplus::bus_t& bus,
-                                                   uint8_t channel);
+std::optional<ChannelParams>
+    maybeGetChannelParams(sdbusplus::bus_t& bus, uint8_t channel);
 
 /** @brief A trivial helper around maybeGetChannelParams() that throws an
  *         exception when it is unable to acquire parameters for the channel.
@@ -172,8 +172,7 @@ class ObjectLookupCache
      */
     ObjectLookupCache(sdbusplus::bus_t& bus, const ChannelParams& params,
                       const char* intf) :
-        bus(bus),
-        params(params), intf(intf),
+        bus(bus), params(params), intf(intf),
         objs(getAllDbusObjects(bus, params.logicalPath, intf, ""))
     {}
 
@@ -258,38 +257,39 @@ std::optional<IfAddr<family>> findIfAddr(
 {
     for (const auto& [path, properties] : ips)
     {
-        std::optional<typename AddrFamily<family>::addr> addr;
         try
         {
-            addr.emplace(stdplus::fromStr<typename AddrFamily<family>::addr>(
-                std::get<std::string>(properties.at("Address"))));
+            typename AddrFamily<family>::addr addr;
+            addr = stdplus::fromStr<typename AddrFamily<family>::addr>(
+                std::get<std::string>(properties.at("Address")));
+
+            sdbusplus::server::xyz::openbmc_project::network::IP::AddressOrigin
+                origin = sdbusplus::server::xyz::openbmc_project::network::IP::
+                    convertAddressOriginFromString(
+                        std::get<std::string>(properties.at("Origin")));
+            if (origins.find(origin) == origins.end())
+            {
+                continue;
+            }
+
+            if (idx > 0)
+            {
+                idx--;
+                continue;
+            }
+
+            IfAddr<family> ifaddr;
+            ifaddr.path = path;
+            ifaddr.address = addr;
+            ifaddr.prefix = std::get<uint8_t>(properties.at("PrefixLength"));
+            ifaddr.origin = origin;
+
+            return ifaddr;
         }
         catch (...)
         {
             continue;
         }
-
-        sdbusplus::server::xyz::openbmc_project::network::IP::AddressOrigin
-            origin = sdbusplus::server::xyz::openbmc_project::network::IP::
-                convertAddressOriginFromString(
-                    std::get<std::string>(properties.at("Origin")));
-        if (origins.find(origin) == origins.end())
-        {
-            continue;
-        }
-
-        if (idx > 0)
-        {
-            idx--;
-            continue;
-        }
-
-        IfAddr<family> ifaddr;
-        ifaddr.path = path;
-        ifaddr.address = *addr;
-        ifaddr.prefix = std::get<uint8_t>(properties.at("PrefixLength"));
-        ifaddr.origin = origin;
-        return ifaddr;
     }
 
     return std::nullopt;
@@ -349,10 +349,9 @@ std::optional<typename AddrFamily<family>::addr>
 }
 
 template <int family>
-std::optional<IfNeigh<family>>
-    findStaticNeighbor(sdbusplus::bus_t&, const ChannelParams&,
-                       typename AddrFamily<family>::addr ip,
-                       ObjectLookupCache& neighbors)
+std::optional<IfNeigh<family>> findStaticNeighbor(
+    sdbusplus::bus_t&, const ChannelParams&,
+    typename AddrFamily<family>::addr ip, ObjectLookupCache& neighbors)
 {
     using sdbusplus::server::xyz::openbmc_project::network::Neighbor;
     const auto state =
@@ -360,31 +359,33 @@ std::optional<IfNeigh<family>>
             Neighbor::State::Permanent);
     for (const auto& [path, neighbor] : neighbors)
     {
-        std::optional<typename AddrFamily<family>::addr> neighIP;
         try
         {
-            neighIP.emplace(stdplus::fromStr<typename AddrFamily<family>::addr>(
-                std::get<std::string>(neighbor.at("IPAddress"))));
+            typename AddrFamily<family>::addr neighIP;
+            neighIP = stdplus::fromStr<typename AddrFamily<family>::addr>(
+                std::get<std::string>(neighbor.at("IPAddress")));
+
+            if (neighIP != ip)
+            {
+                continue;
+            }
+            if (state != std::get<std::string>(neighbor.at("State")))
+            {
+                continue;
+            }
+
+            IfNeigh<family> ret;
+            ret.path = path;
+            ret.ip = ip;
+            ret.mac = stdplus::fromStr<stdplus::EtherAddr>(
+                std::get<std::string>(neighbor.at("MACAddress")));
+
+            return ret;
         }
         catch (...)
         {
             continue;
         }
-        if (*neighIP != ip)
-        {
-            continue;
-        }
-        if (state != std::get<std::string>(neighbor.at("State")))
-        {
-            continue;
-        }
-
-        IfNeigh<family> ret;
-        ret.path = path;
-        ret.ip = ip;
-        ret.mac = stdplus::fromStr<stdplus::EtherAddr>(
-            std::get<std::string>(neighbor.at("MACAddress")));
-        return ret;
     }
 
     return std::nullopt;
@@ -395,9 +396,9 @@ void createNeighbor(sdbusplus::bus_t& bus, const ChannelParams& params,
                     typename AddrFamily<family>::addr address,
                     stdplus::EtherAddr mac)
 {
-    auto newreq = bus.new_method_call(params.service.c_str(),
-                                      params.logicalPath.c_str(),
-                                      INTF_NEIGHBOR_CREATE_STATIC, "Neighbor");
+    auto newreq =
+        bus.new_method_call(params.service.c_str(), params.logicalPath.c_str(),
+                            INTF_NEIGHBOR_CREATE_STATIC, "Neighbor");
     stdplus::ToStrHandle<stdplus::ToStr<stdplus::EtherAddr>> macToStr;
     stdplus::ToStrHandle<stdplus::ToStr<typename AddrFamily<family>::addr>>
         addrToStr;

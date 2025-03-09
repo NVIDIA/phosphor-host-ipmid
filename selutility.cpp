@@ -34,7 +34,7 @@ void constructSEL(uint8_t recordType, std::chrono::milliseconds timestamp,
 {
     if (recordType != systemEventRecord)
     {
-        log<level::ERR>("Invalid recordType");
+        lg2::error("Invalid recordType");
         elog<InternalFailure>();
     }
 
