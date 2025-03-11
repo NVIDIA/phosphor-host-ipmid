@@ -1,5 +1,4 @@
-## This file is a template.  The comment below is emitted
-## into the rendered file; feel free to edit this file.
+##This file is a template.The comment below is emitted##into the rendered file; feel free to edit this file.
 // !!! WARNING: This is a GENERATED Code..Please do NOT Edit !!!
 <%
 interfaceDict = {}
@@ -23,6 +22,7 @@ sensorNameMaxLength = 16
         interfaceDict[serviceInterface]["updateFunc"] = updateFunc
         interfaceDict[serviceInterface]["getFunc"] = getFunc
 %>\
+
 % endfor
 
 #include "sensordatahandler.hpp"

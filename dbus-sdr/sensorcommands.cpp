@@ -2508,12 +2508,10 @@ bool constructVrSdr(ipmi::Context::ptr ctx,
     return true;
 }
 
-
 uint16_t getNumberOfSensors()
 {
     return std::min(getSensorTree().size(), maxIPMISensors);
 }
-
 
 static int getSensorDataRecord(
     ipmi::Context::ptr ctx,
@@ -2861,8 +2859,8 @@ static ipmi::RspType<uint8_t, // respcount
         // Return the number of sensors attached to the LUN
         if ((ctx->lun == lun0) && (numSensors > 0))
         {
-            sdrCount =
-                (numSensors > maxSensorsPerLUN) ? maxSensorsPerLUN : numSensors;
+            sdrCount = (numSensors > maxSensorsPerLUN) ? maxSensorsPerLUN
+                                                       : numSensors;
         }
         else if ((ctx->lun == lun1) && (numSensors > maxSensorsPerLUN))
         {

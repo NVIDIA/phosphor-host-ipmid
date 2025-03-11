@@ -173,8 +173,9 @@ class IPMIStatsEntry
         if ((numStreakRead == 0) && (numReadings != 0))
         {
             std::cerr << "IPMI sensor " << sensorName
-                      << ": Recovered reading, value=" << reading << " byte="
-                      << raw << ", Reading counts good=" << numReadings
+                      << ": Recovered reading, value=" << reading
+                      << " byte=" << raw
+                      << ", Reading counts good=" << numReadings
                       << " miss=" << numMissings
                       << ", Prior miss streak=" << numStreakMiss << "\n";
         }
@@ -370,6 +371,7 @@ enum class SensorTypeCodes : uint8_t
     drive_slot = 0x0D,
     systemFirmwareProgress = 0xF,
     event_log = 0x10,
+    critical_interrupt = 0x13,
     buttons = 0x14,
     module = 0x15,
     cable = 0x1B,
@@ -421,6 +423,9 @@ const static boost::container::flat_map<
                                   SensorEventTypeCodes::sensorSpecified)},
          {"cpu", std::make_pair(SensorTypeCodes::processor,
                                 SensorEventTypeCodes::sensorSpecified)},
+         {"critical_interrupt",
+          std::make_pair(SensorTypeCodes::critical_interrupt,
+                         SensorEventTypeCodes::sensorSpecified)},
          {"motherboard", std::make_pair(SensorTypeCodes::power_supply,
                                         SensorEventTypeCodes::sensorSpecified)},
          {"cable", std::make_pair(SensorTypeCodes::cable,
@@ -464,8 +469,8 @@ namespace ipmi
 std::optional<std::map<std::string, std::vector<std::string>>>
     getObjectInterfaces(const char* path);
 
-std::map<std::string, Value>
-    getEntityManagerProperties(const char* path, const char* interface);
+std::map<std::string, Value> getEntityManagerProperties(const char* path,
+                                                        const char* interface);
 
 std::optional<std::unordered_set<std::string>>&
     getIpmiDecoratorPaths(const std::optional<ipmi::Context::ptr>& ctx);

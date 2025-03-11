@@ -142,10 +142,12 @@ void PasswdMgr::checkAndReload(void)
     }
 }
 
-int PasswdMgr::encryptDecryptData(
-    bool doEncrypt, const EVP_CIPHER* cipher, uint8_t* key, size_t keyLen,
-    uint8_t* iv, size_t ivLen, uint8_t* inBytes, size_t inBytesLen,
-    uint8_t* mac, size_t* macLen, unsigned char* outBytes, size_t* outBytesLen)
+int PasswdMgr::encryptDecryptData(bool doEncrypt, const EVP_CIPHER* cipher,
+                                  uint8_t* key, size_t keyLen, uint8_t* iv,
+                                  size_t ivLen, uint8_t* inBytes,
+                                  size_t inBytesLen, uint8_t* mac,
+                                  size_t* macLen, unsigned char* outBytes,
+                                  size_t* outBytesLen)
 {
     if (cipher == NULL || key == NULL || iv == NULL || inBytes == NULL ||
         outBytes == NULL || mac == NULL || inBytesLen == 0 ||
@@ -162,9 +164,9 @@ int PasswdMgr::encryptDecryptData(
         std::array<uint8_t, EVP_MAX_MD_SIZE> calMac;
         size_t calMacLen = calMac.size();
         // calculate MAC for the encrypted message.
-        if (NULL ==
-            HMAC(EVP_sha256(), key, keyLen, inBytes, inBytesLen, calMac.data(),
-                 reinterpret_cast<unsigned int*>(&calMacLen)))
+        if (NULL == HMAC(EVP_sha256(), key, keyLen, inBytes, inBytesLen,
+                         calMac.data(),
+                         reinterpret_cast<unsigned int*>(&calMacLen)))
         {
             lg2::debug("Error: Failed to calculate MAC");
             return -EIO;
@@ -202,8 +204,8 @@ int PasswdMgr::encryptDecryptData(
                                    inBytes, inBytesLen)))
     {
         outLen += outEVPLen;
-        if ((retval =
-                 EVP_CipherFinal(ctx.get(), outBytes + outLen, &outEVPLen)))
+        if ((retval = EVP_CipherFinal(ctx.get(), outBytes + outLen,
+                                      &outEVPLen)))
         {
             outLen += outEVPLen;
             *outBytesLen = outLen;
@@ -502,9 +504,9 @@ int PasswdMgr::updatePasswdSpecialFile(const std::string& userName,
         lg2::debug("Hash genertion failed, bailing out");
         return -EIO;
     }
-    if (NULL ==
-        HMAC(digest, keyBuff.data(), keyBuff.size(), hash.data(), hashLen,
-             key.data(), reinterpret_cast<unsigned int*>(&keyLen)))
+    if (NULL == HMAC(digest, keyBuff.data(), keyBuff.size(), hash.data(),
+                     hashLen, key.data(),
+                     reinterpret_cast<unsigned int*>(&keyLen)))
     {
         lg2::debug("Failed to create MAC for authentication");
         return -EIO;

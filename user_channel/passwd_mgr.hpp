@@ -118,10 +118,11 @@ class PasswdMgr
      *
      * @return error response
      */
-    int encryptDecryptData(
-        bool doEncrypt, const EVP_CIPHER* cipher, uint8_t* key, size_t keyLen,
-        uint8_t* iv, size_t ivLen, uint8_t* inBytes, size_t inBytesLen,
-        uint8_t* mac, size_t* macLen, uint8_t* outBytes, size_t* outBytesLen);
+    int encryptDecryptData(bool doEncrypt, const EVP_CIPHER* cipher,
+                           uint8_t* key, size_t keyLen, uint8_t* iv,
+                           size_t ivLen, uint8_t* inBytes, size_t inBytesLen,
+                           uint8_t* mac, size_t* macLen, uint8_t* outBytes,
+                           size_t* outBytesLen);
 
     /** @brief  returns updated file checksum of passwd file entry.
      *

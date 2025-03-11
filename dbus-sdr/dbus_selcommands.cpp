@@ -13,7 +13,17 @@
 
 #include <filesystem>
 #include <fstream>
-
+constexpr auto DEFALUT_SENSOR_NUMBER = 0xff;
+constexpr auto INVALID_SENSOR_NUMBER = 0xffff;
+constexpr auto MAX_ALLOWED_SEL_ENTRIES = 4000;
+// The SELs are limited by IPMITOOL to 64KB. Each SEL entry
+// is 16 bytes, meaning a maximum of 4000 SELs is allowed.
+static_assert(MAX_SEL_ENTRIES <= MAX_ALLOWED_SEL_ENTRIES,
+              "MAX_SEL_ENTRIES must be less than or equal to 4000");
+// Read the SEL persistence path from the bb append file. If it is not
+// initialized, the SEL init function will not check the number of the SEL
+// persistence files.
+const char* selPersistPath = SEL_PERSISTENCE_PATH;
 constexpr auto selEraseTimestamp = "/var/lib/ipmi/sel_erase_time";
 constexpr auto selAddTimestamp = "/var/lib/ipmi/sel_add_time";
 static constexpr auto logObjPath = "/xyz/openbmc_project/logging";
@@ -57,7 +67,7 @@ using SELEntry = std::pair<LogID, ipmi::sel::SELEventRecordFormat>;
 using SELCacheMap = std::map<SELRecordID, SELEntry>;
 
 SELCacheMap selCacheMap __attribute__((init_priority(101)));
-bool selCacheMapInitialized;
+bool selCacheMapInitialized = false;
 std::unique_ptr<sdbusplus::bus::match::match> selAddedMatch
     __attribute__((init_priority(101)));
 std::unique_ptr<sdbusplus::bus::match::match> selRemovedMatch
@@ -109,8 +119,9 @@ GetSELEntryResponse createSELEntry(const std::string& objPath)
     }
     // Default values when there is no matched sensor
     record.event.eventRecord.sensorType = 0;
-    record.event.eventRecord.sensorNum = 0xFF;
+    record.event.eventRecord.sensorNum = DEFALUT_SENSOR_NUMBER;
     record.event.eventRecord.eventType = 0;
+    uint16_t sensorNumTmp = INVALID_SENSOR_NUMBER;
     std::string sensorPath("");
     auto iter = m.find(strSensorPath);
     if (iter != m.end())
@@ -122,13 +133,36 @@ GetSELEntryResponse createSELEntry(const std::string& objPath)
         log<level::ERR>("Event not from matched sensor, Hence logging it with "
                         "default values");
     }
-
+    iter = m.find(strSensorNumber);
+    if (iter != m.end())
+    {
+        // Get the sensor number from the SEL dbus object
+        record.event.eventRecord.sensorNum =
+            static_cast<uint8_t>(convert(iter->second));
+    }
     if (!sensorPath.empty())
     {
         try
         {
-            record.event.eventRecord.sensorNum =
-                getSensorNumberFromPath(sensorPath);
+            // Get a new number if the SEL is a valid sensor with a sensor
+            // number different from 0xff
+            if (record.event.eventRecord.sensorNum != DEFALUT_SENSOR_NUMBER)
+            {
+                sensorNumTmp = getSensorNumberFromPath(sensorPath);
+                // if the sensor dbus tree is not loaded the BMC can’t restore
+                // the
+                //  SELs
+                if (sensorNumTmp == INVALID_SENSOR_NUMBER)
+                {
+                    log<level::ERR>(
+                        "Sensor D-bus tree is not yet loaded please try again later");
+                    elog<InternalFailure>();
+                }
+                else
+                {
+                    record.event.eventRecord.sensorNum = sensorNumTmp;
+                }
+            }
             record.event.eventRecord.eventType =
                 getSensorEventTypeFromPath(sensorPath);
             record.event.eventRecord.sensorType =
@@ -304,7 +338,10 @@ void registerSelCallbackHandler()
     }
 }
 
-void initSELCache()
+// The function tries to get the SELs from memory.
+// It returns "true" and makes selCacheMapInitialized true
+// Only if the SEL entry count matches the SEL file count .
+bool initSELCache()
 {
     registerSelCallbackHandler();
     ipmi::sel::ObjectPaths paths;
@@ -315,7 +352,7 @@ void initSELCache()
     catch (const sdbusplus::exception::exception& e)
     {
         log<level::ERR>("Failed to get logging object paths");
-        return;
+        return false;
     }
     for (const auto& p : paths)
     {
@@ -325,7 +362,29 @@ void initSELCache()
             selCacheMap.insert(std::move(*entry));
         }
     }
+    // Compare the number of SEL entries  to the number of SEL files .
+    if (std::string(selPersistPath) != "NULL")
+    {
+        if (std::filesystem::exists(std::string(selPersistPath)))
+        {
+            std::size_t selPersistFileNum = std::distance(
+                std::filesystem::directory_iterator{
+                    std::string(selPersistPath)},
+                std::filesystem::directory_iterator{});
+            if ((selCacheMap.size() >= selPersistFileNum))
+            {
+                selCacheMapInitialized = true;
+            }
+            else
+            {
+                log<level::ERR>(
+                    "Not all SELs are restored. Please wait few minutes and try again");
+            }
+        }
+        return true;
+    } // if selPersistPath is not defined work the same as the old version.
     selCacheMapInitialized = true;
+    return true;
 }
 
 /** @brief implements the delete SEL entry command
@@ -354,7 +413,8 @@ ipmi::RspType<uint16_t // deleted record ID
     if (!selCacheMapInitialized)
     {
         // In case the initSELCache() fails, try it again
-        initSELCache();
+        if (!initSELCache())
+            return ipmi::responseResponseError();
     }
     if (selCacheMap.empty())
     {
@@ -519,7 +579,8 @@ ipmi::RspType<uint8_t,  // SEL revision.
     if (!selCacheMapInitialized)
     {
         // In case the initSELCache() fails, try it again
-        initSELCache();
+        if (!initSELCache())
+            return ipmi::responseResponseError();
     }
     if (!selCacheMap.empty())
     {
@@ -528,8 +589,14 @@ ipmi::RspType<uint8_t,  // SEL revision.
 
     constexpr uint8_t selVersion = ipmi::sel::selVersion;
     constexpr uint16_t maxDefineEntries = MAX_SEL_ENTRIES;
-    uint16_t freeSpace = (maxDefineEntries - entries) *
-                         ipmi::sel::selRecordSize;
+    uint16_t numberOfFreeEntries = maxDefineEntries - entries;
+    // numberOfFreeEntries should be unsigned to ensure the freespace value is
+    // correct
+    if (maxDefineEntries <= entries)
+    {
+        numberOfFreeEntries = 0;
+    }
+    uint16_t freeSpace = numberOfFreeEntries * ipmi::sel::selRecordSize;
     constexpr uint3_t reserved{0};
 
     return ipmi::responseSuccess(
@@ -570,14 +637,14 @@ ipmi::RspType<uint16_t, // Next Record ID
 
     if (!selCacheMapInitialized)
     {
-        initSELCache();
-        selCacheMapInitialized = true;
+        // In case the initSELCache() fails, try it again
+        if (!initSELCache())
+            return ipmi::responseResponseError();
     }
 
     if (selCacheMap.empty())
     {
         return ipmi::responseSensorInvalid();
-        ;
     }
 
     SELCacheMap::const_iterator iter;
@@ -653,6 +720,12 @@ ipmi::RspType<uint16_t // recordID of the Added SEL entry
     static constexpr auto systemRecordType = 0x02;
     cancelSELReservation();
     auto selDataStr = ipmi::sel::toHexStr(eventData);
+    if (!selCacheMapInitialized)
+    {
+        // In case the initSELCache() fails, try it again
+        if (!initSELCache())
+            return ipmi::responseResponseError();
+    }
     if (recordType == systemRecordType)
     {
         std::string objpath("");

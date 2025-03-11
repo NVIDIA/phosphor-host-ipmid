@@ -128,19 +128,19 @@ uint8_t SerialChannel::processEscapedCharacter(std::vector<uint8_t>& buffer,
 
     std::ranges::for_each(data.begin(), data.end(),
                           [&buffer, &checksum](const auto& c) {
-                              auto search = characters.find(c);
-                              if (search != characters.end())
-                              {
-                                  buffer.push_back(bmEscape);
-                                  buffer.push_back(search->second);
-                              }
-                              else
-                              {
-                                  buffer.push_back(c);
-                              }
+        auto search = characters.find(c);
+        if (search != characters.end())
+        {
+            buffer.push_back(bmEscape);
+            buffer.push_back(search->second);
+        }
+        else
+        {
+            buffer.push_back(c);
+        }
 
-                              checksum += c;
-                          });
+        checksum += c;
+    });
 
     return checksum;
 }
@@ -179,9 +179,9 @@ int SerialChannel::write(stdplus::Fd& uart, uint8_t rsAddr, uint8_t rqAddr,
 
         // Reserve the buffer size to avoid relloc and copy
         responseBuffer.clear();
-        responseBuffer.reserve(
-            sizeof(struct IpmiSerialHeader) + 2 * data.size() +
-            4); // 4 for bmStart & bmStop & 2 checksums
+        responseBuffer.reserve(sizeof(struct IpmiSerialHeader) +
+                               2 * data.size() +
+                               4); // 4 for bmStart & bmStop & 2 checksums
 
         // bmStart
         responseBuffer.push_back(bmStart);
@@ -192,8 +192,8 @@ int SerialChannel::write(stdplus::Fd& uart, uint8_t rsAddr, uint8_t rqAddr,
 
         // Assemble response message and checksum
         checksum = processEscapedCharacter(responseBuffer, messageHeader);
-        checksum +=
-            processEscapedCharacter(responseBuffer, std::vector<uint8_t>(data));
+        checksum += processEscapedCharacter(responseBuffer,
+                                            std::vector<uint8_t>(data));
         responseBuffer.push_back(-checksum); // checksum2
 
         // bmStop
@@ -323,14 +323,13 @@ void SerialChannel::read(stdplus::Fd& uart, sdbusplus::bus_t& bus,
     outstanding = m.call_async(stdplus::exception::ignore(
         [&outstanding, this, &uart, _rsAddr{rsAddr}, _rqAddr{rqAddr},
          _seq{seq}](sdbusplus::message_t&& m) {
-            outstanding = sdbusplus::slot_t(nullptr);
+        outstanding = sdbusplus::slot_t(nullptr);
 
-            if (write(uart, _rsAddr, _rqAddr, _seq, std::move(m)) < 0)
-            {
-                lg2::error(
-                    "Occur an error while attempting to send the response.");
-            }
-        }));
+        if (write(uart, _rsAddr, _rqAddr, _seq, std::move(m)) < 0)
+        {
+            lg2::error("Occur an error while attempting to send the response.");
+        }
+    }));
 
     requestBuffer.clear();
 

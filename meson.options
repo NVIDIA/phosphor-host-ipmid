@@ -231,6 +231,9 @@ option(
     description: 'An array of integers',
 )
 
+# SEL SEL_PERSISTENCE PATH
+option('sel-persistence-path', type: 'string', value: '/var/lib/logging/logs/errors/SEL', description: 'SEL persistence path')
+
 # libipmi20.so library
 option(
     'dynamic-storages-only',

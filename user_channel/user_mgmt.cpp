@@ -157,9 +157,9 @@ void setDbusProperty(sdbusplus::bus_t& bus, const std::string& service,
 {
     try
     {
-        auto method =
-            bus.new_method_call(service.c_str(), objPath.c_str(),
-                                dBusPropertiesInterface, setPropertiesMethod);
+        auto method = bus.new_method_call(service.c_str(), objPath.c_str(),
+                                          dBusPropertiesInterface,
+                                          setPropertiesMethod);
         method.append(interface, property, value);
         bus.call(method);
     }
@@ -181,8 +181,8 @@ std::string getUserServiceName()
     {
         try
         {
-            userMgmtService =
-                ipmi::getUserService(bus, userMgrInterface, userMgrObjBasePath);
+            userMgmtService = ipmi::getUserService(bus, userMgrInterface,
+                                                   userMgrObjBasePath);
         }
         catch (const sdbusplus::exception_t& e)
         {
@@ -652,8 +652,8 @@ static int pamFunctionConversation(int numMsg, const struct pam_message** msg,
             return PAM_BUF_ERR;
         }
 
-        void* ptr =
-            calloc(static_cast<size_t>(numMsg), sizeof(struct pam_response));
+        void* ptr = calloc(static_cast<size_t>(numMsg),
+                           sizeof(struct pam_response));
         if (ptr == nullptr)
         {
             free(pass);
@@ -686,8 +686,8 @@ int pamUpdatePasswd(const char* username, const char* password)
                                                const_cast<char*>(password)};
     pam_handle_t* localAuthHandle = NULL; // this gets set by pam_start
 
-    int retval =
-        pam_start("passwd", username, &localConversation, &localAuthHandle);
+    int retval = pam_start("passwd", username, &localConversation,
+                           &localAuthHandle);
 
     if (retval != PAM_SUCCESS)
     {
@@ -830,9 +830,10 @@ Cc UserAccess::setUserEnabledState(const uint8_t userId,
     return ccSuccess;
 }
 
-Cc UserAccess::setUserPayloadAccess(
-    const uint8_t chNum, const uint8_t operation, const uint8_t userId,
-    const PayloadAccess& payloadAccess)
+Cc UserAccess::setUserPayloadAccess(const uint8_t chNum,
+                                    const uint8_t operation,
+                                    const uint8_t userId,
+                                    const PayloadAccess& payloadAccess)
 {
     constexpr uint8_t enable = 0x0;
     constexpr uint8_t disable = 0x1;
@@ -1387,8 +1388,8 @@ void UserAccess::writeUserData()
 
         readPayloadAccessFromUserInfo(usersTbl.user[usrIndex], stdPayload,
                                       oemPayload);
-        Json jsonPayloadEnabledInfo =
-            constructJsonPayloadEnables(stdPayload, oemPayload);
+        Json jsonPayloadEnabledInfo = constructJsonPayloadEnables(stdPayload,
+                                                                  oemPayload);
         jsonUserInfo[payloadEnabledStr] = jsonPayloadEnabledInfo;
 
         jsonUsersTbl.push_back(jsonUserInfo);
@@ -1632,16 +1633,16 @@ void UserAccess::cacheUserDataFile()
                 sdbusplus::bus::match::rules::interface(dBusObjManager) +
                 sdbusplus::bus::match::rules::path(userMgrObjBasePath),
             [&](sdbusplus::message_t& msg) {
-                userUpdatedSignalHandler(*this, msg);
-            });
+            userUpdatedSignalHandler(*this, msg);
+        });
         userMgrRenamedSignal = std::make_unique<sdbusplus::bus::match_t>(
             bus,
             sdbusplus::bus::match::rules::type::signal() +
                 sdbusplus::bus::match::rules::interface(userMgrInterface) +
                 sdbusplus::bus::match::rules::path(userMgrObjBasePath),
             [&](sdbusplus::message_t& msg) {
-                userUpdatedSignalHandler(*this, msg);
-            });
+            userUpdatedSignalHandler(*this, msg);
+        });
         userPropertiesSignal = std::make_unique<sdbusplus::bus::match_t>(
             bus,
             sdbusplus::bus::match::rules::type::signal() +
@@ -1651,8 +1652,8 @@ void UserAccess::cacheUserDataFile()
                 sdbusplus::bus::match::rules::member(propertiesChangedSignal) +
                 sdbusplus::bus::match::rules::argN(0, usersInterface),
             [&](sdbusplus::message_t& msg) {
-                userUpdatedSignalHandler(*this, msg);
-            });
+            userUpdatedSignalHandler(*this, msg);
+        });
         signalHndlrObject = true;
     }
     std::map<DbusUserObjPath, DbusUserObjValue> managedObjs;

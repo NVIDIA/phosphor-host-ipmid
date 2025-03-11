@@ -53,8 +53,8 @@ int execute(const std::string& channel, const bool& verbose)
     IO ioSource(event, uart.get(), EPOLLIN | EPOLLET,
                 stdplus::exception::ignore(
                     [&serialchannel, &uart, &bus, &slot](IO&, int, uint32_t) {
-                        serialchannel->read(uart, bus, slot);
-                    }));
+        serialchannel->read(uart, bus, slot);
+    }));
 
     sd_notify(0, "READY=1");
     return event.loop();

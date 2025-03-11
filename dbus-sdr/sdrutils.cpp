@@ -18,9 +18,7 @@
 
 #include "dbus-sdr/sensorutils.hpp"
 
-#include "dbus-sdr/sensorutils.hpp"
-
-#include <ipmid/utils.hpp> 
+#include <ipmid/utils.hpp>
 #include <nlohmann/json.hpp>
 #include <phosphor-logging/lg2.hpp>
 
@@ -41,8 +39,6 @@ extern const IdInfoMap sensors;
 
 #endif
 
-
-
 namespace details
 {
 
@@ -59,8 +55,8 @@ static void filterSensors(SensorSubTree& subtree)
     {
         return;
     }
-    nlohmann::json sensorFilterJSON =
-        nlohmann::json::parse(filterFile, nullptr, false);
+    nlohmann::json sensorFilterJSON = nlohmann::json::parse(filterFile, nullptr,
+                                                            false);
     nlohmann::json::iterator svcFilterit =
         sensorFilterJSON.find("ServiceFilter");
     if (svcFilterit == sensorFilterJSON.end())
@@ -70,16 +66,15 @@ static void filterSensors(SensorSubTree& subtree)
 
     subtree.erase(std::remove_if(subtree.begin(), subtree.end(),
                                  [svcFilterit](SensorSubTree::value_type& kv) {
-                                     auto& [_, serviceToIfaces] = kv;
+        auto& [_, serviceToIfaces] = kv;
 
-                                     for (auto service = svcFilterit->begin();
-                                          service != svcFilterit->end();
-                                          ++service)
-                                     {
-                                         serviceToIfaces.erase(*service);
-                                     }
-                                     return serviceToIfaces.empty();
-                                 }),
+        for (auto service = svcFilterit->begin(); service != svcFilterit->end();
+             ++service)
+        {
+            serviceToIfaces.erase(*service);
+        }
+        return serviceToIfaces.empty();
+    }),
                   subtree.end());
 }
 
@@ -168,8 +163,13 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
         "xyz.openbmc_project.Control.PowerSupplyRedundancy",
         "xyz.openbmc_project.Inventory.Item.SEL",
         "xyz.openbmc_project.Inventory.Item.GPU"};
+    static constexpr const std::array discreteInterfacesEventOnly = {
+        "xyz.openbmc_project.Inventory.Item.PowerSupplyEvent"};
     static constexpr const std::array bootProgressInterfaces = {
         "xyz.openbmc_project.State.Boot.Progress"};
+
+    static constexpr const std::array processorInterfaces = {
+        "xyz.openbmc_project.Inventory.Item.CpuCore"};
 
     bool sensorRez = lbdUpdateSensorTree("/xyz/openbmc_project/sensors",
                                          sensorInterfaces);
@@ -320,7 +320,12 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
     // Add boot progress sensor
     (void)lbdUpdateSensorTree("/xyz/openbmc_project/state",
                               bootProgressInterfaces);
-
+    // Add processor sensor
+    (void)lbdUpdateSensorTree("/xyz/openbmc_project/state",
+                              processorInterfaces);
+    // Add discrete sensors that returns Event-Only Record
+    (void)lbdUpdateSensorTree("/xyz/openbmc_project/sensors/motherboard",
+                              discreteInterfacesEventOnly);
     subtree = sensorTreePtr;
     sensorUpdatedIndex++;
     // The SDR is being regenerated, wipe the old stats
@@ -373,6 +378,11 @@ bool getSensorNumMap(std::shared_ptr<SensorNumMap>& sensorNumMap)
         }
         sensorNum = sensorIndex;
     }
+    // if no sensors in the sensor tree return false
+    if (sensorIndex == 0)
+    {
+        return sensorNumMapUpated;
+    }
     sensorNumMap = sensorNumMapPtr;
     sensorNumMapUpated = true;
     return sensorNumMapUpated;
@@ -400,8 +410,8 @@ ipmi::sensor::IdInfoMap::const_iterator
     return std::find_if(
         ipmi::sensor::sensors.begin(), ipmi::sensor::sensors.end(),
         [&path](const ipmi::sensor::IdInfoMap::value_type& findSensor) {
-            return findSensor.second.sensorPath == path;
-        });
+        return findSensor.second.sensorPath == path;
+    });
 }
 #endif
 
@@ -1080,8 +1090,8 @@ std::optional<std::map<std::string, std::vector<std::string>>>
     return interfacesResponse;
 }
 
-std::map<std::string, Value>
-    getEntityManagerProperties(const char* path, const char* interface)
+std::map<std::string, Value> getEntityManagerProperties(const char* path,
+                                                        const char* interface)
 {
     std::map<std::string, Value> properties;
     std::shared_ptr<sdbusplus::asio::connection> dbus = getSdBus();
@@ -1132,8 +1142,8 @@ std::optional<std::unordered_set<std::string>>&
         return ipmiDecoratorPaths;
     }
 
-    ipmiDecoratorPaths =
-        std::unordered_set<std::string>(paths.begin(), paths.end());
+    ipmiDecoratorPaths = std::unordered_set<std::string>(paths.begin(),
+                                                         paths.end());
     return ipmiDecoratorPaths;
 }
 

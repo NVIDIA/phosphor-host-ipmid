@@ -1,7 +1,5 @@
 #include "config.h"
 
-
-
 #include "dbus-sdr/sdrutils.hpp"
 #include "fruread.hpp"
 #include "read_fru_data.hpp"
@@ -381,8 +379,8 @@ ipmi_ret_t getSELEntry(ipmi_netfn_t, ipmi_cmd_t, ipmi_request_t request,
         }
 
         auto diff = ipmi::sel::selRecordSize - requestData->offset;
-        auto readLength =
-            std::min(diff, static_cast<int>(requestData->readLength));
+        auto readLength = std::min(diff,
+                                   static_cast<int>(requestData->readLength));
 
         std::memcpy(response, &record.nextRecordID,
                     sizeof(record.nextRecordID));
@@ -528,9 +526,9 @@ ipmi::RspType<uint8_t // erase status
 
     sdbusplus::bus_t bus{ipmid_get_sd_bus_connection()};
     auto service = ipmi::getService(bus, ipmi::sel::logIntf, ipmi::sel::logObj);
-    auto method =
-        bus.new_method_call(service.c_str(), ipmi::sel::logObj,
-                            ipmi::sel::logIntf, ipmi::sel::logDeleteAllMethod);
+    auto method = bus.new_method_call(service.c_str(), ipmi::sel::logObj,
+                                      ipmi::sel::logIntf,
+                                      ipmi::sel::logDeleteAllMethod);
     try
     {
         bus.call_noreply(method);
@@ -733,8 +731,8 @@ bool isFruPresent(ipmi::Context::ptr& ctx, const std::string& fruPath)
     using namespace ipmi::fru;
 
     std::string service;
-    boost::system::error_code ec =
-        getService(ctx, invItemInterface, invObjPath + fruPath, service);
+    boost::system::error_code ec = getService(ctx, invItemInterface,
+                                              invObjPath + fruPath, service);
     if (!ec)
     {
         bool result;
@@ -873,8 +871,8 @@ ipmi::RspType<uint8_t,  // SDR version
     const auto& entityRecords =
         ipmi::sensor::EntityInfoMapContainer::getContainer()
             ->getIpmiEntityRecords();
-    uint16_t records =
-        ipmi::sensor::sensors.size() + frus.size() + entityRecords.size();
+    uint16_t records = ipmi::sensor::sensors.size() + frus.size() +
+                       entityRecords.size();
 
     return ipmi::responseSuccess(sdrVersion, records, freeSpace,
                                  additionTimestamp, deletionTimestamp,

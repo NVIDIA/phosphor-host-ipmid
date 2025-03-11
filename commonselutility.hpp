@@ -28,6 +28,7 @@ constexpr auto strGenerateId = "GENERATOR_ID";
 constexpr auto strRecordType = "RECORD_TYPE";
 constexpr auto strSensorData = "SENSOR_DATA";
 constexpr auto strSensorPath = "SENSOR_PATH";
+constexpr auto strSensorNumber = "SENSOR_NUMBER";
 } // namespace
 
 namespace ipmi

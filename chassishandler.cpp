@@ -136,7 +136,7 @@ namespace chassis
 {
 namespace internal
 {
-
+constexpr auto timeoutOverRideProperty = "BootValidTimeoutOverride";
 constexpr auto bootSettingsPath = "/xyz/openbmc_project/control/host0/boot";
 constexpr auto bootEnableIntf = "xyz.openbmc_project.Object.Enable";
 constexpr auto bootModeIntf = "xyz.openbmc_project.Control.Boot.Mode";
@@ -150,6 +150,8 @@ constexpr auto powerRestoreIntf =
     "xyz.openbmc_project.Control.Power.RestorePolicy";
 
 constexpr auto bootFlagIntf = "xyz.openbmc_project.Control.Boot.Flags";
+constexpr auto bootValidFlagClearIntf =
+    "xyz.openbmc_project.Control.Boot.BootSettingsExpiryOverride";
 constexpr auto bootInstanceIntf = "xyz.openbmc_project.Control.Boot.Instance";
 constexpr auto bootInstanceTypeIntf =
     "xyz.openbmc_project.Control.Boot.InstanceType";
@@ -213,9 +215,9 @@ int getHostNetworkData(ipmi::message::Payload& payload)
 
         properties = ipmi::getAllDbusProperties(
             bus, ipObjectInfo.second, ipObjectInfo.first, IP_INTERFACE);
-        auto variant = ipmi::getDbusProperty(
-            bus, macObjectInfo.second, macObjectInfo.first, MAC_INTERFACE,
-            "MACAddress");
+        auto variant = ipmi::getDbusProperty(bus, macObjectInfo.second,
+                                             macObjectInfo.first, MAC_INTERFACE,
+                                             "MACAddress");
 
         auto ipAddress = std::get<std::string>(properties["Address"]);
 
@@ -356,7 +358,8 @@ std::string getAddrStr(uint8_t family, uint8_t* data, uint8_t offset,
     {
         case AF_INET:
         {
-            struct sockaddr_in addr4{};
+            struct sockaddr_in addr4
+            {};
             std::memcpy(&addr4.sin_addr.s_addr, &data[offset], addrSize);
 
             inet_ntop(AF_INET, &addr4.sin_addr, ipAddr, INET_ADDRSTRLEN);
@@ -365,7 +368,8 @@ std::string getAddrStr(uint8_t family, uint8_t* data, uint8_t offset,
         }
         case AF_INET6:
         {
-            struct sockaddr_in6 addr6{};
+            struct sockaddr_in6 addr6
+            {};
             std::memcpy(&addr6.sin6_addr.s6_addr, &data[offset], addrSize);
 
             inet_ntop(AF_INET6, &addr6.sin6_addr, ipAddr, INET6_ADDRSTRLEN);
@@ -533,10 +537,10 @@ ipmi::Cc setHostNetworkData(ipmi::message::Payload& data)
         } while (0);
 
         // Cookie == 0 or it is a valid cookie
-        hostNetworkConfig +=
-            "ipaddress="s + ipAddress + ",prefix="s + std::to_string(prefix) +
-            ",gateway="s + gateway + ",mac="s + mac + ",addressOrigin="s +
-            addressOrigin;
+        hostNetworkConfig += "ipaddress="s + ipAddress + ",prefix="s +
+                             std::to_string(prefix) + ",gateway="s + gateway +
+                             ",mac="s + mac + ",addressOrigin="s +
+                             addressOrigin;
 
         sdbusplus::bus_t bus(ipmid_get_sd_bus_connection());
 
@@ -576,15 +580,15 @@ uint32_t getPOHCounter()
 {
     sdbusplus::bus_t bus{ipmid_get_sd_bus_connection()};
 
-    auto chassisStateObj =
-        ipmi::getDbusObject(bus, chassisPOHStateIntf, chassisStateRoot, match);
+    auto chassisStateObj = ipmi::getDbusObject(bus, chassisPOHStateIntf,
+                                               chassisStateRoot, match);
 
-    auto service =
-        ipmi::getService(bus, chassisPOHStateIntf, chassisStateObj.first);
+    auto service = ipmi::getService(bus, chassisPOHStateIntf,
+                                    chassisStateObj.first);
 
-    auto propValue =
-        ipmi::getDbusProperty(bus, service, chassisStateObj.first,
-                              chassisPOHStateIntf, pohCounterProperty);
+    auto propValue = ipmi::getDbusProperty(bus, service, chassisStateObj.first,
+                                           chassisPOHStateIntf,
+                                           pohCounterProperty);
 
     return std::get<uint32_t>(propValue);
 }
@@ -632,9 +636,9 @@ ipmi::RspType<bool,    // chassis intrusion sensor
         // [0] -1b = Chassis provides intrusion (physical security) sensor.
         // set to default value 0x0.
 
-        properties =
-            ipmi::getAllDbusProperties(bus, chassisCapObject.second,
-                                       chassisCapObject.first, chassisCapIntf);
+        properties = ipmi::getAllDbusProperties(bus, chassisCapObject.second,
+                                                chassisCapObject.first,
+                                                chassisCapIntf);
     }
     catch (const std::exception& e)
     {
@@ -706,11 +710,11 @@ ipmi::RspType<bool,    // chassis intrusion sensor
         return ipmi::responseUnspecifiedError();
     }
 
-    return ipmi::responseSuccess(
-        *chassisIntrusionFlag, *chassisFrontPanelFlag, *chassisNMIFlag,
-        *chassisPowerInterlockFlag, 0, *chassisFRUInfoDevAddr,
-        *chassisSDRDevAddr, *chassisSELDevAddr, *chassisSMDevAddr,
-        *chassisBridgeDevAddr);
+    return ipmi::responseSuccess(*chassisIntrusionFlag, *chassisFrontPanelFlag,
+                                 *chassisNMIFlag, *chassisPowerInterlockFlag, 0,
+                                 *chassisFRUInfoDevAddr, *chassisSDRDevAddr,
+                                 *chassisSELDevAddr, *chassisSMDevAddr,
+                                 *chassisBridgeDevAddr);
 }
 
 /** @brief implements set chassis capalibities command
@@ -725,18 +729,18 @@ ipmi::RspType<bool,    // chassis intrusion sensor
  *
  *  @returns IPMI completion code
  */
-ipmi::RspType<> ipmiSetChassisCap(
-    bool intrusion, bool fpLockout, uint6_t reserved1,
+ipmi::RspType<> ipmiSetChassisCap(bool intrusion, bool fpLockout,
+                                  uint6_t reserved1,
 
-    uint8_t fruDeviceAddr,
+                                  uint8_t fruDeviceAddr,
 
-    uint8_t sdrDeviceAddr,
+                                  uint8_t sdrDeviceAddr,
 
-    uint8_t selDeviceAddr,
+                                  uint8_t selDeviceAddr,
 
-    uint8_t smDeviceAddr,
+                                  uint8_t smDeviceAddr,
 
-    uint8_t bridgeDeviceAddr)
+                                  uint8_t bridgeDeviceAddr)
 {
     // check input data
     if (reserved1 != 0)
@@ -834,8 +838,8 @@ int initiateHostStateTransition(ipmi::Context::ptr& ctx,
             transition);
 
     std::string service;
-    boost::system::error_code ec =
-        ipmi::getService(ctx, hostStateIntf, hostStatePath, service);
+    boost::system::error_code ec = ipmi::getService(ctx, hostStateIntf,
+                                                    hostStatePath, service);
 
     if (!ec)
     {
@@ -880,8 +884,8 @@ int initiateChassisStateTransition(ipmi::Context::ptr& ctx,
     constexpr auto chassisStateIntf = "xyz.openbmc_project.State.Chassis";
 
     std::string service;
-    boost::system::error_code ec =
-        ipmi::getService(ctx, chassisStateIntf, chassisStatePath, service);
+    boost::system::error_code ec = ipmi::getService(ctx, chassisStateIntf,
+                                                    chassisStatePath, service);
 
     // Convert to string equivalent of the passed in transition enum.
     auto request =
@@ -999,8 +1003,8 @@ std::optional<bool> getPowerStatus()
             "/xyz/openbmc_project/state/chassis0";
         constexpr const char* chassisStateIntf =
             "xyz.openbmc_project.State.Chassis";
-        auto service =
-            ipmi::getService(*busp, chassisStateIntf, chassisStatePath);
+        auto service = ipmi::getService(*busp, chassisStateIntf,
+                                        chassisStatePath);
 
         ipmi::Value powerState =
             ipmi::getDbusProperty(*busp, service, chassisStatePath,
@@ -1021,8 +1025,8 @@ std::optional<bool> getPowerStatus()
                 "/org/openbmc/control/power0";
             constexpr const char* legacyPwrCtrlIntf =
                 "org.openbmc.control.Power";
-            auto service =
-                ipmi::getService(*busp, legacyPwrCtrlIntf, legacyPwrCtrlObj);
+            auto service = ipmi::getService(*busp, legacyPwrCtrlIntf,
+                                            legacyPwrCtrlObj);
 
             ipmi::Value variant = ipmi::getDbusProperty(
                 *busp, service, legacyPwrCtrlObj, legacyPwrCtrlIntf, "pgood");
@@ -1052,8 +1056,8 @@ bool getACFailStatus()
     std::shared_ptr<sdbusplus::asio::connection> bus = getSdBus();
     try
     {
-        auto service =
-            ipmi::getService(*bus, powerControlIntf, powerControlObj);
+        auto service = ipmi::getService(*bus, powerControlIntf,
+                                        powerControlObj);
 
         ipmi::Value variant = ipmi::getDbusProperty(
             *bus, service, powerControlObj, powerControlIntf, "PFail");
@@ -1151,8 +1155,8 @@ static std::optional<bool> getChassisIntrusionStatus(ipmi::Context::ptr& ctx)
             chassisIntrusionStr);
         if (!ec)
         {
-            bool ret =
-                (chassisIntrusionStr == "HardwareIntrusion") ? true : false;
+            bool ret = (chassisIntrusionStr == "HardwareIntrusion") ? true
+                                                                    : false;
             return std::make_optional(ret);
         }
     }
@@ -1178,7 +1182,7 @@ ipmi::RspType<bool,    // Power is on
               bool,    // last power down caused by a Power overload
               bool,    // last power down caused by a power interlock
               bool,    // last power down caused by power fault
-              bool,    // last ‘Power is on’ state was entered via IPMI command
+              bool, // last ‘Power is on’ state was entered via IPMI command
               uint3_t, // reserved
 
               bool,    // Chassis intrusion active
@@ -1210,8 +1214,8 @@ ipmi::RspType<bool,    // Power is on
     }
 
     //  Front Panel Button Capabilities and disable/enable status(Optional)
-    std::optional<bool> powerButtonReading =
-        getButtonEnabled(powerButtonPath, powerButtonIntf);
+    std::optional<bool> powerButtonReading = getButtonEnabled(powerButtonPath,
+                                                              powerButtonIntf);
     // allow disable if the interface is present
     bool powerButtonDisableAllow = static_cast<bool>(powerButtonReading);
     // default return the button is enabled (not disabled)
@@ -1222,8 +1226,8 @@ ipmi::RspType<bool,    // Power is on
         powerButtonDisabled = *powerButtonReading;
     }
 
-    std::optional<bool> resetButtonReading =
-        getButtonEnabled(resetButtonPath, resetButtonIntf);
+    std::optional<bool> resetButtonReading = getButtonEnabled(resetButtonPath,
+                                                              resetButtonIntf);
     // allow disable if the interface is present
     bool resetButtonDisableAllow = static_cast<bool>(resetButtonReading);
     // default return the button is enabled (not disabled)
@@ -1349,8 +1353,8 @@ static std::optional<uint4_t> getRestartCause(ipmi::Context::ptr ctx)
     constexpr const char* restartCauseIntf = "xyz.openbmc_project.State.Host";
 
     std::string service;
-    boost::system::error_code ec =
-        ipmi::getService(ctx, restartCauseIntf, restartCausePath, service);
+    boost::system::error_code ec = ipmi::getService(ctx, restartCauseIntf,
+                                                    restartCausePath, service);
     if (!ec)
     {
         std::string restartCauseStr;
@@ -1669,8 +1673,8 @@ static ipmi::Cc getBootSource(ipmi::Context::ptr& ctx, Source::Sources& source)
     using namespace chassis::internal;
     std::string result;
     std::string service;
-    boost::system::error_code ec =
-        getService(ctx, bootSourceIntf, bootSettingsPath, service);
+    boost::system::error_code ec = getService(ctx, bootSourceIntf,
+                                              bootSettingsPath, service);
     if (!ec)
     {
         ec = ipmi::getDbusProperty(ctx, service, bootSettingsPath,
@@ -1695,8 +1699,8 @@ static ipmi::Cc setBootSource(ipmi::Context::ptr& ctx,
 {
     using namespace chassis::internal;
     std::string service;
-    boost::system::error_code ec =
-        getService(ctx, bootSourceIntf, bootSettingsPath, service);
+    boost::system::error_code ec = getService(ctx, bootSourceIntf,
+                                              bootSettingsPath, service);
     if (!ec)
     {
         ec = ipmi::setDbusProperty(ctx, service, bootSettingsPath,
@@ -1721,8 +1725,8 @@ static ipmi::Cc getBootMode(ipmi::Context::ptr& ctx, Mode::Modes& mode)
     using namespace chassis::internal;
     std::string result;
     std::string service;
-    boost::system::error_code ec =
-        getService(ctx, bootModeIntf, bootSettingsPath, service);
+    boost::system::error_code ec = getService(ctx, bootModeIntf,
+                                              bootSettingsPath, service);
     if (!ec)
     {
         ec = ipmi::getDbusProperty(ctx, service, bootSettingsPath, bootModeIntf,
@@ -1746,8 +1750,8 @@ static ipmi::Cc setBootMode(ipmi::Context::ptr& ctx, const Mode::Modes& mode)
 {
     using namespace chassis::internal;
     std::string service;
-    boost::system::error_code ec =
-        getService(ctx, bootModeIntf, bootSettingsPath, service);
+    boost::system::error_code ec = getService(ctx, bootModeIntf,
+                                              bootSettingsPath, service);
     if (!ec)
     {
         ec = ipmi::setDbusProperty(ctx, service, bootSettingsPath, bootModeIntf,
@@ -1771,8 +1775,8 @@ static ipmi::Cc getBootType(ipmi::Context::ptr& ctx, Type::Types& type)
     using namespace chassis::internal;
     std::string result;
     std::string service;
-    boost::system::error_code ec =
-        getService(ctx, bootTypeIntf, bootSettingsPath, service);
+    boost::system::error_code ec = getService(ctx, bootTypeIntf,
+                                              bootSettingsPath, service);
 
     // Don't throw error if BootType interface is not present.
     // This interface is not relevant for some Host architectures
@@ -1803,8 +1807,8 @@ static ipmi::Cc setBootType(ipmi::Context::ptr& ctx, const Type::Types& type)
 {
     using namespace chassis::internal;
     std::string service;
-    boost::system::error_code ec =
-        getService(ctx, bootTypeIntf, bootSettingsPath, service);
+    boost::system::error_code ec = getService(ctx, bootTypeIntf,
+                                              bootSettingsPath, service);
     if (!ec)
     {
         ec = ipmi::setDbusProperty(ctx, service, bootSettingsPath, bootTypeIntf,
@@ -1832,8 +1836,8 @@ static ipmi::Cc getBootEnable(ipmi::Context::ptr& ctx, bool& enable)
     using namespace chassis::internal;
     std::string result;
     std::string service;
-    boost::system::error_code ec =
-        getService(ctx, bootEnableIntf, bootSettingsPath, service);
+    boost::system::error_code ec = getService(ctx, bootEnableIntf,
+                                              bootSettingsPath, service);
     if (!ec)
     {
         ec = ipmi::getDbusProperty(ctx, service, bootSettingsPath,
@@ -1857,8 +1861,8 @@ static ipmi::Cc setBootEnable(ipmi::Context::ptr& ctx, const bool& enable)
 {
     using namespace chassis::internal;
     std::string service;
-    boost::system::error_code ec =
-        getService(ctx, bootEnableIntf, bootSettingsPath, service);
+    boost::system::error_code ec = getService(ctx, bootEnableIntf,
+                                              bootSettingsPath, service);
     if (!ec)
     {
         ec = ipmi::setDbusProperty(ctx, service, bootSettingsPath,
@@ -1873,6 +1877,40 @@ static ipmi::Cc setBootEnable(ipmi::Context::ptr& ctx, const bool& enable)
     return ipmi::ccUnspecifiedError;
 }
 
+/** @brief flips the boot valid flag value and then reverts it
+ *  @param[in] ctx - context pointer
+ *  @return On failure return IPMI error.
+ */
+
+static ipmi::Cc resetBootValid(ipmi::Context::ptr& ctx)
+{
+    ipmi::Cc rc;
+    bool bootValidFlag = false;
+
+    rc = getBootEnable(ctx, bootValidFlag);
+    if (rc != ipmi::ccSuccess)
+    {
+        return ipmi::ccUnspecifiedError;
+    }
+    // if boot valid flag  value is already  false
+    //  do nothing
+    if (!bootValidFlag)
+    {
+        return ipmi::ccSuccess;
+    }
+    rc = setBootEnable(ctx, !bootValidFlag);
+    if (rc != ipmi::ccSuccess)
+    {
+        return ipmi::ccUnspecifiedError;
+    }
+    rc = setBootEnable(ctx, bootValidFlag);
+    if (rc != ipmi::ccSuccess)
+    {
+        return ipmi::ccUnspecifiedError;
+    }
+    return ipmi::ccSuccess;
+}
+
 /** @brief Get the property value for boot override one-time
  *  @param[in] ctx - context pointer
  *  @param[out] onetime - boot override one-time
@@ -1883,8 +1921,8 @@ static ipmi::Cc getBootOneTime(ipmi::Context::ptr& ctx, bool& onetime)
     using namespace chassis::internal;
     std::string result;
     std::string service;
-    boost::system::error_code ec =
-        getService(ctx, bootOneTimeIntf, bootSettingsOneTimePath, service);
+    boost::system::error_code ec = getService(ctx, bootOneTimeIntf,
+                                              bootSettingsOneTimePath, service);
     if (!ec)
     {
         ec = ipmi::getDbusProperty(ctx, service, bootSettingsOneTimePath,
@@ -1908,8 +1946,8 @@ static ipmi::Cc setBootOneTime(ipmi::Context::ptr& ctx, const bool& onetime)
 {
     using namespace chassis::internal;
     std::string service;
-    boost::system::error_code ec =
-        getService(ctx, bootOneTimeIntf, bootSettingsOneTimePath, service);
+    boost::system::error_code ec = getService(ctx, bootOneTimeIntf,
+                                              bootSettingsOneTimePath, service);
     if (!ec)
     {
         ec = ipmi::setDbusProperty(ctx, service, bootSettingsOneTimePath,
@@ -1924,11 +1962,11 @@ static ipmi::Cc setBootOneTime(ipmi::Context::ptr& ctx, const bool& onetime)
     return ipmi::ccUnspecifiedError;
 }
 
-/** @brief Get the property value for boot flags 
+/** @brief Get the property value for boot flags
  *  @param[in] ctx - context pointer
  *  @param[in] flag - flag name
  *  @param[out] value - value
- *  @return On failure return IPMI error. 
+ *  @return On failure return IPMI error.
  */
 static ipmi::Cc getBootFlag(ipmi::Context::ptr& ctx, const std::string& flag,
                             bool& value)
@@ -1951,7 +1989,7 @@ static ipmi::Cc getBootFlag(ipmi::Context::ptr& ctx, const std::string& flag,
     return ipmi::ccUnspecifiedError;
 }
 
-/** @brief Set the property value for boot flags 
+/** @brief Set the property value for boot flags
  *  @param[in] ctx - context pointer
  *  @param[in] flag - flag name
  *  @param[in] value - value
@@ -1975,6 +2013,65 @@ static ipmi::Cc setBootFlag(ipmi::Context::ptr& ctx, const std::string& flag,
     }
     log<level::ERR>(("Error in Flag " + flag + " Set").c_str(),
                     entry("ERROR=%s", ec.message().c_str()));
+    return ipmi::ccUnspecifiedError;
+}
+
+/** @brief Get the property value for boot flags
+ *  @param[in] ctx - context pointer
+ *  @param[in] flag - flag name
+ *  @param[out] value - value
+ *  @return On failure return IPMI error.
+ */
+static ipmi::Cc getBootFlagTimeoutDis(ipmi::Context::ptr& ctx, bool& value)
+{
+    using namespace chassis::internal;
+    std::string service;
+    boost::system::error_code ec = getService(ctx, bootValidFlagClearIntf,
+                                              bootSettingsPath, service);
+    if (!ec)
+    {
+        ec = ipmi::getDbusProperty(ctx, service, bootSettingsPath,
+                                   bootValidFlagClearIntf,
+                                   timeoutOverRideProperty, value);
+        if (!ec)
+        {
+            return ipmi::ccSuccess;
+        }
+    }
+    log<level::ERR>(
+        ("Error in Flag " + std::string(timeoutOverRideProperty) + " Get")
+            .c_str(),
+        entry("ERROR=%s", ec.message().c_str()));
+    return ipmi::ccUnspecifiedError;
+}
+
+/** @brief Set the property value for boot flags
+ *  @param[in] ctx - context pointer
+ *  @param[in] flag - flag name
+ *  @param[in] value - value
+ *  @return On failure return IPMI error.
+ */
+static ipmi::Cc setBootFlagTimeoutDis(ipmi::Context::ptr& ctx,
+                                      const bool& value)
+{
+    using namespace chassis::internal;
+    std::string service;
+    boost::system::error_code ec = getService(ctx, bootValidFlagClearIntf,
+                                              bootSettingsPath, service);
+    if (!ec)
+    {
+        ec = ipmi::setDbusProperty(ctx, service, bootSettingsPath,
+                                   bootValidFlagClearIntf,
+                                   timeoutOverRideProperty, value);
+        if (!ec)
+        {
+            return ipmi::ccSuccess;
+        }
+    }
+    log<level::ERR>(
+        ("Error in Flag " + std::string(timeoutOverRideProperty) + " Set")
+            .c_str(),
+        entry("ERROR=%s", ec.message().c_str()));
     return ipmi::ccUnspecifiedError;
 }
 
@@ -2318,10 +2415,11 @@ void initEnabledMatch()
  *   parmIndicator - parameter valid/invalid indicator
  *   data          - configuration parameter data
  */
-ipmi::RspType<ipmi::message::Payload> ipmiChassisGetSysBootOptions(
-    ipmi::Context::ptr ctx, uint7_t bootOptionParameter, bool reserved1,
-    [[maybe_unused]] uint8_t setSelector,
-    [[maybe_unused]] uint8_t blockSelector)
+ipmi::RspType<ipmi::message::Payload>
+    ipmiChassisGetSysBootOptions(ipmi::Context::ptr ctx,
+                                 uint7_t bootOptionParameter, bool reserved1,
+                                 [[maybe_unused]] uint8_t setSelector,
+                                 [[maybe_unused]] uint8_t blockSelector)
 {
     ipmi::Cc rc;
     if (reserved1)
@@ -2355,6 +2453,16 @@ ipmi::RspType<ipmi::message::Payload> ipmiChassisGetSysBootOptions(
     if (types::enum_cast<BootOptionParameter>(bootOptionParameter) ==
         BootOptionParameter::bootFlagValidClr)
     {
+        bool bootFlagTimeoutDis = false;
+        getBootFlagTimeoutDis(ctx, bootFlagTimeoutDis);
+        if (bootFlagTimeoutDis)
+        {
+            bootFlagValidBitClr |= (1 << 3); // Set the 3rd bit to 1
+        }
+        else
+        {
+            bootFlagValidBitClr &= ~(1 << 3); // Clear the 3rd bit to 0
+        }
         response.pack(bootOptionParameter, reserved1,
                       uint5_t{bootFlagValidBitClr}, uint3_t{});
         return ipmi::responseSuccess(std::move(response));
@@ -2639,7 +2747,6 @@ ipmi::RspType<> ipmiChassisSetSysBootOptions(ipmi::Context::ptr ctx,
      * Parameter #5 means boot flags. Please refer to 28.13 of ipmi doc.
      * This is the only parameter used by petitboot.
      */
-
     if (types::enum_cast<BootOptionParameter>(parameterSelector) ==
         BootOptionParameter::bootFlags)
     {
@@ -2714,14 +2821,11 @@ ipmi::RspType<> ipmiChassisSetSysBootOptions(ipmi::Context::ptr ctx,
             {
                 permanent = false;
             }
-
             rc = setBootOneTime(ctx, !permanent);
-
             if (rc != ipmi::ccSuccess)
             {
                 return ipmi::response(rc);
             }
-
             rc = setBootEnable(ctx, validFlag);
             if (rc != ipmi::ccSuccess)
             {
@@ -2771,7 +2875,7 @@ ipmi::RspType<> ipmiChassisSetSysBootOptions(ipmi::Context::ptr ctx,
                 return ipmi::response(rc);
             }
 
-            rc = setBootFlag(ctx, "CMOSClear", cmosClear); 
+            rc = setBootFlag(ctx, "CMOSClear", cmosClear);
             if (rc != ipmi::ccSuccess)
             {
                 return ipmi::response(rc);
@@ -2781,7 +2885,7 @@ ipmi::RspType<> ipmiChassisSetSysBootOptions(ipmi::Context::ptr ctx,
 
             auto redirectionItr = consoleRedirectionIpmiToDbus.find(
                 static_cast<uint8_t>(consoleRedirection));
-            if (consoleRedirectionIpmiToDbus.end() != redirectionItr) 
+            if (consoleRedirectionIpmiToDbus.end() != redirectionItr)
             {
                 rc = setBootConsoleRedirection(ctx, redirectionItr->second);
                 if (rc != ipmi::ccSuccess)
@@ -2946,11 +3050,27 @@ ipmi::RspType<> ipmiChassisSetSysBootOptions(ipmi::Context::ptr ctx,
             return ipmi::responseInvalidFieldRequest();
         }
         // store boot flag valid bits clear value
+
         bootFlagValidBitClr = static_cast<uint8_t>(bootFlagValidClr);
-        lg2::info(
+        bool bootFlagTimeoutDis = false;
+        // Check if the 3rd bit (timeout override) is 1 or 0.
+        // true - timeout is disables boot valid flag will not be set to false
+        // after 60 seconds. false - timeout is Enable boot valid flag will be
+        // set to false after 60 seconds.
+        if (uint5_t{bootFlagValidBitClr} & (1 << 3))
+            bootFlagTimeoutDis = true;
+        setBootFlagTimeoutDis(ctx, bootFlagTimeoutDis);
+        log<level::INFO>(
             "ipmiChassisSetSysBootOptions: bootFlagValidBits parameter set "
-            "successfully to {VALUE}",
-            "VALUE", lg2::hex, bootFlagValidBitClr);
+            "successfully",
+            entry("value=0x%x", bootFlagValidBitClr));
+        // if timeout is on reset the vlaue of boot valid to enable the timeout
+        // mechanism.
+        if (!bootFlagTimeoutDis)
+        {
+            resetBootValid(ctx);
+        }
+
         return ipmi::responseSuccess();
     }
     else
@@ -3077,9 +3197,10 @@ ipmi::RspType<uint3_t, // policy support
     return ipmi::responseSuccess(power_policy::allSupport, reserved);
 }
 
-ipmi::RspType<> ipmiSetFrontPanelButtonEnables(
-    ipmi::Context::ptr ctx, bool disablePowerButton, bool disableResetButton,
-    bool, bool, uint4_t)
+ipmi::RspType<> ipmiSetFrontPanelButtonEnables(ipmi::Context::ptr ctx,
+                                               bool disablePowerButton,
+                                               bool disableResetButton, bool,
+                                               bool, uint4_t)
 {
     using namespace chassis::internal;
 

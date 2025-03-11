@@ -243,7 +243,6 @@ enum class IPMINetfnSensorCmds : ipmi_cmd_t
 namespace ipmi
 {
 
-
 uint16_t getNumberOfSensors();
 
 SensorSubTree& getSensorTree()
@@ -343,4 +342,3 @@ int getOtherSensorsDataRecord(ipmi::Context::ptr ctx, uint16_t recordID,
 } // namespace sensor
 
 } // namespace ipmi
-
