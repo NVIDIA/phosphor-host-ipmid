@@ -78,6 +78,9 @@ const std::unordered_set<IP::AddressOrigin> originsV4 = {
     IP::AddressOrigin::DHCP,
 };
 
+const std::unordered_set<IP::AddressOrigin> originsV4Static = {
+    IP::AddressOrigin::Static,
+};
 static constexpr uint8_t oemCmdStart = 192;
 
 // Checks if the ifname is part of the networkd path
@@ -315,18 +318,41 @@ auto getIfAddr4(sdbusplus::bus_t& bus, const ChannelParams& params)
     return getIfAddr<AF_INET>(bus, params, 0, originsV4);
 }
 
-/** @brief Reconfigures the IPv4 address info configured for the interface
+/** @brief Trivial helper for getting the Static IPv4 address from getIfAddrs()
  *
- *  @param[in] bus     - The bus object used for lookups
- *  @param[in] params  - The parameters for the channel
- *  @param[in] address - The new address if specified
- *  @param[in] prefix  - The new address prefix if specified
+ *  @param[in] bus    - The bus object used for lookups
+ *  @param[in] params - The parameters for the channel
+ *  @return The address and prefix if found
+ */
+auto getIfAddr4Static(sdbusplus::bus_t& bus, const ChannelParams& params)
+{
+    return getIfAddr<AF_INET>(bus, params, 0, originsV4Static);
+}
+
+/**
+ * @brief Reconfigure the IPv4 address on the given interface
+ *
+ * This function is called in two distinct cases:
+ * 1. When setting a static IP address (address parameter has value, prefix is
+ * nullopt)
+ * 2. When setting a subnet mask/prefix length (address is nullopt, prefix
+ * parameter has value)
+ *
+ * In both cases, we need to delete any existing IP object and create a new one
+ * with the updated parameters. This is because network configuration changes
+ * require recreating the IP object with the new settings.
+ *
+ * @param[in] bus - The bus to use for D-Bus communication
+ * @param[in] params - The channel parameters
+ * @param[in] address - The IPv4 address to set (optional)
+ * @param[in] prefix - The prefix length to set (optional)
  */
 void reconfigureIfAddr4(sdbusplus::bus_t& bus, const ChannelParams& params,
                         std::optional<stdplus::In4Addr> address,
                         std::optional<uint8_t> prefix)
 {
-    auto ifaddr = getIfAddr4(bus, params);
+    /* Get the defined static address from the interface */
+    auto ifaddr = getIfAddr4Static(bus, params);
     if (!ifaddr && !address)
     {
         log<level::ERR>("Missing address for IPv4 assignment");
@@ -338,6 +364,7 @@ void reconfigureIfAddr4(sdbusplus::bus_t& bus, const ChannelParams& params,
         fallbackPrefix = ifaddr->prefix;
         deleteObjectIfExists(bus, params.service, ifaddr->path);
     }
+
     auto addr = address.value_or(ifaddr->address);
     if (addr != stdplus::In4Addr{})
     {
@@ -892,6 +919,8 @@ RspType<> setLanInt(Context::ptr ctx, uint4_t channelBits, uint4_t reserved1,
         {
             if (channelCall<getEthProp<bool>>(channel, "DHCP4"))
             {
+                log<level::ERR>(
+                    "Set subnet mask is not allowed when DHCP4 is enabled");
                 return responseCommandNotAvailable();
             }
             auto pfx = stdplus::maskToPfx(unpackT<stdplus::In4Addr>(req));
