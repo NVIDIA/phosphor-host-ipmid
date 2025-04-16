@@ -65,9 +65,17 @@ using LogID = uint32_t;
 // <phosphor-log ID, SEL record information entry>
 using SELEntry = std::pair<LogID, ipmi::sel::SELEventRecordFormat>;
 using SELCacheMap = std::map<SELRecordID, SELEntry>;
+// This is used to store the SEL record ID and the corresponding
+// phosphor-logging path ID
+// This map is used to improve the performance of the delete SEL
+using SELLoggingIdMap = std::map<LogID, SELRecordID>;
 
 SELCacheMap selCacheMap __attribute__((init_priority(101)));
+SELLoggingIdMap selLoggingIdMap __attribute__((init_priority(101)));
 bool selCacheMapInitialized = false;
+// This is used to track the number of all SEL entries that exist in the logging
+// system but might not be added to the SEL cache map due to errors.
+static uint16_t selUncachedEntryCount = 0;
 std::unique_ptr<sdbusplus::bus::match::match> selAddedMatch
     __attribute__((init_priority(101)));
 std::unique_ptr<sdbusplus::bus::match::match> selRemovedMatch
@@ -96,10 +104,11 @@ GetSELEntryResponse createSELEntry(const std::string& objPath)
     ipmi::sel::GetSELEntryResponse record{};
 
     uint16_t recordId;
+    uint32_t loggingId;
+    uint16_t selRecordId;
     entryDataMap entryData;
     std::chrono::milliseconds chronoTimeStamp = getEntryData(objPath, entryData,
                                                              recordId);
-
     record.event.eventRecord.recordID = recordId;
     additionalDataMap m;
     auto iterData = entryData.find(propAdditionalData);
@@ -117,6 +126,7 @@ GetSELEntryResponse createSELEntry(const std::string& objPath)
     {
         return ipmi::sel::GetSELEntryResponse{};
     }
+    selUncachedEntryCount++;
     if (recordType != systemEventRecord)
     {
         log<level::ERR>("Record type is not system event record");
@@ -145,6 +155,36 @@ GetSELEntryResponse createSELEntry(const std::string& objPath)
         record.event.eventRecord.sensorNum =
             static_cast<uint8_t>(convert(iter->second));
     }
+
+    loggingId = getLoggingId(objPath);
+    // Try to find the SEL_RECORD_ID field in the additional data of logging
+    // entry.
+    iter = m.find("SEL_RECORD_ID");
+    if (iter != m.end())
+    {
+        try
+        {
+            // If SEL_RECORD_ID is present, get the logging entry ID from the
+            // object path.
+            selRecordId = static_cast<uint16_t>(convert(iter->second));
+        }
+        catch (const std::exception& e)
+        {
+            // If no SEL_RECORD_ID is found or conversion fails, throw an error.
+            // This entry will not be presented in the SEL list.
+            log<level::ERR>("Failed to convert SEL_RECORD_ID",
+                            entry("ERROR=%s", e.what()));
+            elog<InternalFailure>();
+        }
+    }
+    else
+    {
+        log<level::INFO>("No SEL Record ID found in AdditionalData");
+        selRecordId = convertSelIdToU16(loggingId);
+    }
+    record.event.eventRecord.recordID = selRecordId;
+    selLoggingIdMap.insert_or_assign(loggingId, selRecordId);
+
     if (!sensorPath.empty())
     {
         try
@@ -280,7 +320,7 @@ void selAddedCallback(sdbusplus::message::message& m)
     auto entry = parseLoggingEntry(p);
     if (entry)
     {
-        selCacheMap.insert(std::move(*entry));
+        selCacheMap.insert_or_assign(entry->first, std::move(entry->second));
         saveTimeStamp(selAddTimestamp);
     }
 }
@@ -298,11 +338,32 @@ void selRemovedCallback(sdbusplus::message::message& m)
     }
     try
     {
+        uint16_t selRecordId = 0;
         std::string p = objPath;
-        uint16_t selId =
-            ipmi::sel::internal::convertSelIdToU16(getLoggingId(p));
-        ;
-        selCacheMap.erase(selId);
+        uint32_t loggingId = getLoggingId(p);
+        // Looks up the SEL record ID associated with a given phosphor-logging
+        // entry ID (loggingId) using the selLoggingIdMap. If the loggingId
+        // is found in the map, remove the corresponding entries from the map.
+        auto it = selLoggingIdMap.find(loggingId);
+        if (it != selLoggingIdMap.end())
+        {
+            selRecordId = it->second;
+            auto iter = selCacheMap.find(selRecordId);
+            if (iter != selCacheMap.end())
+            {
+                uint32_t cachedLoggingId = iter->second.first;
+                if (cachedLoggingId != loggingId)
+                {
+                    log<level::INFO>(
+                        "Ignore removing SEL entry in cache as logging ID does not match",
+                        entry("LOGGING_ID=%u", loggingId),
+                        entry("SEL_RECORD_ID=%u", selRecordId));
+                    return;
+                }
+            }
+        }
+        selCacheMap.erase(selRecordId);
+        selLoggingIdMap.erase(loggingId);
         saveTimeStamp(selEraseTimestamp);
     }
     catch (const std::invalid_argument& e)
@@ -355,6 +416,7 @@ bool initSELCache()
 {
     registerSelCallbackHandler();
     ipmi::sel::ObjectPaths paths;
+    selUncachedEntryCount = 0;
     try
     {
         ipmi::sel::readLoggingObjectPaths(paths);
@@ -369,7 +431,8 @@ bool initSELCache()
         auto entry = parseLoggingEntry(p);
         if (entry)
         {
-            selCacheMap.insert(std::move(*entry));
+            selCacheMap.insert_or_assign(entry->first,
+                                         std::move(entry->second));
         }
     }
     // Compare the number of SEL entries  to the number of SEL files .
@@ -381,7 +444,7 @@ bool initSELCache()
                 std::filesystem::directory_iterator{
                     std::string(selPersistPath)},
                 std::filesystem::directory_iterator{});
-            if ((selCacheMap.size() >= selPersistFileNum))
+            if (selUncachedEntryCount >= selPersistFileNum)
             {
                 selCacheMapInitialized = true;
             }
@@ -432,15 +495,16 @@ ipmi::RspType<uint16_t // deleted record ID
     }
 
     SELCacheMap::const_iterator iter;
+    SELEntry selEntry;
     uint16_t delRecordID = 0;
 
     if (selRecordID == ipmi::sel::firstEntry)
     {
-        delRecordID = selCacheMap.begin()->first;
+        selEntry = selCacheMap.begin()->second;
     }
     else if (selRecordID == ipmi::sel::lastEntry)
     {
-        delRecordID = selCacheMap.rbegin()->first;
+        selEntry = selCacheMap.rbegin()->second;
     }
     else
     {
@@ -449,12 +513,11 @@ ipmi::RspType<uint16_t // deleted record ID
         {
             return ipmi::responseSensorInvalid();
         }
-        delRecordID = selRecordID;
+        selEntry = iter->second;
     }
-
+    delRecordID = selEntry.first;
     sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
     std::string service;
-    ;
     auto objPath = getLoggingObjPath(iter->second.first);
     try
     {
