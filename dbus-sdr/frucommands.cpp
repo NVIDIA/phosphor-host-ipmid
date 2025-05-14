@@ -297,7 +297,7 @@ void startMatch(void)
     });
 
     // call once to populate
-    (void)boost::asio::spawn(*getIoContext(),
+    auto spawnResult = boost::asio::spawn(*getIoContext(),
                              [](boost::asio::yield_context yield) {
         replaceCacheFru(getSdBus(), yield);
     },

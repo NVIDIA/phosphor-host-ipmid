@@ -781,7 +781,7 @@ void handleLegacyIpmiCommand(sdbusplus::message_t& m)
 {
     // make a copy so the next two moves don't wreak havoc on the stack
     sdbusplus::message_t b{m};
-    (void)boost::asio::spawn(
+    auto spawnResult = boost::asio::spawn(
         *getIoContext(),
         [b = std::move(b)](boost::asio::yield_context yield) {
         sdbusplus::message_t m{std::move(b)};
