@@ -1878,12 +1878,33 @@ static ipmi::Cc getBootEnable(ipmi::Context::ptr& ctx, bool& enable)
  */
 static ipmi::Cc setBootEnable(ipmi::Context::ptr& ctx, const bool& enable)
 {
+    ipmi::Cc rc;
+    bool bootValidFlag = false;
+
+    rc = getBootEnable(ctx, bootValidFlag);
+    if (rc != ipmi::ccSuccess)
+    {
+        return ipmi::ccUnspecifiedError;
+    }
     using namespace chassis::internal;
     std::string service;
     boost::system::error_code ec = getService(ctx, bootEnableIntf,
                                               bootSettingsPath, service);
     if (!ec)
     {
+        // if boot valid flag is true and enable is true, set it to false
+        // so the property change signal will be sent
+        if (bootValidFlag == true && enable == true)
+        {
+            log<level::ERR>("Setting boot valid flag to false");
+            ec = ipmi::setDbusProperty(ctx, service, bootSettingsPath,
+                                       bootEnableIntf, "Enabled", false);
+            if (ec)
+            {
+                return ipmi::ccUnspecifiedError;
+            }
+        }
+        log<level::ERR>("Setting boot valid flag to true");
         ec = ipmi::setDbusProperty(ctx, service, bootSettingsPath,
                                    bootEnableIntf, "Enabled", enable);
         if (!ec)
@@ -1900,7 +1921,6 @@ static ipmi::Cc setBootEnable(ipmi::Context::ptr& ctx, const bool& enable)
  *  @param[in] ctx - context pointer
  *  @return On failure return IPMI error.
  */
-
 static ipmi::Cc resetBootValid(ipmi::Context::ptr& ctx)
 {
     ipmi::Cc rc;
@@ -1916,11 +1936,6 @@ static ipmi::Cc resetBootValid(ipmi::Context::ptr& ctx)
     if (!bootValidFlag)
     {
         return ipmi::ccSuccess;
-    }
-    rc = setBootEnable(ctx, !bootValidFlag);
-    if (rc != ipmi::ccSuccess)
-    {
-        return ipmi::ccUnspecifiedError;
     }
     rc = setBootEnable(ctx, bootValidFlag);
     if (rc != ipmi::ccSuccess)
