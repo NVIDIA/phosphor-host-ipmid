@@ -112,9 +112,14 @@ GetSELEntryResponse createSELEntry(const std::string& objPath)
     const auto& addData = std::get<AdditionalData>(iterData->second);
     m = parseAdditionalData(addData);
     auto recordType = static_cast<uint8_t>(convert(m[strRecordType]));
+    auto iter = m.find("namespace");
+    if (iter == m.end() || iter->second != "SEL")
+    {
+        return ipmi::sel::GetSELEntryResponse{};
+    }
     if (recordType != systemEventRecord)
     {
-        log<level::ERR>("Invalid recordType");
+        log<level::ERR>("Record type is not system event record");
         elog<InternalFailure>();
     }
     // Default values when there is no matched sensor
@@ -123,7 +128,7 @@ GetSELEntryResponse createSELEntry(const std::string& objPath)
     record.event.eventRecord.eventType = 0;
     uint16_t sensorNumTmp = INVALID_SENSOR_NUMBER;
     std::string sensorPath("");
-    auto iter = m.find(strSensorPath);
+    iter = m.find(strSensorPath);
     if (iter != m.end())
     {
         sensorPath = iter->second;
@@ -222,6 +227,11 @@ std::optional<std::pair<uint16_t, SELEntry>>
         auto id = getLoggingId(p);
         ipmi::sel::GetSELEntryResponse record{};
         record = ipmi::sel::internal::createSELEntry(p);
+        if (record.event.eventRecord.recordID == 0)
+        {
+            log<level::INFO>("Empty SEL record, can be due to none SEL type");
+            return std::nullopt;
+        }
         uint16_t selRecordID = record.event.eventRecord.recordID;
         // Returning a pair of
         // <SELEntry ID number, <phosphor-logging ID number, SEL record
