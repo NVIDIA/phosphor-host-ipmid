@@ -62,6 +62,9 @@ conf_data.set('MAX_SEL_ENTRIES', get_option('max-sel-entries'))
 # System interface ID
 conf_data.set('SYSTEM_INTERFACE_ID', get_option('system-interface-id'))
 
+# PAM user authentication
+conf_data.set_quoted('PAM_SERVICE_NAME', get_option('pam-service-name'))
+
 conf_h = configure_file(
   output: 'config.h',
   configuration: conf_data)

@@ -91,3 +91,6 @@ option('system-interface-id', type: 'integer', value: 15, description: 'System i
 
 # Host connection to the BMC
 option('host-connected', type: 'feature', value: 'enabled', description: 'Prevent call to host, when it is not connected')
+
+# PAM user authentication
+option('pam-service-name', type: 'string', value: 'dropbear', description: 'Service name used for user PAM authentication')

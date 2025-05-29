@@ -13,6 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 */
+#include "config.h"
+
 #include "user_mgmt.hpp"
 
 #include "apphandler.hpp"
@@ -716,7 +718,7 @@ bool pamUserCheckAuthenticate(std::string_view username,
 
     pam_handle_t* localAuthHandle = NULL; // this gets set by pam_start
 
-    if (pam_start("dropbear", username.data(), &localConversation,
+    if (pam_start(PAM_SERVICE_NAME, username.data(), &localConversation,
                   &localAuthHandle) != PAM_SUCCESS)
     {
         log<level::ERR>("User Authentication Failure");
