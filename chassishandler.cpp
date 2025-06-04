@@ -2392,6 +2392,30 @@ static uint8_t transferStatus = setComplete;
 static uint8_t bootFlagValidBitClr = 0;
 static uint5_t bootInitiatorAckData = 0x0;
 
+void initEnabledValue()
+{
+    using namespace chassis::internal;
+    std::string path = "/xyz/openbmc_project/control/host0/boot";
+    std::string inf = "xyz.openbmc_project.Object.Enable";
+    std::shared_ptr<sdbusplus::asio::connection> bus = getSdBus();
+    try
+    {
+        auto service = ipmi::getService(*bus, inf, path);
+        ipmi::Value enabledValue = ipmi::getDbusProperty(*bus, service, path,
+                                                         inf, "Enabled");
+        auto value = std::get<bool>(enabledValue);
+        if (value)
+        {
+            bootInitiatorAckData |= 0x1;
+        }
+    }
+    catch (const std::exception& e)
+    {
+        log<level::ERR>("Fail to get Enabled property",
+                        entry("ERROR=%s", e.what()));
+    }
+}
+
 void initEnabledMatch()
 {
     using namespace sdbusplus::bus::match::rules;
@@ -3261,6 +3285,7 @@ void register_netfn_chassis_functions()
 {
     createIdentifyTimer();
     initEnabledMatch();
+    initEnabledValue();
 
     // Get Chassis Capabilities
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnChassis,
