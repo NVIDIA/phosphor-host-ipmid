@@ -2685,7 +2685,7 @@ static int getSensorDataRecord(
     constructDiscreteEventSdr(interfaces, sensor::watchdogEventInterface,
                               static_cast<uint8_t>(SensorTypeCodes::watchdog2),
                               sensorNum, recordID, watchdogEntityId, readBytes,
-                              bmcI2CAddr, path, recordData);
+                              systemSoftwareId, path, recordData);
 
     for (auto& it : sensor::discreteInterfaceEventOnly)
     {
