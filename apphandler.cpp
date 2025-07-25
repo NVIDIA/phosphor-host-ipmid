@@ -869,8 +869,8 @@ auto ipmiAppGetSystemGuid(ipmi::Context::ptr& ctx)
 
     // Get the Inventory object implementing BMC interface
     ipmi::DbusObjectInfo objectInfo{};
-    boost::system::error_code ec = ipmi::getDbusObject(
-        ctx, uuidInterface, ipmi::sensor::inventoryRoot, objectInfo);
+    boost::system::error_code ec = ipmi::getDbusObject(ctx, uuidInterface,
+                                                       objectInfo);
     if (ec.value())
     {
         lg2::error("Failed to locate System UUID object, "
