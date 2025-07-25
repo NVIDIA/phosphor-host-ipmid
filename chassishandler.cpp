@@ -1859,12 +1859,33 @@ static ipmi::Cc getBootEnable(ipmi::Context::ptr& ctx, bool& enable)
  */
 static ipmi::Cc setBootEnable(ipmi::Context::ptr& ctx, const bool& enable)
 {
+    ipmi::Cc rc;
+    bool bootValidFlag = false;
+
+    rc = getBootEnable(ctx, bootValidFlag);
+    if (rc != ipmi::ccSuccess)
+    {
+        return ipmi::ccUnspecifiedError;
+    }
     using namespace chassis::internal;
     std::string service;
     boost::system::error_code ec = getService(ctx, bootEnableIntf,
                                               bootSettingsPath, service);
     if (!ec)
     {
+        // if boot valid flag is true and enable is true, set it to false
+        // so the property change signal will be sent
+        if (bootValidFlag == true && enable == true)
+        {
+            log<level::ERR>("Setting boot valid flag to false");
+            ec = ipmi::setDbusProperty(ctx, service, bootSettingsPath,
+                                       bootEnableIntf, "Enabled", false);
+            if (ec)
+            {
+                return ipmi::ccUnspecifiedError;
+            }
+        }
+        log<level::ERR>("Setting boot valid flag to true");
         ec = ipmi::setDbusProperty(ctx, service, bootSettingsPath,
                                    bootEnableIntf, "Enabled", enable);
         if (!ec)
@@ -1881,7 +1902,6 @@ static ipmi::Cc setBootEnable(ipmi::Context::ptr& ctx, const bool& enable)
  *  @param[in] ctx - context pointer
  *  @return On failure return IPMI error.
  */
-
 static ipmi::Cc resetBootValid(ipmi::Context::ptr& ctx)
 {
     ipmi::Cc rc;
@@ -1897,11 +1917,6 @@ static ipmi::Cc resetBootValid(ipmi::Context::ptr& ctx)
     if (!bootValidFlag)
     {
         return ipmi::ccSuccess;
-    }
-    rc = setBootEnable(ctx, !bootValidFlag);
-    if (rc != ipmi::ccSuccess)
-    {
-        return ipmi::ccUnspecifiedError;
     }
     rc = setBootEnable(ctx, bootValidFlag);
     if (rc != ipmi::ccSuccess)
@@ -2357,6 +2372,30 @@ static constexpr uint8_t setInProgress = 0x1;
 static uint8_t transferStatus = setComplete;
 static uint8_t bootFlagValidBitClr = 0;
 static uint5_t bootInitiatorAckData = 0x0;
+
+void initEnabledValue()
+{
+    using namespace chassis::internal;
+    std::string path = "/xyz/openbmc_project/control/host0/boot";
+    std::string inf = "xyz.openbmc_project.Object.Enable";
+    std::shared_ptr<sdbusplus::asio::connection> bus = getSdBus();
+    try
+    {
+        auto service = ipmi::getService(*bus, inf, path);
+        ipmi::Value enabledValue = ipmi::getDbusProperty(*bus, service, path,
+                                                         inf, "Enabled");
+        auto value = std::get<bool>(enabledValue);
+        if (value)
+        {
+            bootInitiatorAckData |= 0x1;
+        }
+    }
+    catch (const std::exception& e)
+    {
+        log<level::ERR>("Fail to get Enabled property",
+                        entry("ERROR=%s", e.what()));
+    }
+}
 
 void initEnabledMatch()
 {
@@ -3224,6 +3263,7 @@ void register_netfn_chassis_functions()
 {
     createIdentifyTimer();
     initEnabledMatch();
+    initEnabledValue();
 
     // Get Chassis Capabilities
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnChassis,

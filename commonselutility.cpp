@@ -136,11 +136,7 @@ std::chrono::milliseconds getEntryData(const std::string& objPath,
         log<level::ERR>("Error in reading Id of logging entry");
         elog<InternalFailure>();
     }
-#ifdef FEATURE_DYNAMIC_SENSORS
-    recordId = convertSelIdToU16(std::get<uint32_t>(iterId->second));
-#else
     recordId = static_cast<uint16_t>(std::get<uint32_t>(iterId->second));
-#endif
     // Read Timestamp from the log entry.
     static constexpr auto propTimeStamp = "Timestamp";
     auto iterTimeStamp = entryData.find(propTimeStamp);

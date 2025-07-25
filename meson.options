@@ -1,4 +1,3 @@
-
 option('tests', type: 'feature', description: 'Build tests')
 option(
     'boot-flag-safe-mode-support',
@@ -178,7 +177,12 @@ option(
     value: 'disabled',
     description: 'OEM sensor SDR parsing is disabled by default; offer a way to enable it',
 )
-option('dynamic-sensors-remove-exceeded-scale', type: 'feature', value: 'disabled', description: 'Remove SDR if M range exceeds scale is disabled by default; offer a way to enable it')
+option(
+    'dynamic-sensors-remove-exceeded-scale',
+    type: 'feature',
+    value: 'disabled',
+    description: 'Remove SDR if M range exceeds scale is disabled by default; offer a way to enable it',
+)
 
 # Sensor Cache
 option(
@@ -201,7 +205,12 @@ option(
     value: 'disabled',
     description: 'shortname-replace-words is disabled by default',
 )
-option('enable-sensorname-algo-shortner', type: 'feature', value: 'disabled', description: 'enable-sensorname-algo-shortner is disabled by default')
+option(
+    'enable-sensorname-algo-shortner',
+    type: 'feature',
+    value: 'disabled',
+    description: 'enable-sensorname-algo-shortner is disabled by default',
+)
 
 # Generate configuration from Yaml
 option('sensor-yaml-gen', type: 'string', value: 'sensor-example.yaml')
@@ -232,7 +241,12 @@ option(
 )
 
 # SEL SEL_PERSISTENCE PATH
-option('sel-persistence-path', type: 'string', value: '/var/lib/logging/logs/errors/SEL', description: 'SEL persistence path')
+option(
+    'sel-persistence-path',
+    type: 'string',
+    value: '/var/lib/logging/logs/errors/SEL',
+    description: 'SEL persistence path',
+)
 
 # libipmi20.so library
 option(
@@ -243,23 +257,57 @@ option(
 )
 
 # open-power specific functionality.
-option('open-power', type: 'feature', description: 'Support open-power specific functions')
+option(
+    'open-power',
+    type: 'feature',
+    description: 'Support open-power specific functions',
+)
 
-# SEL Logger functionality 
-option('dbus-logger', type: 'feature', value: 'disabled', description: 'Feature dbus/file based IPMI SEL entries')
-option('max-sel-entries', type: 'integer', value: 2000, description: 'Max SEL Records')
+# SEL Logger functionality
+option(
+    'dbus-logger',
+    type: 'feature',
+    value: 'disabled',
+    description: 'Feature dbus/file based IPMI SEL entries',
+)
+option(
+    'max-sel-entries',
+    type: 'integer',
+    value: 2000,
+    description: 'Max SEL Records',
+)
 
 # System interface ID
-option('system-interface-id', type: 'integer', value: 15, description: 'System interface id')
+option(
+    'system-interface-id',
+    type: 'integer',
+    value: 15,
+    description: 'System interface id',
+)
 
 # Host connection to the BMC
-option('host-connected', type: 'feature', value: 'enabled', description: 'Prevent call to host, when it is not connected')
+option(
+    'host-connected',
+    type: 'feature',
+    value: 'enabled',
+    description: 'Prevent call to host, when it is not connected',
+)
 
 # SEL SEL_PERSISTENCE PATH
-option('sel-persistence-path', type: 'string', value: '/var/lib/logging/logs/errors/SEL', description: 'SEL persistence path')
+option(
+    'sel-persistence-path',
+    type: 'string',
+    value: '/var/lib/logging/logs/errors/SEL',
+    description: 'SEL persistence path',
+)
 
 # libipmi20.so library
-option('dynamic-storages-only', type: 'feature', value: 'disabled', description: 'Request to compile storage commands in the libipmi20 library')
+option(
+    'dynamic-storages-only',
+    type: 'feature',
+    value: 'disabled',
+    description: 'Request to compile storage commands in the libipmi20 library',
+)
 
 # HW transport
 option(
@@ -269,3 +317,10 @@ option(
     description: 'transport',
 )
 
+# PAM user authentication
+option(
+    'pam-service-name',
+    type: 'string',
+    value: 'dropbear',
+    description: 'Service name used for user PAM authentication',
+)

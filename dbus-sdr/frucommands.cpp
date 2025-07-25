@@ -36,8 +36,6 @@ using ManagedEntry = std::pair<sdbusplus::message::object_path, ObjectType>;
 
 constexpr static const char* fruDeviceServiceName =
     "xyz.openbmc_project.FruDevice";
-constexpr static const char* entityManagerServiceName =
-    "xyz.openbmc_project.EntityManager";
 constexpr static const size_t writeTimeoutSeconds = 10;
 constexpr static const char* chassisTypeRackMount = "23";
 constexpr static const char* chassisTypeMainServer = "17";
@@ -562,13 +560,18 @@ ipmi_ret_t getFruSdrs([[maybe_unused]] ipmi::Context::ptr ctx, size_t index,
 
     boost::container::flat_map<std::string, Value>* entityData = nullptr;
 
-    // todo: this should really use caching, this is a very inefficient lookup
+    using SubTreeType =
+        std::map<std::string, std::map<std::string, std::vector<std::string>>>;
     boost::system::error_code ec;
 
-    ManagedObjectType entities = ctx->bus->yield_method_call<ManagedObjectType>(
-        ctx->yield, ec, entityManagerServiceName,
-        "/xyz/openbmc_project/inventory", "org.freedesktop.DBus.ObjectManager",
-        "GetManagedObjects");
+    const std::vector<std::string> interfaces = {
+        "xyz.openbmc_project.Inventory.Decorator.I2CDevice"};
+
+    auto subtree = ctx->bus->yield_method_call<SubTreeType>(
+        ctx->yield, ec, "xyz.openbmc_project.ObjectMapper",
+        "/xyz/openbmc_project/object_mapper",
+        "xyz.openbmc_project.ObjectMapper", "GetSubTree",
+        "/xyz/openbmc_project/inventory", 0, interfaces);
 
     if (ec)
     {
@@ -579,51 +582,85 @@ ipmi_ret_t getFruSdrs([[maybe_unused]] ipmi::Context::ptr ctx, size_t index,
         return ipmi::ccResponseError;
     }
 
-    auto entity =
-        std::find_if(entities.begin(), entities.end(),
-                     [bus, address, &entityData, &name](ManagedEntry& entry) {
-        auto findFruDevice = entry.second.find(
-            "xyz.openbmc_project.Inventory.Decorator.I2CDevice");
-        if (findFruDevice == entry.second.end())
-        {
-            return false;
-        }
+    auto entity = std::find_if(
+        subtree.begin(), subtree.end(),
+        [ctx, bus, address, &entityData, &name](const auto& entry) {
+        const auto& path = entry.first;
+        const auto& services = entry.second;
 
-        // Integer fields added via Entity-Manager json are uint64_ts by
-        // default.
-        auto findBus = findFruDevice->second.find("Bus");
-        auto findAddress = findFruDevice->second.find("Address");
-
-        if (findBus == findFruDevice->second.end() ||
-            findAddress == findFruDevice->second.end())
+        // Get the properties for this object
+        for (const auto& [service, interfaces] : services)
         {
-            return false;
-        }
-        if ((std::get<uint64_t>(findBus->second) != bus) ||
-            (std::get<uint64_t>(findAddress->second) != address))
-        {
-            return false;
-        }
+            try
+            {
+                boost::system::error_code ec;
+                auto properties = ctx->bus->yield_method_call<PropertyMap>(
+                    ctx->yield, ec, service, path,
+                    "org.freedesktop.DBus.Properties", "GetAll",
+                    "xyz.openbmc_project.Inventory.Decorator.I2CDevice");
 
-        auto fruName = findFruDevice->second.find("Name");
-        if (fruName != findFruDevice->second.end())
-        {
-            name = std::get<std::string>(fruName->second);
-        }
+                if (ec)
+                {
+                    continue;
+                }
+                auto findBus = properties.find("Bus");
+                auto findAddress = properties.find("Address");
 
-        // At this point we found the device entry and should return
-        // true.
-        auto findIpmiDevice =
-            entry.second.find("xyz.openbmc_project.Inventory.Decorator.Ipmi");
-        if (findIpmiDevice != entry.second.end())
-        {
-            entityData = &(findIpmiDevice->second);
-        }
+                if (findBus == properties.end() ||
+                    findAddress == properties.end())
+                {
+                    continue;
+                }
 
-        return true;
+                if ((std::get<uint64_t>(findBus->second) != bus) ||
+                    (std::get<uint64_t>(findAddress->second) != address))
+                {
+                    continue;
+                }
+
+                auto fruName = properties.find("Name");
+                if (fruName != properties.end())
+                {
+                    name = std::get<std::string>(fruName->second);
+                }
+
+                // Get IPMI properties if available
+                static boost::container::flat_map<std::string, Value>
+                    storedProps;
+
+                auto ipmiProps = ctx->bus->yield_method_call<PropertyMap>(
+                    ctx->yield, ec, service, path,
+                    "org.freedesktop.DBus.Properties", "GetAll",
+                    "xyz.openbmc_project.Inventory.Decorator.Ipmi");
+
+                if (!ec)
+                {
+                    // Convert std::map to boost::container::flat_map
+                    storedProps.clear();
+                    storedProps.insert(ipmiProps.begin(), ipmiProps.end());
+                    entityData = &storedProps;
+                }
+                if constexpr (DEBUG)
+                {
+                    phosphor::logging::log<phosphor::logging::level::INFO>(
+                        ("FRU Device Info - BUS=0x" + std::to_string(bus) +
+                         " ADDR=0x" + std::to_string(address) +
+                         " NAME=" + name + " ENTITY_DATA=" +
+                         (entityData ? "Present" : "Not Present"))
+                            .c_str());
+                }
+
+                return true;
+            }
+            catch (const std::exception& e)
+            {
+                continue;
+            }
+        }
+        return false;
     });
 
-    if (entity == entities.end())
+    if (entity == subtree.end())
     {
         if constexpr (DEBUG)
         {

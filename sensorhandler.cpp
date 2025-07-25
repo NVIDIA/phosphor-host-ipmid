@@ -720,8 +720,15 @@ get_sdr::GetSensorThresholdsResponse
     getSensorThresholds(ipmi::Context::ptr& ctx, uint8_t sensorNum)
 {
     get_sdr::GetSensorThresholdsResponse resp{};
-    const auto iter = ipmi::sensor::sensors.find(sensorNum);
-    const auto info = iter->second;
+    const auto& iter = ipmi::sensor::sensors.find(sensorNum);
+    // Check if the sensor was found
+    if (iter == ipmi::sensor::sensors.end())
+    {
+        // Sensor not found, return default response
+        return resp;
+    }
+
+    const auto& info = iter->second;
 
     std::string service;
     boost::system::error_code ec;

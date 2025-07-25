@@ -91,6 +91,7 @@ static constexpr uint8_t systemSoftwareId = 0x01;
 static constexpr uint8_t noneLunUsed = 0;
 static constexpr uint8_t systemFirmwareEntityId = 0x22;
 static constexpr uint8_t processorEntityId = 0x03;
+static constexpr uint8_t watchdogEntityId = 0x04;
 static constexpr uint8_t logicalContainerEntity = 0x1;
 
 constexpr size_t maxSDRTotalSize =
@@ -221,6 +222,8 @@ static constexpr const char* bootProgressInterface =
     "xyz.openbmc_project.State.Boot.Progress";
 static constexpr const char* cpuInterface =
     "xyz.openbmc_project.Inventory.Item.CpuCore";
+static constexpr const char* watchdogEventInterface =
+    "xyz.openbmc_project.State.Watchdog.Event";
 
 std::map<DbusInterface,
          std::map<DbusInterface,
@@ -2513,6 +2516,36 @@ uint16_t getNumberOfSensors()
     return std::min(getSensorTree().size(), maxIPMISensors);
 }
 
+static int constructDiscreteEventSdr(const std::vector<std::string>& interfaces,
+                                     const char* interface, uint8_t type,
+                                     uint16_t sensorNum, uint16_t recordID,
+                                     uint8_t entityId, uint8_t readBytes,
+                                     uint8_t ownerId, const std::string& path,
+                                     std::vector<uint8_t>& recordData)
+{
+    if (std::find(interfaces.begin(), interfaces.end(), interface) !=
+        interfaces.end())
+    {
+        get_sdr::SensorDataEventRecord record = {0};
+        // If the request doesn't read SDR body, construct only header and
+        // key part to avoid additional DBus transaction.
+        if (readBytes <= sizeof(record.header) + sizeof(record.key))
+        {
+            constructCommonSensorHeaderKey(sensorNum, recordID, record,
+                                           entityId, ownerId);
+        }
+        else
+        {
+            constructCommonSensorSdr(sensorNum, recordID, path, record, type,
+                                     entityId, ownerId);
+        }
+        recordData.insert(recordData.end(), (uint8_t*)&record,
+                          ((uint8_t*)&record) + sizeof(record));
+        return 0;
+    }
+    return 0;
+}
+
 static int getSensorDataRecord(
     ipmi::Context::ptr ctx,
     const std::unordered_set<std::string>& ipmiDecoratorPaths,
@@ -2745,55 +2778,19 @@ static int getSensorDataRecord(
             break;
         }
     }
-
-    if (std::find(interfaces.begin(), interfaces.end(),
-                  sensor::bootProgressInterface) != interfaces.end())
-    {
-        get_sdr::SensorDataEventRecord record = {0};
-
-        // If the request doesn't read SDR body, construct only header and
-        // key part to avoid additional DBus transaction.
-        if (readBytes <= sizeof(record.header) + sizeof(record.key))
-        {
-            constructCommonSensorHeaderKey(sensorNum, recordID, record,
-                                           systemFirmwareEntityId,
-                                           systemSoftwareId);
-        }
-        else
-        {
-            constructCommonSensorSdr(
-                sensorNum, recordID, path, record,
-                static_cast<uint8_t>(SensorTypeCodes::systemFirmwareProgress),
-                systemFirmwareEntityId, systemSoftwareId);
-        }
-        recordData.insert(recordData.end(), (uint8_t*)&record,
-                          ((uint8_t*)&record) + sizeof(record));
-        return 0;
-    }
-
-    if (std::find(interfaces.begin(), interfaces.end(), sensor::cpuInterface) !=
-        interfaces.end())
-    {
-        get_sdr::SensorDataEventRecord record = {0};
-
-        // If the request doesn't read SDR body, construct only header and
-        // key part to avoid additional DBus transaction.
-        if (readBytes <= sizeof(record.header) + sizeof(record.key))
-        {
-            constructCommonSensorHeaderKey(sensorNum, recordID, record,
-                                           processorEntityId, bmcI2CAddr);
-        }
-        else
-        {
-            constructCommonSensorSdr(
-                sensorNum, recordID, path, record,
-                static_cast<uint8_t>(SensorTypeCodes::processor),
-                processorEntityId, bmcI2CAddr);
-        }
-        recordData.insert(recordData.end(), (uint8_t*)&record,
-                          ((uint8_t*)&record) + sizeof(record));
-        return 0;
-    }
+    constructDiscreteEventSdr(
+        interfaces, sensor::bootProgressInterface,
+        static_cast<uint8_t>(SensorTypeCodes::systemFirmwareProgress),
+        sensorNum, recordID, systemFirmwareEntityId, readBytes,
+        systemSoftwareId, path, recordData);
+    constructDiscreteEventSdr(interfaces, sensor::cpuInterface,
+                              static_cast<uint8_t>(SensorTypeCodes::processor),
+                              sensorNum, recordID, processorEntityId, readBytes,
+                              bmcI2CAddr, path, recordData);
+    constructDiscreteEventSdr(interfaces, sensor::watchdogEventInterface,
+                              static_cast<uint8_t>(SensorTypeCodes::watchdog2),
+                              sensorNum, recordID, watchdogEntityId, readBytes,
+                              systemSoftwareId, path, recordData);
 
     for (auto& it : sensor::discreteInterfaceEventOnly)
     {

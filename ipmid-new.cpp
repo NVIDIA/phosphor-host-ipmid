@@ -130,7 +130,11 @@ using FilterTuple = std::tuple<int,            /* prio */
                                >;
 
 /* list to hold all registered ipmi command filters */
-static std::forward_list<FilterTuple> filterList;
+std::forward_list<FilterTuple>& getFilterList()
+{
+    static std::forward_list<FilterTuple> filterList;
+    return filterList;
+}
 
 namespace impl
 {
@@ -205,6 +209,8 @@ bool registerOemHandler(int prio, Iana iana, Cmd cmd, Privilege priv,
 /* common function to register all IPMI filter handlers */
 void registerFilter(int prio, FilterBase::ptr filter)
 {
+    auto& filterList = getFilterList();
+
     // check for initial placement
     if (filterList.empty() || std::get<int>(filterList.front()) < prio)
     {
@@ -224,6 +230,8 @@ void registerFilter(int prio, FilterBase::ptr filter)
 
 message::Response::ptr filterIpmiCommand(message::Request::ptr request)
 {
+    auto& filterList = getFilterList();
+
     // pass the command through the filter mechanism
     // This can be the firmware firewall or any OEM mechanism like
     // whitelist filtering based on operational mode
@@ -924,7 +932,10 @@ int main(int argc, char* argv[])
     ipmi::handlerMap.clear();
     ipmi::groupHandlerMap.clear();
     ipmi::oemHandlerMap.clear();
-    ipmi::filterList.clear();
+
+    auto& filterList = ipmi::getFilterList();
+    filterList.clear();
+
     // unload the provider libraries
     providers.clear();
 

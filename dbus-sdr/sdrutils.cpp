@@ -167,6 +167,8 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
         "xyz.openbmc_project.Inventory.Item.PowerSupplyEvent"};
     static constexpr const std::array bootProgressInterfaces = {
         "xyz.openbmc_project.State.Boot.Progress"};
+    static constexpr const std::array watchdogEventInterfaces = {
+        "xyz.openbmc_project.State.Watchdog.Event"};
 
     static constexpr const std::array processorInterfaces = {
         "xyz.openbmc_project.Inventory.Item.CpuCore"};
@@ -320,6 +322,9 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
     // Add boot progress sensor
     (void)lbdUpdateSensorTree("/xyz/openbmc_project/state",
                               bootProgressInterfaces);
+    // Add watchdog event sensor
+    (void)lbdUpdateSensorTree("/xyz/openbmc_project/state",
+                              watchdogEventInterfaces);
     // Add processor sensor
     (void)lbdUpdateSensorTree("/xyz/openbmc_project/state",
                               processorInterfaces);

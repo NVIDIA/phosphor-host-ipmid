@@ -56,7 +56,7 @@ if get_option('shortname-replace-words').allowed()
     conf_data.set_quoted('SHORTNAME_REPLACE_WORDS', '1')
 endif
 if get_option('enable-sensorname-algo-shortner').enabled()
-  conf_data.set_quoted('ENABLE_SENSORNAME_ALGO_SHORTNER', '1')
+    conf_data.set_quoted('ENABLE_SENSORNAME_ALGO_SHORTNER', '1')
 endif
 if get_option('open-power').allowed()
     conf_data.set_quoted('OPEN_POWER_SUPPORT', '1')
@@ -76,13 +76,10 @@ conf_data.set('MAX_SEL_ENTRIES', get_option('max-sel-entries'))
 # System interface ID
 conf_data.set('SYSTEM_INTERFACE_ID', get_option('system-interface-id'))
 
-# Max SEL Entries
-conf_data.set('MAX_SEL_ENTRIES', get_option('max-sel-entries'))
+# PAM user authentication
+conf_data.set_quoted('PAM_SERVICE_NAME', get_option('pam-service-name'))
 
-# System interface ID
-conf_data.set('SYSTEM_INTERFACE_ID', get_option('system-interface-id'))
-
-conf_h = configure_file(output: 'config.h', configuration: conf_data) 
+conf_h = configure_file(output: 'config.h', configuration: conf_data)
 
 root = meson.current_source_dir()
 root_inc = include_directories('.', 'include')
@@ -119,8 +116,8 @@ feature_map = {
     'hybrid-sensors'             : '-DFEATURE_HYBRID_SENSORS',
     'sensors-cache'              : '-DFEATURE_SENSORS_CACHE',
     'dynamic-storages-only'      : '-DFEATURE_DYNAMIC_STORAGES_ONLY',
-  'dynamic-sensors-remove-exceeded-scale' : '-DENABLE_DYNAMIC_SENSORS_REMOVE_EXCEEDED_SCALE',
-  'host-connected'              : '-DHOST_CONNECTED',
+    'dynamic-sensors-remove-exceeded-scale' : '-DENABLE_DYNAMIC_SENSORS_REMOVE_EXCEEDED_SCALE',
+    'host-connected'              : '-DHOST_CONNECTED',
 }
 
 foreach option_key, option_value : feature_map
@@ -201,17 +198,23 @@ if get_option('softoff').allowed()
 endif
 
 # whitelist
-if get_option('ipmi-whitelist').allowed()
-    generate_whitelist_script = files('generate_whitelist_create.sh')
+if not get_option('ipmi-whitelist').disabled()
+    allowlist_conf = get_option('whitelist-conf')
+    conf_list = allowlist_conf.split()
+    final_conf = conf_list[conf_list.length() - 1]
 
-    whitelist_conf = get_option('whitelist-conf')
-    ipmiwhitelist = run_command( \
-            'bash', \
-            generate_whitelist_script, \
-            whitelist_conf,
+    prog_python = import('python').find_installation('python3')
+    generate_allowlist_script = files('generate_allowlist.py')
+    ipmiallowlist = custom_target(
+        'ipmiallowlist.hpp',
+        input: [generate_allowlist_script, final_conf],
+        output: 'ipmiallowlist.hpp',
+        command: [prog_python, '@INPUT0@', '@INPUT1@', '@OUTPUT@'],
     )
 
-    whitelist_pre = declare_dependency(
+    allowlist_src = ['allowlist-filter.cpp', ipmiallowlist]
+
+    allowlist_pre = declare_dependency(
         include_directories: root_inc,
         dependencies: [
             crypto,
@@ -222,12 +225,11 @@ if get_option('ipmi-whitelist').allowed()
         ],
     )
 
-    whitelist_lib = library(
-        'whitelist',
-        'whitelist-filter.cpp',
-        'ipmiwhitelist.cpp',
+    allowlist_lib = library(
+        'allowlist',
+        sources: allowlist_src,
         implicit_include_directories: false,
-        dependencies: whitelist_pre,
+        dependencies: allowlist_pre,
         version: meson.project_version(),
         override_options: ['b_lundef=false'],
         install: true,
@@ -305,7 +307,7 @@ libipmi20_src = [
     'globalhandler.cpp',
     'groupext.cpp',
     'selutility.cpp',
-  'commonselutility.cpp',
+    'commonselutility.cpp',
     'ipmi_fru_info_area.cpp',
     'read_fru_data.cpp',
     'sensordatahandler.cpp',
@@ -346,11 +348,17 @@ executable(
     export_dynamic: true,
     install: true,
     install_dir: get_option('bindir'),
-) 
+)
 
-install_headers(['sensorhandler.hpp', 'selutility.hpp'], install_dir : '/usr/local/include/phosphor-ipmi-host')
+install_headers(
+    ['sensorhandler.hpp', 'selutility.hpp'],
+    install_dir: '/usr/local/include/phosphor-ipmi-host',
+)
 
-install_headers(['sensorhandler.hpp', 'selutility.hpp'], install_dir : '/usr/local/include/phosphor-ipmi-host')
+install_headers(
+    ['sensorhandler.hpp', 'selutility.hpp'],
+    install_dir: '/usr/local/include/phosphor-ipmi-host',
+)
 
 # Dynamic Sensor Stack
 subdir('dbus-sdr')
@@ -382,6 +390,3 @@ install_subdir(
 
 # HW Transport
 subdir('transport')
-
-
-

@@ -13,6 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 */
+#include "config.h"
+
 #include "user_mgmt.hpp"
 
 #include "channel_layer.hpp"
@@ -712,7 +714,7 @@ bool pamUserCheckAuthenticate(std::string_view username,
 
     pam_handle_t* localAuthHandle = NULL; // this gets set by pam_start
 
-    if (pam_start("dropbear", username.data(), &localConversation,
+    if (pam_start(PAM_SERVICE_NAME, username.data(), &localConversation,
                   &localAuthHandle) != PAM_SUCCESS)
     {
         lg2::error("User Authentication Failure");
@@ -1252,8 +1254,14 @@ void UserAccess::readUserData()
                 "Corrupted IPMI user data file - invalid user info");
         }
         std::string userName = userInfo[jsonUserName].get<std::string>();
+
+        // Zero-fill the userName array to ensure null termination
+        std::memset(usersTbl.user[usrIndex].userName, 0, ipmiMaxUserName);
+
+        // Copy up to ipmiMaxUserName - 1 characters from userName to prevent
+        // overflow
         std::strncpy(reinterpret_cast<char*>(usersTbl.user[usrIndex].userName),
-                     userName.c_str(), ipmiMaxUserName);
+                     userName.c_str(), ipmiMaxUserName - 1);
 
         std::vector<std::string> privilege =
             userInfo[jsonPriv].get<std::vector<std::string>>();
