@@ -56,7 +56,7 @@ using Resolved = bool;
 using Id = uint32_t;
 using Timestamp = uint64_t;
 using Message = std::string;
-using AdditionalData = std::vector<std::string>;
+using AdditionalData = std::map<std::string, std::string>;
 using PropertyType =
     std::variant<Resolved, Id, Timestamp, Message, AdditionalData>;
 

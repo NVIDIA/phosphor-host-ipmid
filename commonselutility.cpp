@@ -38,13 +38,7 @@ std::pair<std::string, std::string> parseEntry(const std::string& entry)
 // Parse SEL data and stored in additionalDataMap
 additionalDataMap parseAdditionalData(const AdditionalData& data)
 {
-    std::map<std::string, std::string> ret;
-
-    for (const auto& d : data)
-    {
-        ret.insert(parseEntry(d));
-    }
-    return ret;
+    return data;
 }
 
 // convert required SEL data in to integer
