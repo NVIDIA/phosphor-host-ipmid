@@ -291,7 +291,6 @@ void selRemovedCallback(sdbusplus::message::message& m)
         std::string p = objPath;
         uint16_t selId =
             ipmi::sel::internal::convertSelIdToU16(getLoggingId(p));
-        ;
         selCacheMap.erase(selId);
         saveTimeStamp(selEraseTimestamp);
     }
