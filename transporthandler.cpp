@@ -1493,7 +1493,12 @@ RspType<> setSolConfParams(Context::ptr ctx, uint4_t channelBits,
     }
 
     std::string solService{};
-    std::string solPathWitheEthName = solPath + ipmi::getChannelName(channel);
+    std::string ethName = ipmi::getChannelName(channel);
+    if (ethName.empty())
+    {
+        return responseInvalidFieldRequest();
+    }
+    std::string solPathWitheEthName = solPath + ethName;
 
     if (ipmi::getService(ctx, solInterface, solPathWitheEthName, solService))
     {
@@ -1672,7 +1677,12 @@ RspType<message::Payload> getSolConfParams(Context::ptr ctx,
     }
 
     std::string solService{};
-    std::string solPathWitheEthName = solPath + ipmi::getChannelName(channel);
+    std::string ethName = ipmi::getChannelName(channel);
+    if (ethName.empty())
+    {
+        return responseInvalidFieldRequest();
+    }
+    std::string solPathWitheEthName = solPath + ethName;
 
     if (ipmi::getService(ctx, solInterface, solPathWitheEthName, solService))
     {

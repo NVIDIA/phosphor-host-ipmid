@@ -152,7 +152,7 @@ std::string ChannelConfig::getChannelName(const uint8_t chNum)
     if (!isValidChannel(chNum))
     {
         lg2::error("Invalid channel number: {CHANNEL_ID}", "CHANNEL_ID", chNum);
-        throw std::invalid_argument("Invalid channel number");
+        return "";
     }
 
     return channelData[chNum].chName;

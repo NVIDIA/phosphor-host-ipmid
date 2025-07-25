@@ -39,7 +39,7 @@ bool doesDeviceExist(const uint8_t chNum)
         return false;
     }
 
-    std::string devName("/sys/class/net/" + getChannelName(chNum));
+    std::string devName("/sys/class/net/" + channelName);
 
     if (stat(devName.data(), &fileStat) != 0)
     {
