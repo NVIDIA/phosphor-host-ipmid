@@ -11,16 +11,12 @@ hybrid_src = []
 
 selcmd_src = ['dbus-sdr/dbus_selcommands.cpp']
 if get_option('dbus-logger').disabled()
-  selcmd_src = [
-    'dbus-sdr/file_selcommands.cpp',
-  ]
+    selcmd_src = ['dbus-sdr/file_selcommands.cpp']
 endif
 
 selcmd_src = ['dbus-sdr/dbus_selcommands.cpp']
 if get_option('dbus-logger').disabled()
-  selcmd_src = [
-    'dbus-sdr/file_selcommands.cpp',
-  ]
+    selcmd_src = ['dbus-sdr/file_selcommands.cpp']
 endif
 
 if get_option('hybrid-sensors').allowed()
@@ -29,7 +25,7 @@ if get_option('hybrid-sensors').allowed()
         'sensordatahandler.cpp',
         'ipmisensor.cpp',
         generated_src,
-    ] 
+    ]
 endif
 
 sensorsoem_src = []
@@ -53,24 +49,26 @@ dbus_sdr_src = [
     'dbus-sdr/sensorcommands.cpp',
     'commonselutility.cpp',
     'dbus-sdr/sensorutils.cpp',
-	  'dbus-sdr/frucommands.cpp',  
-     selcmd_src,
-     hybrid_src,
+    'dbus-sdr/frucommands.cpp',
+    selcmd_src,
+    hybrid_src,
     sensorsoem_src,
 ]
 
 dbus_sdr_lib = library(
-  'dbus_sdr',
-  ['sdrutils.cpp', 'sensorutils.cpp'],
-  implicit_include_directories: false,
-  dependencies: dbus_sdr_pre,
-  version: meson.project_version(),
-  install: true,
-  install_dir: get_option('libdir'),
-  override_options: ['b_lundef=false'])
+    'dbus_sdr',
+    ['sdrutils.cpp', 'sensorutils.cpp'],
+    implicit_include_directories: false,
+    dependencies: dbus_sdr_pre,
+    version: meson.project_version(),
+    install: true,
+    install_dir: get_option('libdir'),
+    override_options: ['b_lundef=false'],
+)
 
 import('pkgconfig').generate(
-  dbus_sdr_lib,
-  name: 'libdbussdr',
-  version: meson.project_version(),
-  description: 'libdbussdr')
+    dbus_sdr_lib,
+    name: 'libdbussdr',
+    version: meson.project_version(),
+    description: 'libdbussdr',
+)

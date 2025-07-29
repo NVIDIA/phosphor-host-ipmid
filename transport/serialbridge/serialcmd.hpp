@@ -35,7 +35,7 @@ class SerialChannel
     static constexpr uint8_t netFnShift = 2;
     static constexpr uint8_t lunMask = (1 << netFnShift) - 1;
 
-    SerialChannel(bool debug) : verbose(debug), msgState(MsgState::msgIdle){};
+    SerialChannel(bool debug) : verbose(debug), msgState(MsgState::msgIdle) {};
 
     int write(stdplus::Fd& uart, uint8_t rsAddr, uint8_t rqAddr, uint8_t seq,
               sdbusplus::message_t&& m);

@@ -790,8 +790,7 @@ void handleLegacyIpmiCommand(sdbusplus::message_t& m)
     // make a copy so the next two moves don't wreak havoc on the stack
     sdbusplus::message_t b{m};
     auto spawnResult = boost::asio::spawn(
-        *getIoContext(),
-        [b = std::move(b)](boost::asio::yield_context yield) {
+        *getIoContext(), [b = std::move(b)](boost::asio::yield_context yield) {
         sdbusplus::message_t m{std::move(b)};
         unsigned char seq = 0, netFn = 0, lun = 0, cmd = 0;
         ipmi::SecureBuffer data;
@@ -824,8 +823,7 @@ void handleLegacyIpmiCommand(sdbusplus::message_t& m)
                 "ERROR", ec.message(), "SENDER", dest, "NETFN", lg2::hex, netFn,
                 "CMD", lg2::hex, cmd);
         }
-    },
-        {});
+    }, {});
 }
 
 #endif /* ALLOW_DEPRECATED_API */
