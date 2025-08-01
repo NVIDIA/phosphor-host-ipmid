@@ -866,23 +866,14 @@ auto ipmiAppGetSystemGuid(ipmi::Context::ptr& ctx)
 {
     static constexpr auto uuidInterface = "xyz.openbmc_project.Common.UUID";
     static constexpr auto uuidProperty = "UUID";
-
-    // Get the Inventory object implementing BMC interface
-    ipmi::DbusObjectInfo objectInfo{};
-    boost::system::error_code ec = ipmi::getDbusObject(ctx, uuidInterface,
-                                                       objectInfo);
-    if (ec.value())
-    {
-        lg2::error("Failed to locate System UUID object, "
-                   "interface: {INTERFACE}, error: {ERROR}",
-                   "INTERFACE", uuidInterface, "ERROR", ec.message());
-    }
+    static constexpr auto uuidPath = "/xyz/openbmc_project/Common/UUID";
+    static constexpr auto uuidService = "xyz.openbmc_project.Settings";
 
     // Read UUID property value from bmcObject
     // UUID is in RFC4122 format Ex: 61a39523-78f2-11e5-9862-e6402cfc3223
     std::string rfc4122Uuid{};
-    ec = ipmi::getDbusProperty(ctx, objectInfo.second, objectInfo.first,
-                               uuidInterface, uuidProperty, rfc4122Uuid);
+    boost::system::error_code ec = ipmi::getDbusProperty(
+        ctx, uuidService, uuidPath, uuidInterface, uuidProperty, rfc4122Uuid);
     if (ec.value())
     {
         lg2::error("Failed to read System UUID property, "
