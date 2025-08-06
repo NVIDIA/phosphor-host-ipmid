@@ -238,6 +238,12 @@ int PasswdMgr::encryptDecryptData(bool doEncrypt, const EVP_CIPHER* cipher,
 void PasswdMgr::initPasswordMap(void)
 {
     // TODO  phosphor-host-ipmid#170 phosphor::user::shadow::Lock lock{};
+
+    // Calculate CRC first, before reading the file
+    // This prevents the race condition where file changes after read but before
+    // CRC calculation
+    uint32_t currentCRC = getUpdatedFileCRC();
+
     SecureString dataBuf;
 
     if (readPasswdFileData(dataBuf) != 0)
@@ -268,8 +274,9 @@ void PasswdMgr::initPasswordMap(void)
         }
     }
 
-    // Update checksum
-    fileLastUpdatedCRC = getUpdatedFileCRC();
+    // Update checksum with the value calculated before reading
+    // If file changed during read, next checkAndReload() will detect it
+    fileLastUpdatedCRC = currentCRC;
     return;
 }
 
