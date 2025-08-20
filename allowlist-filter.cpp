@@ -15,6 +15,11 @@
  * limitations under the License.
  */
 
+#include <sys/inotify.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include <boost/asio/posix/stream_descriptor.hpp>
 #include <ipmiallowlist.hpp>
 #include <ipmid/api.hpp>
 #include <ipmid/utils.hpp>
@@ -43,7 +48,7 @@ class AllowlistFilter
 {
   public:
     AllowlistFilter();
-    ~AllowlistFilter() = default;
+    ~AllowlistFilter();
     AllowlistFilter(const AllowlistFilter&) = delete;
     AllowlistFilter(AllowlistFilter&&) = delete;
     AllowlistFilter& operator=(const AllowlistFilter&) = delete;
@@ -51,10 +56,10 @@ class AllowlistFilter
 
   private:
     void postInit();
-    void cacheRestrictedAndPostCompleteMode();
+    void startPostCompleteFileWatch();
+    void armInotifyRead();
+    void cacheRestrictedMode();
     void handleRestrictedModeChange(sdbusplus::message_t& m);
-    void handlePostCompleteChange(sdbusplus::message_t& m);
-    void updatePostComplete(const std::string& value);
     void updateRestrictionMode(const std::string& value);
     ipmi::Cc filterMessage(ipmi::message::Request::ptr request);
 
@@ -73,17 +78,19 @@ class AllowlistFilter
     std::shared_ptr<sdbusplus::asio::connection> bus;
     std::unique_ptr<sdbusplus::bus::match_t> modeChangeMatch;
     std::unique_ptr<sdbusplus::bus::match_t> modeIntfAddedMatch;
-    std::unique_ptr<sdbusplus::bus::match_t> postCompleteMatch;
-    std::unique_ptr<sdbusplus::bus::match_t> postCompleteIntfAddedMatch;
+    // inotify-based file watch (persistent)
+    int inotifyFd{-1};
+    int inotifyWd{-1};
+    std::unique_ptr<boost::asio::posix::stream_descriptor> inotifyStream;
+    std::array<char, 4096> inotifyBuf{};
 
     static constexpr const char restrictionModeIntf[] =
         "xyz.openbmc_project.Control.Security.RestrictionMode";
-    static constexpr const char* systemOsStatusIntf =
-        "xyz.openbmc_project.State.Boot.Progress";
     static constexpr const char* restrictionModePath =
         "/xyz/openbmc_project/control/host0/restriction_mode";
-    static constexpr const char* systemOsStatusPath =
-        "/xyz/openbmc_project/state/host0";
+    static constexpr const char* postCompleteDir = "/run/bmc-state";
+    static constexpr const char* postCompleteFile =
+        "/run/bmc-state/CPU_BOOT_DONE-I";
 };
 
 /**
@@ -138,13 +145,40 @@ AllowlistFilter::AllowlistFilter()
     post_work([this]() { postInit(); });
 }
 
+AllowlistFilter::~AllowlistFilter()
+{
+    // Cancel asio descriptor first to stop any pending reads
+    if (inotifyStream)
+    {
+        boost::system::error_code ec;
+        inotifyStream->cancel(ec);
+        inotifyStream->release();
+        inotifyStream.reset();
+    }
+
+    // Remove watch if installed
+    if (inotifyWd >= 0 && inotifyFd >= 0)
+    {
+        inotify_rm_watch(inotifyFd, inotifyWd);
+        inotifyWd = -1;
+    }
+
+    // Close fd if open
+    if (inotifyFd >= 0)
+    {
+        close(inotifyFd);
+        inotifyFd = -1;
+    }
+}
+
 /**
- * @brief Cache the restricted mode and POST complete status.
+ * @brief Cache the restricted mode.
  *
- * Retrieves the restricted mode and POST complete status from D-Bus
- * and updates the internal variables.
+ * Reads RestrictionMode from D-Bus
+ * (xyz.openbmc_project.Control.Security.RestrictionMode) and updates internal
+ * state.
  */
-void AllowlistFilter::cacheRestrictedAndPostCompleteMode()
+void AllowlistFilter::cacheRestrictedMode()
 {
     try
     {
@@ -162,23 +196,6 @@ void AllowlistFilter::cacheRestrictedAndPostCompleteMode()
     {
         lg2::error("Could not initialize RestrictionMode, "
                    "defaulting to RestrictionMode::None");
-    }
-
-    try
-    {
-        auto service = ipmi::getService(*bus, systemOsStatusIntf,
-                                        systemOsStatusPath);
-        ipmi::Value v = ipmi::getDbusProperty(*bus, service, systemOsStatusPath,
-                                              systemOsStatusIntf,
-                                              "BootProgress");
-        auto& value = std::get<std::string>(v);
-        updatePostComplete(value);
-        lg2::info("Read POST complete value: {VALUE}", "VALUE", postCompleted);
-    }
-    catch (const std::exception&)
-    {
-        lg2::error("Error in OperatingSystemState Get");
-        postCompleted = true;
     }
 }
 
@@ -238,62 +255,96 @@ void AllowlistFilter::handleRestrictedModeChange(sdbusplus::message_t& m)
 }
 
 /**
- * @brief Update the POST complete status.
+ * @brief Start watching the POST complete file using inotify
  *
- * Converts the string value to a boolean and updates the internal
- * variable.
+ * Creates an inotify instance, adds a watch for the POST complete file, and
+ * starts the asynchronous read operation.
  */
-void AllowlistFilter::updatePostComplete(const std::string& value)
+void AllowlistFilter::startPostCompleteFileWatch()
 {
-    postCompleted =
-        (value ==
-         "xyz.openbmc_project.State.Boot.Progress.ProgressStages.OSRunning") ||
-        (value ==
-         "xyz.openbmc_project.State.Boot.Progress.ProgressStages.OSStart");
-    lg2::info(postCompleted ? "Updated to POST Complete"
-                            : "Updated to !POST Complete");
+    // Create inotify (non-blocking)
+    inotifyFd = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
+    if (inotifyFd < 0)
+    {
+        lg2::error("inotify_init1 failed");
+        return;
+    }
+
+    // Watch directory for create/move-in/delete/move-out
+    inotifyWd =
+        inotify_add_watch(inotifyFd, postCompleteDir,
+                          IN_CREATE | IN_MOVED_TO | IN_DELETE | IN_MOVED_FROM);
+    if (inotifyWd < 0)
+    {
+        lg2::error("inotify_add_watch failed for {DIR}", "DIR",
+                   postCompleteDir);
+        close(inotifyFd);
+        inotifyFd = -1;
+        return;
+    }
+
+    // Race-window close: check once after installing watch
+    struct stat st{};
+    if (stat(postCompleteFile, &st) == 0)
+    {
+        if (!postCompleted)
+        {
+            postCompleted = true;
+            lg2::info("Updated to POST Complete (created during watch setup)");
+        }
+    }
+    else
+    {
+        if (postCompleted)
+        {
+            postCompleted = false;
+            lg2::info("Updated to !POST Complete (file absent at start)");
+        }
+    }
+
+    inotifyStream = std::make_unique<boost::asio::posix::stream_descriptor>(
+        bus->get_io_context(), inotifyFd);
+    armInotifyRead();
 }
 
 /**
- * @brief Handle changes in the POST complete status.
+ * @brief Arm the inotify read operation.
  *
- * Reads the signal member from the message and updates the POST complete status
- * based on the property changes.
+ * Asynchronously reads any inotify events and updates postCompleted
+ * by checking the file existence with stat().
  */
-void AllowlistFilter::handlePostCompleteChange(sdbusplus::message_t& m)
+void AllowlistFilter::armInotifyRead()
 {
-    std::string signal = m.get_member();
-    if (signal == "PropertiesChanged")
+    if (!inotifyStream)
     {
-        std::string intf;
-        std::vector<std::pair<std::string, ipmi::Value>> propertyList;
-        m.read(intf, propertyList);
-        for (const auto& property : propertyList)
+        return;
+    }
+
+    inotifyStream->async_read_some(
+        boost::asio::buffer(inotifyBuf),
+        [this](const boost::system::error_code& ec, std::size_t /*bytes*/) {
+        if (ec)
         {
-            if (property.first == "OperatingSystemState")
+            if (ec != boost::asio::error::operation_aborted)
             {
-                updatePostComplete(std::get<std::string>(property.second));
+                lg2::error("inotify async_read error");
             }
-        }
-    }
-    else if (signal == "InterfacesAdded")
-    {
-        sdbusplus::message::object_path path;
-        DbusInterfaceMap postCompleteObj;
-        m.read(path, postCompleteObj);
-        auto intfItr = postCompleteObj.find(systemOsStatusIntf);
-        if (intfItr == postCompleteObj.end())
-        {
             return;
         }
-        PropertyMap& propertyList = intfItr->second;
-        auto itr = propertyList.find("OperatingSystemState");
-        if (itr == propertyList.end())
+
+        // check if the POST complete file exists
+        struct stat st{};
+        bool exists = (stat(postCompleteFile, &st) == 0);
+        if (exists != postCompleted)
         {
-            return;
+            postCompleted = exists;
+            lg2::info(postCompleted ? "Updated to POST Complete"
+                                    : "Updated to !POST Complete");
         }
-        updatePostComplete(std::get<std::string>(itr->second));
-    }
+
+        // Re-arm for the next event
+        armInotifyRead();
+    });
 }
 
 /**
@@ -315,14 +366,6 @@ void AllowlistFilter::postInit()
     const std::string filterStrModeIntfAdd =
         rules::interfacesAdded() + rules::argNpath(0, restrictionModePath);
 
-    const std::string filterStrPostComplete =
-        rules::type::signal() + rules::member("PropertiesChanged") +
-        rules::interface("org.freedesktop.DBus.Properties") +
-        rules::argN(0, systemOsStatusIntf);
-
-    const std::string filterStrPostIntfAdd =
-        rules::interfacesAdded() + rules::argNpath(0, systemOsStatusPath);
-
     modeChangeMatch = std::make_unique<sdbusplus::bus::match_t>(
         *bus, filterStrModeChange,
         [this](sdbusplus::message_t& m) { handleRestrictedModeChange(m); });
@@ -331,16 +374,11 @@ void AllowlistFilter::postInit()
         *bus, filterStrModeIntfAdd,
         [this](sdbusplus::message_t& m) { handleRestrictedModeChange(m); });
 
-    postCompleteMatch = std::make_unique<sdbusplus::bus::match_t>(
-        *bus, filterStrPostComplete,
-        [this](sdbusplus::message_t& m) { handlePostCompleteChange(m); });
-
-    postCompleteIntfAddedMatch = std::make_unique<sdbusplus::bus::match_t>(
-        *bus, filterStrPostIntfAdd,
-        [this](sdbusplus::message_t& m) { handlePostCompleteChange(m); });
-
     // Initialize restricted mode
-    cacheRestrictedAndPostCompleteMode();
+    cacheRestrictedMode();
+
+    // Start watching the POST complete file using inotify
+    startPostCompleteFileWatch();
 }
 
 /**
@@ -396,45 +434,37 @@ ipmi::Cc AllowlistFilter::filterMessage(ipmi::message::Request::ptr request)
         return ipmi::ccSuccess;
     }
 
+    // Allow all commands before POST completes
+    if (!postCompleted)
+    {
+        return ipmi::ccSuccess;
+    }
+
+    bool allowed = true;
     switch (restrictionMode)
     {
         case restrictionModeNone: // None mode
-        {
-            return ipmi::ccSuccess;
-        }
+            allowed = true;
+            break;
         case restrictionModeAllowlist: // Allowlist mode
-        {
-            return isInAllowlist(request) ? ipmi::ccSuccess
-                                          : ipmi::ccInsufficientPrivilege;
-        }
+            allowed = isInAllowlist(request);
+            break;
         case restrictionModeRestricted: // ProvisionedHostAllowlist mode
-        {
-            if (!postCompleted)
-            {
-                // POST not completed, allow all
-                return ipmi::ccSuccess;
-            }
-            return isInAllowlistWithChannel(request)
-                       ? ipmi::ccSuccess
-                       : ipmi::ccInsufficientPrivilege;
-        }
+            allowed = isInAllowlistWithChannel(request);
+            break;
         case restrictionModeDenyAll: // ProvisionedHostDisabled mode
-        {
-            if (postCompleted)
-            {
-                // POST completed, deny all
-                return ipmi::ccInsufficientPrivilege;
-            }
-            return isInAllowlistWithChannel(request)
-                       ? ipmi::ccSuccess
-                       : ipmi::ccInsufficientPrivilege;
-        }
-        default: // mode not supported
-        {
-            lg2::error("RestrictionMode:{MODE}, not supported", "MODE",
-                       restrictionMode);
-            return ipmi::ccInsufficientPrivilege;
-        }
+        default:                     // mode not supported
+            allowed = false;
+            break;
+    }
+
+    if (!allowed)
+    {
+        lg2::error(
+            "Blocked IPMI cmd netfn={NETFN} cmd={CMD} ch={CH} reason=not-in-allowlist",
+            "NETFN", request->ctx->netFn, "CMD", request->ctx->cmd, "CH",
+            request->ctx->channel);
+        return ipmi::ccInsufficientPrivilege;
     }
 
     return ipmi::ccSuccess;
