@@ -160,8 +160,8 @@ void AllowlistFilter::cacheRestrictedAndPostCompleteMode()
     }
     catch (const std::exception&)
     {
-        lg2::error("Could not initialize RestrictionMode, "
-                   "defaulting to RestrictionMode::None");
+        lg2::error("Could not initialize provisioning mode, "
+                   "defaulting to restricted");
     }
 
     try

@@ -43,16 +43,12 @@ class entry:
             raise ParseError(data)
         self.netfn = int(m[0], 16)
         self.cmd = int(m[1], 16)
-        if not m[4]:
-             # if no channel was provided, default to previous behavior, which
-             # is allow all interfaces, including the system interface (ch 15)
-             self.channels = 0xFFFF
-        else:
+        if m[4] is not None:
             self.channels = int(m[4], 16)
-            if self.channels == 0:
-                # Invalid allowlist entry, ignore it
-                print("Warning: Allowlist entry with 0x0000 channel mask ignored.")
-                raise ValueError("0x0000 channel mask is invalid")
+        else:
+            # if no channel was provided, default to previous behavior, which
+            # is allow all interfaces, including the system interface (ch 15)
+            self.channels = 0xFFFF
         if m[6] is not None:
             self.comment = "// " + m[7]
         else:
@@ -86,15 +82,12 @@ def parse(config):
             line = line.strip()
             if len(line) == 0 or line[0] == "#":
                 continue
-            try:
-                e = entry(line)
-                if any([e.match(item) for item in entries]):
-                    d = DuplicateEntry(e)
-                    sys.stderr.write("WARNING: {}\n".format(d))
-                else:
-                    entries.append(e)
-            except ValueError:
-                continue  # Skip invalid entry
+            e = entry(line)
+            if any([e.match(item) for item in entries]):
+                d = DuplicateEntry(e)
+                sys.stderr.write("WARNING: {}\n".format(d))
+            else:
+                entries.append(e)
     entries.sort()
     return entries
 
