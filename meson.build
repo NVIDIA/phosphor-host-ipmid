@@ -177,25 +177,15 @@ endif
 
 # whitelist
 if not get_option('ipmi-whitelist').disabled()
-  allowlist_conf = get_option('whitelist-conf')
-  conf_list = allowlist_conf.split()
-  final_conf = conf_list[conf_list.length() - 1]
+  generate_whitelist_script = files('generate_whitelist_create.sh')
 
-  prog_python = import('python').find_installation('python3')
-  generate_allowlist_script = files('generate_allowlist.py')
-  ipmiallowlist = custom_target(
-      'ipmiallowlist.hpp',
-      input: [generate_allowlist_script, final_conf],
-      output: 'ipmiallowlist.hpp',
-      command: [prog_python, '@INPUT0@', '@INPUT1@', '@OUTPUT@'],
-  )
+  whitelist_conf = get_option('whitelist-conf')
+  ipmiwhitelist = run_command( \
+    'bash', \
+    generate_whitelist_script, \
+    whitelist_conf)
 
-  allowlist_src = [
-    'allowlist-filter.cpp',
-    ipmiallowlist,
-  ]
-
-  allowlist_pre = declare_dependency(
+  whitelist_pre = declare_dependency(
     include_directories: root_inc,
     dependencies: [
       crypto,
@@ -206,11 +196,12 @@ if not get_option('ipmi-whitelist').disabled()
     ],
   )
 
-  allowlist_lib = library(
-    'allowlist',
-    sources: allowlist_src,
+  whitelist_lib = library(
+    'whitelist',
+    'whitelist-filter.cpp',
+    'ipmiwhitelist.cpp',
     implicit_include_directories: false,
-    dependencies: allowlist_pre,
+    dependencies: whitelist_pre,
     version: meson.project_version(),
     override_options: ['b_lundef=false'],
     install: true,
