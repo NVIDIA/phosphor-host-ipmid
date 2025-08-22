@@ -31,13 +31,13 @@ using namespace sdbusplus::server::xyz::openbmc_project::control;
 
 void SoftPowerOff::sendHostShutDownCmd()
 {
-    auto ctrlHostPath = std::string{CONTROL_HOST_OBJ_MGR} + '/' + HOST_NAME +
-                        '0';
-    auto host = ::ipmi::getService(this->bus, CONTROL_HOST_BUSNAME,
-                                   ctrlHostPath.c_str());
+    auto ctrlHostPath =
+        std::string{CONTROL_HOST_OBJ_MGR} + '/' + HOST_NAME + '0';
+    auto host = ::ipmi::getService(
+        this->bus, CONTROL_HOST_BUSNAME, ctrlHostPath.c_str());
 
-    auto method = bus.new_method_call(host.c_str(), ctrlHostPath.c_str(),
-                                      CONTROL_HOST_BUSNAME, "Execute");
+    auto method = bus.new_method_call(
+        host.c_str(), ctrlHostPath.c_str(), CONTROL_HOST_BUSNAME, "Execute");
 
     method.append(convertForMessage(Host::Command::SoftOff).c_str());
     try

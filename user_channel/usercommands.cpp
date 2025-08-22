@@ -32,6 +32,17 @@ namespace ipmi
 static constexpr uint8_t enableOperation = 0x00;
 static constexpr uint8_t disableOperation = 0x01;
 
+static constexpr uint8_t userIdEnabledViaSetPassword = 0x01;
+static constexpr uint8_t userIdDisabledViaSetPassword = 0x02;
+
+/** IPMI set password return codes (refer spec sec 22.30) */
+constexpr Cc ccPasswdFailMismatch = 0x80;
+
+static inline auto responsePasswdFailMismatch()
+{
+    return response(ccPasswdFailMismatch);
+}
+
 /** @brief implements the set user access command
  *  @param ctx - IPMI context pointer (for channel)
  *  @param channel - channel number
@@ -47,15 +58,15 @@ static constexpr uint8_t disableOperation = 0x01;
  *
  *  @returns ipmi completion code
  */
-ipmi::RspType<> ipmiSetUserAccess(ipmi::Context::ptr ctx, uint4_t channel,
-                                  uint1_t ipmiEnabled, uint1_t linkAuthEnabled,
-                                  uint1_t accessCallback, uint1_t bitsUpdate,
+ipmi::RspType<> ipmiSetUserAccess(
+    ipmi::Context::ptr ctx, uint4_t channel, uint1_t ipmiEnabled,
+    uint1_t linkAuthEnabled, uint1_t accessCallback, uint1_t bitsUpdate,
 
-                                  uint6_t userId, uint2_t reserved1,
+    uint6_t userId, uint2_t reserved1,
 
-                                  uint4_t privilege, uint4_t reserved2,
+    uint4_t privilege, uint4_t reserved2,
 
-                                  std::optional<uint8_t> sessionLimit)
+    std::optional<uint8_t> sessionLimit)
 {
     uint8_t sessLimit = sessionLimit.value_or(0);
     if (reserved1 || reserved2 || sessLimit ||
@@ -65,17 +76,18 @@ ipmi::RspType<> ipmiSetUserAccess(ipmi::Context::ptr ctx, uint4_t channel,
         return ipmi::responseInvalidFieldRequest();
     }
 
-    uint8_t chNum = convertCurrentChannelNum(static_cast<uint8_t>(channel),
-                                             ctx->channel);
+    uint8_t chNum =
+        convertCurrentChannelNum(static_cast<uint8_t>(channel), ctx->channel);
     if (!isValidChannel(chNum))
     {
-        lg2::debug("Set user access - Invalid channel request");
+        lg2::debug("Set user access - Invalid channel request: {CHANNEL}",
+                   "CHANNEL", chNum);
         return ipmi::response(invalidChannel);
     }
     if (getChannelSessionSupport(chNum) == EChannelSessSupported::none)
     {
         lg2::debug("Set user access - No support on channel");
-        return ipmi::response(ccActionNotSupportedForChannel);
+        return ipmi::responseActionNotSupportedForChannel();
     }
     if (!ipmiUserIsValidUserId(static_cast<uint8_t>(userId)))
     {
@@ -91,9 +103,9 @@ ipmi::RspType<> ipmiSetUserAccess(ipmi::Context::ptr ctx, uint4_t channel,
         privAccess.accessCallback = static_cast<uint8_t>(accessCallback);
     }
     privAccess.privilege = static_cast<uint8_t>(privilege);
-    return ipmi::response(
-        ipmiUserSetPrivilegeAccess(static_cast<uint8_t>(userId), chNum,
-                                   privAccess, static_cast<bool>(bitsUpdate)));
+    return ipmi::response(ipmiUserSetPrivilegeAccess(
+        static_cast<uint8_t>(userId), chNum, privAccess,
+        static_cast<bool>(bitsUpdate)));
 }
 
 /** @brief implements the set user access command
@@ -136,8 +148,8 @@ ipmi::RspType<uint6_t, // max channel users
 
                       uint6_t userId, uint2_t reserved2)
 {
-    uint8_t chNum = convertCurrentChannelNum(static_cast<uint8_t>(channel),
-                                             ctx->channel);
+    uint8_t chNum =
+        convertCurrentChannelNum(static_cast<uint8_t>(channel), ctx->channel);
 
     if (reserved1 || reserved2 || !isValidChannel(chNum))
     {
@@ -148,7 +160,7 @@ ipmi::RspType<uint6_t, // max channel users
     if (getChannelSessionSupport(chNum) == EChannelSessSupported::none)
     {
         lg2::debug("Get user access - No support on channel");
-        return ipmi::response(ccActionNotSupportedForChannel);
+        return ipmi::responseActionNotSupportedForChannel();
     }
     if (!ipmiUserIsValidUserId(static_cast<uint8_t>(userId)))
     {
@@ -165,8 +177,8 @@ ipmi::RspType<uint6_t, // max channel users
     }
 
     bool enabledState = false;
-    retStatus = ipmiUserCheckEnabled(static_cast<uint8_t>(userId),
-                                     enabledState);
+    retStatus =
+        ipmiUserCheckEnabled(static_cast<uint8_t>(userId), enabledState);
     if (retStatus != ccSuccess)
     {
         return ipmi::response(retStatus);
@@ -175,8 +187,8 @@ ipmi::RspType<uint6_t, // max channel users
     uint2_t enabledStatus = enabledState ? userIdEnabledViaSetPassword
                                          : userIdDisabledViaSetPassword;
     PrivAccess privAccess{};
-    retStatus = ipmiUserGetPrivilegeAccess(static_cast<uint8_t>(userId), chNum,
-                                           privAccess);
+    retStatus = ipmiUserGetPrivilegeAccess(
+        static_cast<uint8_t>(userId), chNum, privAccess);
     if (retStatus != ccSuccess)
     {
         return ipmi::response(retStatus);
@@ -204,10 +216,9 @@ ipmi::RspType<uint6_t, // max channel users
 
  *  @returns ipmi response
  */
-ipmi::RspType<>
-    ipmiSetUserName([[maybe_unused]] ipmi::Context::ptr ctx, uint6_t id,
-                    uint2_t reserved,
-                    const std::array<uint8_t, ipmi::ipmiMaxUserName>& name)
+ipmi::RspType<> ipmiSetUserName(
+    [[maybe_unused]] ipmi::Context::ptr ctx, uint6_t id, uint2_t reserved,
+    const std::array<uint8_t, ipmi::ipmiMaxUserName>& name)
 {
     if (reserved)
     {
@@ -220,10 +231,10 @@ ipmi::RspType<>
         return ipmi::responseParmOutOfRange();
     }
 
-    size_t nameLen = strnlen(reinterpret_cast<const char*>(name.data()),
-                             ipmi::ipmiMaxUserName);
-    const std::string strUserName(reinterpret_cast<const char*>(name.data()),
-                                  nameLen);
+    size_t nameLen = strnlen(
+        reinterpret_cast<const char*>(name.data()), ipmi::ipmiMaxUserName);
+    const std::string strUserName(
+        reinterpret_cast<const char*>(name.data()), nameLen);
 
     ipmi::Cc res = ipmiUserSetUserName(userId, strUserName);
     return ipmi::response(res);
@@ -318,8 +329,8 @@ ipmi::RspType<> // user name
     }
     else if (operation == opEnableUser || operation == opDisableUser)
     {
-        ipmi::Cc res = ipmiUserUpdateEnabledState(userId,
-                                                  static_cast<bool>(operation));
+        ipmi::Cc res =
+            ipmiUserUpdateEnabledState(userId, static_cast<bool>(operation));
         return ipmi::response(res);
     }
     else if (operation == opTestPassword)
@@ -353,7 +364,7 @@ ipmi::RspType<> // user name
         {
             lg2::debug("Test password failed, user Id: {USER_ID}", "USER_ID",
                        userId);
-            return ipmi::response(ipmiCCPasswdFailMismatch);
+            return ipmi::responsePasswdFailMismatch();
         }
         return ipmi::responseSuccess();
     }
@@ -403,14 +414,12 @@ ipmi::RspType<uint8_t,  // channel number
               uint24_t, // oemID
               uint8_t   // oemAuxillary
               >
-    ipmiGetChannelAuthenticationCapabilities(ipmi::Context::ptr ctx,
-                                             uint4_t chNum, uint3_t reserved1,
-                                             [[maybe_unused]] bool extData,
-                                             uint4_t privLevel,
-                                             uint4_t reserved2)
+    ipmiGetChannelAuthenticationCapabilities(
+        ipmi::Context::ptr ctx, uint4_t chNum, uint3_t reserved1,
+        [[maybe_unused]] bool extData, uint4_t privLevel, uint4_t reserved2)
 {
-    uint8_t channel = convertCurrentChannelNum(static_cast<uint8_t>(chNum),
-                                               ctx->channel);
+    uint8_t channel =
+        convertCurrentChannelNum(static_cast<uint8_t>(chNum), ctx->channel);
 
     if (reserved1 || reserved2 || !isValidChannel(channel) ||
         !isValidPrivLimit(static_cast<uint8_t>(privLevel)))
@@ -422,7 +431,7 @@ ipmi::RspType<uint8_t,  // channel number
     if (getChannelSessionSupport(channel) == EChannelSessSupported::none)
     {
         lg2::debug("Get channel auth capabilities - No support on channel");
-        return ipmi::response(ccActionNotSupportedForChannel);
+        return ipmi::responseActionNotSupportedForChannel();
     }
 
     constexpr bool extDataSupport = true; // true for IPMI 2.0 extensions
@@ -496,8 +505,8 @@ ipmi::RspType<> ipmiSetUserPayloadAccess(
 
     uint8_t oemPayloadEnables2Reserved)
 {
-    auto chNum = convertCurrentChannelNum(static_cast<uint8_t>(channel),
-                                          ctx->channel);
+    auto chNum =
+        convertCurrentChannelNum(static_cast<uint8_t>(channel), ctx->channel);
     // Validate the reserved args. Only SOL payload is supported as on date.
     if (reserved || stdPayload0ipmiReserved || stdPayload2 || stdPayload3 ||
         stdPayload4 || stdPayload5 || stdPayload6 || stdPayload7 ||
@@ -515,7 +524,7 @@ ipmi::RspType<> ipmiSetUserPayloadAccess(
     }
     if (getChannelSessionSupport(chNum) == EChannelSessSupported::none)
     {
-        return ipmi::responseInvalidFieldRequest();
+        return ipmi::responseActionNotSupportedForChannel();
     }
     if (!ipmiUserIsValidUserId(static_cast<uint8_t>(userId)))
     {
@@ -591,8 +600,8 @@ ipmi::RspType<bool,    // stdPayload0ipmiReserved
 
                              uint6_t userId, uint2_t reserved2)
 {
-    uint8_t chNum = convertCurrentChannelNum(static_cast<uint8_t>(channel),
-                                             ctx->channel);
+    uint8_t chNum =
+        convertCurrentChannelNum(static_cast<uint8_t>(channel), ctx->channel);
 
     if (reserved1 || reserved2 || !isValidChannel(chNum))
     {
@@ -600,7 +609,7 @@ ipmi::RspType<bool,    // stdPayload0ipmiReserved
     }
     if (getChannelSessionSupport(chNum) == EChannelSessSupported::none)
     {
-        return ipmi::responseInvalidFieldRequest();
+        return ipmi::responseActionNotSupportedForChannel();
     }
     if (!ipmiUserIsValidUserId(static_cast<uint8_t>(userId)))
     {
@@ -616,27 +625,28 @@ ipmi::RspType<bool,    // stdPayload0ipmiReserved
         return ipmi::response(retStatus);
     }
     constexpr uint8_t res8bits = 0;
-    return ipmi::responseSuccess(payloadAccess.stdPayloadEnables1.test(0),
-                                 payloadAccess.stdPayloadEnables1.test(1),
-                                 payloadAccess.stdPayloadEnables1.test(2),
-                                 payloadAccess.stdPayloadEnables1.test(3),
-                                 payloadAccess.stdPayloadEnables1.test(4),
-                                 payloadAccess.stdPayloadEnables1.test(5),
-                                 payloadAccess.stdPayloadEnables1.test(6),
-                                 payloadAccess.stdPayloadEnables1.test(7),
+    return ipmi::responseSuccess(
+        payloadAccess.stdPayloadEnables1.test(0),
+        payloadAccess.stdPayloadEnables1.test(1),
+        payloadAccess.stdPayloadEnables1.test(2),
+        payloadAccess.stdPayloadEnables1.test(3),
+        payloadAccess.stdPayloadEnables1.test(4),
+        payloadAccess.stdPayloadEnables1.test(5),
+        payloadAccess.stdPayloadEnables1.test(6),
+        payloadAccess.stdPayloadEnables1.test(7),
 
-                                 res8bits,
+        res8bits,
 
-                                 payloadAccess.oemPayloadEnables1.test(0),
-                                 payloadAccess.oemPayloadEnables1.test(1),
-                                 payloadAccess.oemPayloadEnables1.test(2),
-                                 payloadAccess.oemPayloadEnables1.test(3),
-                                 payloadAccess.oemPayloadEnables1.test(4),
-                                 payloadAccess.oemPayloadEnables1.test(5),
-                                 payloadAccess.oemPayloadEnables1.test(6),
-                                 payloadAccess.oemPayloadEnables1.test(7),
+        payloadAccess.oemPayloadEnables1.test(0),
+        payloadAccess.oemPayloadEnables1.test(1),
+        payloadAccess.oemPayloadEnables1.test(2),
+        payloadAccess.oemPayloadEnables1.test(3),
+        payloadAccess.oemPayloadEnables1.test(4),
+        payloadAccess.oemPayloadEnables1.test(5),
+        payloadAccess.oemPayloadEnables1.test(6),
+        payloadAccess.oemPayloadEnables1.test(7),
 
-                                 res8bits);
+        res8bits);
 }
 
 void registerUserIpmiFunctions() __attribute__((constructor));
@@ -651,22 +661,22 @@ void registerUserIpmiFunctions()
                           ipmi::app::cmdGetUserAccessCommand,
                           ipmi::Privilege::Admin, ipmiGetUserAccess);
 
-    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnApp,
-                          ipmi::app::cmdGetUserNameCommand,
-                          ipmi::Privilege::Admin, ipmiGetUserName);
+    ipmi::registerHandler(
+        ipmi::prioOpenBmcBase, ipmi::netFnApp, ipmi::app::cmdGetUserNameCommand,
+        ipmi::Privilege::Admin, ipmiGetUserName);
 
-    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnApp,
-                          ipmi::app::cmdSetUserName, ipmi::Privilege::Admin,
-                          ipmiSetUserName);
+    ipmi::registerHandler(
+        ipmi::prioOpenBmcBase, ipmi::netFnApp, ipmi::app::cmdSetUserName,
+        ipmi::Privilege::Admin, ipmiSetUserName);
 
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnApp,
                           ipmi::app::cmdSetUserPasswordCommand,
                           ipmi::Privilege::Admin, ipmiSetUserPassword);
 
-    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnApp,
-                          ipmi::app::cmdGetChannelAuthCapabilities,
-                          ipmi::Privilege::Callback,
-                          ipmiGetChannelAuthenticationCapabilities);
+    ipmi::registerHandler(
+        ipmi::prioOpenBmcBase, ipmi::netFnApp,
+        ipmi::app::cmdGetChannelAuthCapabilities, ipmi::Privilege::Callback,
+        ipmiGetChannelAuthenticationCapabilities);
 
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnApp,
                           ipmi::app::cmdSetUserPayloadAccess,

@@ -77,15 +77,15 @@ void constructSEL(uint8_t recordType, std::chrono::milliseconds timestamp,
            std::min(sensorData.size(), static_cast<size_t>(selDataSize)));
 }
 
-GetSELEntryResponse
-    prepareSELEntry(const std::string& objPath,
-                    ipmi::sensor::InvObjectIDMap::const_iterator iter)
+GetSELEntryResponse prepareSELEntry(
+    const std::string& objPath,
+    ipmi::sensor::InvObjectIDMap::const_iterator iter)
 {
     GetSELEntryResponse record{};
     uint16_t recordId;
     entryDataMap entryData;
-    std::chrono::milliseconds chronoTimeStamp = getEntryData(objPath, entryData,
-                                                             recordId);
+    std::chrono::milliseconds chronoTimeStamp =
+        getEntryData(objPath, entryData, recordId);
 
     bool isFromSELLogger = false;
     additionalDataMap m;
@@ -158,8 +158,8 @@ GetSELEntryResponse
         // Evaluate if the event is assertion or deassertion event
         if (std::get<bool>(iterResolved->second))
         {
-            record.event.eventRecord.eventType = deassertEvent |
-                                                 iter->second.eventReadingType;
+            record.event.eventRecord.eventType =
+                deassertEvent | iter->second.eventReadingType;
         }
         else
         {
@@ -183,8 +183,8 @@ GetSELEntryResponse convertLogEntrytoSEL(const std::string& objPath)
     auto service = ipmi::getService(bus, assocIntf, objPath);
 
     // Read the Associations interface.
-    auto methodCall = bus.new_method_call(service.c_str(), objPath.c_str(),
-                                          propIntf, "Get");
+    auto methodCall =
+        bus.new_method_call(service.c_str(), objPath.c_str(), propIntf, "Get");
     methodCall.append(assocIntf);
     methodCall.append(assocProp);
 

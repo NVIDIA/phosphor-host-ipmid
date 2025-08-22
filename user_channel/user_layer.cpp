@@ -143,6 +143,8 @@ Cc ipmiUserGetPrivilegeAccess(const uint8_t userId, const uint8_t chNum,
 {
     if (!UserAccess::isValidChannel(chNum))
     {
+        lg2::error("Get Privilege access - Invalid channel number: {CHANNEL}",
+                   "CHANNEL", chNum);
         return ccInvalidFieldRequest;
     }
     if (!UserAccess::isValidUserId(userId))
@@ -193,6 +195,9 @@ Cc ipmiUserSetUserPayloadAccess(const uint8_t chNum, const uint8_t operation,
 
     if (!UserAccess::isValidChannel(chNum))
     {
+        lg2::error(
+            "Set user payload access - Invalid channel number: {CHANNEL}",
+            "CHANNEL", chNum);
         return ccInvalidFieldRequest;
     }
     if (!UserAccess::isValidUserId(userId))
@@ -200,8 +205,8 @@ Cc ipmiUserSetUserPayloadAccess(const uint8_t chNum, const uint8_t operation,
         return ccParmOutOfRange;
     }
 
-    return getUserAccessObject().setUserPayloadAccess(chNum, operation, userId,
-                                                      payloadAccess);
+    return getUserAccessObject().setUserPayloadAccess(
+        chNum, operation, userId, payloadAccess);
 }
 
 Cc ipmiUserGetUserPayloadAccess(const uint8_t chNum, const uint8_t userId,
@@ -216,6 +221,9 @@ Cc ipmiUserGetUserPayloadAccess(const uint8_t chNum, const uint8_t userId,
 
     if (!UserAccess::isValidChannel(chNum))
     {
+        lg2::error(
+            "Get user payload access - Invalid channel number: {CHANNEL}",
+            "CHANNEL", chNum);
         return ccInvalidFieldRequest;
     }
     if (!UserAccess::isValidUserId(userId))

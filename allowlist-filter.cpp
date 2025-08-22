@@ -148,11 +148,11 @@ void AllowlistFilter::cacheRestrictedAndPostCompleteMode()
 {
     try
     {
-        auto service = ipmi::getService(*bus, restrictionModeIntf,
-                                        restrictionModePath);
-        ipmi::Value v =
-            ipmi::getDbusProperty(*bus, service, restrictionModePath,
-                                  restrictionModeIntf, "RestrictionMode");
+        auto service =
+            ipmi::getService(*bus, restrictionModeIntf, restrictionModePath);
+        ipmi::Value v = ipmi::getDbusProperty(
+            *bus, service, restrictionModePath, restrictionModeIntf,
+            "RestrictionMode");
         auto& mode = std::get<std::string>(v);
         restrictionMode = RestrictionMode::convertModesFromString(mode);
         lg2::info("Read restriction mode: {MODE}", "MODE",
@@ -166,11 +166,11 @@ void AllowlistFilter::cacheRestrictedAndPostCompleteMode()
 
     try
     {
-        auto service = ipmi::getService(*bus, systemOsStatusIntf,
-                                        systemOsStatusPath);
-        ipmi::Value v = ipmi::getDbusProperty(*bus, service, systemOsStatusPath,
-                                              systemOsStatusIntf,
-                                              "BootProgress");
+        auto service =
+            ipmi::getService(*bus, systemOsStatusIntf, systemOsStatusPath);
+        ipmi::Value v = ipmi::getDbusProperty(
+            *bus, service, systemOsStatusPath, systemOsStatusIntf,
+            "BootProgress");
         auto& value = std::get<std::string>(v);
         updatePostComplete(value);
         lg2::info("Read POST complete value: {VALUE}", "VALUE", postCompleted);
@@ -374,9 +374,9 @@ bool isInAllowlistWithChannel(const ipmi::message::Request::ptr& request)
         std::make_tuple(request->ctx->netFn, request->ctx->cmd, channelMask),
         [](const netfncmd_tuple& first, const netfncmd_tuple& value) {
         return (std::get<2>(first) & std::get<2>(value))
-                   ? first < std::make_tuple(std::get<0>(value),
-                                             std::get<1>(value),
-                                             std::get<2>(first))
+                   ? first <
+                         std::make_tuple(std::get<0>(value), std::get<1>(value),
+                                         std::get<2>(first))
                    : first < value;
     });
 }

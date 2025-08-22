@@ -118,6 +118,7 @@ feature_map = {
     'dynamic-storages-only'      : '-DFEATURE_DYNAMIC_STORAGES_ONLY',
     'dynamic-sensors-remove-exceeded-scale' : '-DENABLE_DYNAMIC_SENSORS_REMOVE_EXCEEDED_SCALE',
     'host-connected'              : '-DHOST_CONNECTED',
+    'arm-sbmr'                   : '-DARM_SBMR_SUPPORT',
 }
 
 foreach option_key, option_value : feature_map
@@ -141,7 +142,7 @@ add_project_arguments(
 
 # Dependencies
 
-boost = dependency('boost', modules: ['coroutine', 'context'], required: false)
+boost = dependency('boost', modules: ['context', 'coroutine'], required: false)
 
 if not boost.found()
     cmake = import('cmake')
@@ -292,6 +293,11 @@ if get_option('open-power').allowed()
     openpower_cmds_src = ['storageaddsel.cpp']
 endif
 
+arm_sbmr_cmds_src = []
+if get_option('arm-sbmr').allowed()
+    arm_sbmr_cmds_src = ['sbmrhandler.cpp']
+endif
+
 libipmi20_src = [
     'app/channel.cpp',
     'app/watchdog.cpp',
@@ -316,6 +322,7 @@ libipmi20_src = [
     transportoem_src,
     storage_cmds_src,
     openpower_cmds_src,
+    arm_sbmr_cmds_src,
     conf_h,
 ]
 
@@ -363,7 +370,7 @@ install_headers(
 # Dynamic Sensor Stack
 subdir('dbus-sdr')
 
-if get_option('dynamic-sensors').disabled() or not get_option('tests').allowed()
+if get_option('dynamic-sensors').allowed() or get_option('tests').allowed()
     library(
         'dynamiccmds',
         dbus_sdr_src,
@@ -390,3 +397,6 @@ install_subdir(
 
 # HW Transport
 subdir('transport')
+
+# OEM provider libraries
+subdir('oem')

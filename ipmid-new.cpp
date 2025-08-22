@@ -20,6 +20,7 @@
 #include <dlfcn.h>
 
 #include <boost/algorithm/string.hpp>
+#include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/spawn.hpp>
 #include <host-cmd-manager.hpp>
@@ -29,6 +30,7 @@
 #include <ipmid/message.hpp>
 #include <ipmid/oemrouter.hpp>
 #include <ipmid/types.hpp>
+#include <ipmid/utils.hpp>
 #include <phosphor-logging/lg2.hpp>
 #include <sdbusplus/asio/connection.hpp>
 #include <sdbusplus/asio/object_server.hpp>
@@ -324,8 +326,10 @@ message::Response::ptr executeIpmiGroupCommand(message::Request::ptr request)
         return errorResponse(request, ccReqDataLenInvalid);
     }
     auto group = static_cast<Group>(bytes);
-    message::Response::ptr response = executeIpmiCommandCommon(groupHandlerMap,
-                                                               group, request);
+    // Set defining body code
+    request->ctx->group = group;
+    message::Response::ptr response =
+        executeIpmiCommandCommon(groupHandlerMap, group, request);
     ipmi::message::Payload prefix;
     prefix.pack(bytes);
     response->prepend(prefix);
@@ -344,8 +348,8 @@ message::Response::ptr executeIpmiOemCommand(message::Request::ptr request)
 
     lg2::debug("unpack IANA {IANA}", "IANA", lg2::hex, iana);
 
-    message::Response::ptr response = executeIpmiCommandCommon(oemHandlerMap,
-                                                               iana, request);
+    message::Response::ptr response =
+        executeIpmiCommandCommon(oemHandlerMap, iana, request);
     ipmi::message::Payload prefix;
     prefix.pack(bytes);
     response->prepend(prefix);
@@ -418,11 +422,11 @@ void updateOwners(sdbusplus::asio::connection& conn, const std::string& name)
         name);
 }
 
-void doListNames(boost::asio::io_context& io, sdbusplus::asio::connection& conn)
+void doListNames(sdbusplus::asio::connection& conn)
 {
     conn.async_method_call(
-        [&io, &conn](const boost::system::error_code ec,
-                     std::vector<std::string> busNames) {
+        [&conn](const boost::system::error_code ec,
+                std::vector<std::string> busNames) {
         if (ec)
         {
             lg2::error("Error getting dbus names: {ERROR}", "ERROR",
@@ -433,8 +437,8 @@ void doListNames(boost::asio::io_context& io, sdbusplus::asio::connection& conn)
         // Try to make startup consistent
         std::sort(busNames.begin(), busNames.end());
 
-        const std::string channelPrefix = std::string(ipmiDbusChannelMatch) +
-                                          ".";
+        const std::string channelPrefix =
+            std::string(ipmiDbusChannelMatch) + ".";
         for (const std::string& busName : busNames)
         {
             if (busName.find(channelPrefix) == 0)
@@ -599,9 +603,9 @@ auto executionEntry(boost::asio::yield_context yield, sdbusplus::message_t& m,
                "SESSIONID", lg2::hex, sessionId, "PRIVILEGE",
                static_cast<uint8_t>(privilege), "RQSA", lg2::hex, rqSA);
 
-    auto ctx = std::make_shared<ipmi::Context>(getSdBus(), netFn, lun, cmd,
-                                               channel, userId, sessionId,
-                                               privilege, rqSA, hostIdx, yield);
+    auto ctx = std::make_shared<ipmi::Context>(
+        getSdBus(), netFn, lun, cmd, channel, userId, sessionId, privilege,
+        rqSA, hostIdx, yield);
     auto request = std::make_shared<ipmi::message::Request>(
         ctx, std::forward<ipmi::SecureBuffer>(data));
     message::Response::ptr response = executeIpmiCommand(request);
@@ -745,15 +749,15 @@ void ipmi_register_callback(ipmi_netfn_t netFn, ipmi_cmd_t cmd,
     // The original ipmi_register_callback allowed for group OEM handlers
     // to be registered via this same interface. It just so happened that
     // all the handlers were part of the DCMI group, so default to that.
-    if (netFn == NETFUN_GRPEXT)
+    if (netFn == ipmi::netFnGroup)
     {
-        ipmi::impl::registerGroupHandler(ipmi::prioOpenBmcBase, ipmi::groupDCMI,
-                                         cmd, realPriv, h);
+        ipmi::impl::registerGroupHandler(
+            ipmi::prioOpenBmcBase, ipmi::groupDCMI, cmd, realPriv, h);
     }
     else
     {
-        ipmi::impl::registerHandler(ipmi::prioOpenBmcBase, netFn, cmd, realPriv,
-                                    h);
+        ipmi::impl::registerHandler(
+            ipmi::prioOpenBmcBase, netFn, cmd, realPriv, h);
     }
 }
 
@@ -771,8 +775,8 @@ class LegacyRouter : public oem::Router
     void registerHandler(Number oen, ipmi_cmd_t cmd, Handler handler) override
     {
         auto h = ipmi::makeLegacyHandler(std::forward<Handler>(handler));
-        ipmi::impl::registerOemHandler(ipmi::prioOpenBmcBase, oen, cmd,
-                                       ipmi::Privilege::Admin, h);
+        ipmi::impl::registerOemHandler(
+            ipmi::prioOpenBmcBase, oen, cmd, ipmi::Privilege::Admin, h);
     }
 };
 static LegacyRouter legacyRouter;
@@ -789,8 +793,8 @@ void handleLegacyIpmiCommand(sdbusplus::message_t& m)
 {
     // make a copy so the next two moves don't wreak havoc on the stack
     sdbusplus::message_t b{m};
-    auto spawnResult = boost::asio::spawn(
-        *getIoContext(), [b = std::move(b)](boost::asio::yield_context yield) {
+    boost::asio::spawn(*getIoContext(),
+                       [b = std::move(b)](boost::asio::yield_context yield) {
         sdbusplus::message_t m{std::move(b)};
         unsigned char seq = 0, netFn = 0, lun = 0, cmd = 0;
         ipmi::SecureBuffer data;
@@ -807,15 +811,14 @@ void handleLegacyIpmiCommand(sdbusplus::message_t& m)
         // Responses in IPMI require a bit set.  So there ya go...
         netFn |= 0x01;
 
-        const char *dest, *path;
         constexpr const char* DBUS_INTF = "org.openbmc.HostIpmi";
 
-        dest = m.get_sender();
-        path = m.get_path();
-        boost::system::error_code ec;
-        bus->yield_method_call(yield, ec, dest, path, DBUS_INTF, "sendMessage",
-                               seq, netFn, lun, cmd, response->cc,
-                               response->payload.raw);
+        std::string dest = m.get_sender();
+        std::string path = m.get_path();
+        boost::system::error_code ec = ipmi::callDbusMethod(
+            ctx, dest, path, DBUS_INTF, "sendMessage", seq, netFn, lun, cmd,
+            response->cc, response->payload.raw);
+
         if (ec)
         {
             lg2::error(
@@ -823,7 +826,7 @@ void handleLegacyIpmiCommand(sdbusplus::message_t& m)
                 "ERROR", ec.message(), "SENDER", dest, "NETFN", lg2::hex, netFn,
                 "CMD", lg2::hex, cmd);
         }
-    }, {});
+    }, boost::asio::detached);
 }
 
 #endif /* ALLOW_DEPRECATED_API */
@@ -891,8 +894,8 @@ int main(int argc, char* argv[])
     // listen on deprecated signal interface for kcs/bt commands
     constexpr const char* FILTER = "type='signal',interface='org.openbmc."
                                    "HostIpmi',member='ReceivedMessage'";
-    sdbusplus::bus::match_t oldIpmiInterface(*sdbusp, FILTER,
-                                             handleLegacyIpmiCommand);
+    sdbusplus::bus::match_t oldIpmiInterface(
+        *sdbusp, FILTER, handleLegacyIpmiCommand);
 #endif /* ALLOW_DEPRECATED_API */
 
     // set up bus name watching to match channels with bus names
@@ -902,7 +905,7 @@ int main(int argc, char* argv[])
             sdbusplus::bus::match::rules::arg0namespace(
                 ipmi::ipmiDbusChannelMatch),
         ipmi::nameChangeHandler);
-    ipmi::doListNames(*io, *sdbusp);
+    ipmi::doListNames(*sdbusp);
 
     int exitCode = 0;
     // set up boost::asio signal handling
@@ -919,8 +922,8 @@ int main(int argc, char* argv[])
     sdbusp->request_name("xyz.openbmc_project.Ipmi.Host");
     // Add bindings for inbound IPMI requests
     auto server = sdbusplus::asio::object_server(sdbusp);
-    auto iface = server.add_interface("/xyz/openbmc_project/Ipmi",
-                                      "xyz.openbmc_project.Ipmi.Server");
+    auto iface = server.add_interface(
+        "/xyz/openbmc_project/Ipmi", "xyz.openbmc_project.Ipmi.Server");
     iface->register_method("execute", ipmi::executionEntry);
     iface->initialize();
 

@@ -38,14 +38,8 @@ using InternalFailure =
 
 namespace
 {
-constexpr auto SYSTEMD_TIME_SERVICE = "org.freedesktop.timedate1";
-constexpr auto SYSTEMD_TIME_PATH = "/org/freedesktop/timedate1";
-constexpr auto SYSTEMD_TIME_INTERFACE = "org.freedesktop.timedate1";
-
 constexpr auto logWatchPath = "/xyz/openbmc_project/logging";
-constexpr auto logBasePath = "/xyz/openbmc_project/logging/entry";
 constexpr auto logEntryIntf = "xyz.openbmc_project.Logging.Entry";
-constexpr auto logDeleteIntf = "xyz.openbmc_project.Object.Delete";
 } // namespace
 
 void registerStorageFunctions() __attribute__((constructor));
@@ -107,8 +101,8 @@ GetSELEntryResponse createSELEntry(const std::string& objPath)
     uint32_t loggingId;
     uint16_t selRecordId;
     entryDataMap entryData;
-    std::chrono::milliseconds chronoTimeStamp = getEntryData(objPath, entryData,
-                                                             recordId);
+    std::chrono::milliseconds chronoTimeStamp =
+        getEntryData(objPath, entryData, recordId);
     record.event.eventRecord.recordID = recordId;
     additionalDataMap m;
     auto iterData = entryData.find(propAdditionalData);
@@ -259,8 +253,8 @@ GetSELEntryResponse createSELEntry(const std::string& objPath)
 } // namespace sel
 } // namespace ipmi
 
-std::optional<std::pair<uint16_t, SELEntry>>
-    parseLoggingEntry(const std::string& p)
+std::optional<std::pair<uint16_t, SELEntry>> parseLoggingEntry(
+    const std::string& p)
 {
     try
     {
@@ -431,8 +425,8 @@ bool initSELCache()
         auto entry = parseLoggingEntry(p);
         if (entry)
         {
-            selCacheMap.insert_or_assign(entry->first,
-                                         std::move(entry->second));
+            selCacheMap.insert_or_assign(
+                entry->first, std::move(entry->second));
         }
     }
     // Compare the number of SEL entries  to the number of SEL files .
@@ -529,8 +523,8 @@ ipmi::RspType<uint16_t // deleted record ID
         return ipmi::responseUnspecifiedError();
     }
 
-    auto methodCall = bus.new_method_call(service.c_str(), objPath.c_str(),
-                                          ipmi::sel::logDeleteIntf, "Delete");
+    auto methodCall = bus.new_method_call(
+        service.c_str(), objPath.c_str(), ipmi::sel::logDeleteIntf, "Delete");
     auto reply = bus.call(methodCall);
     if (reply.is_method_error())
     {
@@ -580,9 +574,9 @@ ipmi::RspType<uint8_t // erase status
 
     sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
     auto service = ipmi::getService(bus, ipmi::sel::logIntf, ipmi::sel::logObj);
-    auto method = bus.new_method_call(service.c_str(), ipmi::sel::logObj,
-                                      ipmi::sel::logIntf,
-                                      ipmi::sel::logDeleteAllMethod);
+    auto method = bus.new_method_call(
+        service.c_str(), ipmi::sel::logObj, ipmi::sel::logIntf,
+        ipmi::sel::logDeleteAllMethod);
     try
     {
         bus.call_noreply(method);
@@ -601,8 +595,8 @@ template <typename TP>
 std::time_t to_time_t(TP tp)
 {
     using namespace std::chrono;
-    auto sctp = time_point_cast<system_clock::duration>(tp - TP::clock::now() +
-                                                        system_clock::now());
+    auto sctp = time_point_cast<system_clock::duration>(
+        tp - TP::clock::now() + system_clock::now());
     return system_clock::to_time_t(sctp);
 }
 
@@ -829,8 +823,8 @@ ipmi::RspType<uint16_t // recordID of the Added SEL entry
         try
         {
             auto service = ipmi::getService(bus, logInterface, logObjPath);
-            auto method = bus.new_method_call(service.c_str(), logObjPath,
-                                              logInterface, "Create");
+            auto method = bus.new_method_call(
+                service.c_str(), logObjPath, logInterface, "Create");
             method.append(messageID, sevLvl, addData);
             bus.call_noreply(method);
         }
@@ -874,9 +868,9 @@ ipmi::RspType<uint8_t> ipmiStorageSetErrorInfoCap(size_t capacity)
     try
     {
         auto service = ipmi::getService(bus, capacityInterface, logObjPath);
-        auto method = bus.new_method_call(service.c_str(), logObjPath,
-                                          capacityInterface,
-                                          "SetInfoLogCapacity");
+        auto method = bus.new_method_call(
+            service.c_str(), logObjPath, capacityInterface,
+            "SetInfoLogCapacity");
         method.append(capacity);
         bus.call_noreply(method);
     }
@@ -899,8 +893,8 @@ ipmi::RspType<size_t> ipmiStorageGetErrorInfoCap()
     try
     {
         auto service = ipmi::getService(bus, capacityInterface, logObjPath);
-        auto method = bus.new_method_call(service.c_str(), logObjPath,
-                                          dbusProperty, "Get");
+        auto method = bus.new_method_call(
+            service.c_str(), logObjPath, dbusProperty, "Get");
         method.append(capacityInterface, "InfoLogCapacity");
         response = bus.call(method);
         response.read(capacity);
@@ -926,14 +920,14 @@ void registerStorageFunctions()
                           ipmi::Privilege::Operator, ipmiStorageAddSEL);
 
     // <Get SEL Entry>
-    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
-                          ipmi::storage::cmdGetSelEntry, ipmi::Privilege::User,
-                          ipmiGetSELEntry);
+    ipmi::registerHandler(
+        ipmi::prioOpenBmcBase, ipmi::netFnStorage,
+        ipmi::storage::cmdGetSelEntry, ipmi::Privilege::User, ipmiGetSELEntry);
 
     // <Get SEL Info>
-    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
-                          ipmi::storage::cmdGetSelInfo, ipmi::Privilege::User,
-                          ipmiStorageGetSelInfo);
+    ipmi::registerHandler(
+        ipmi::prioOpenBmcBase, ipmi::netFnStorage, ipmi::storage::cmdGetSelInfo,
+        ipmi::Privilege::User, ipmiStorageGetSelInfo);
 
     // <Delete SEL Entry>
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
@@ -941,26 +935,26 @@ void registerStorageFunctions()
                           ipmi::Privilege::Operator, deleteSELEntry);
 
     // <Clear SEL>
-    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
-                          ipmi::storage::cmdClearSel, ipmi::Privilege::Operator,
-                          clearSEL);
+    ipmi::registerHandler(
+        ipmi::prioOpenBmcBase, ipmi::netFnStorage, ipmi::storage::cmdClearSel,
+        ipmi::Privilege::Operator, clearSEL);
 
     // <Get SEL Time>
-    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
-                          ipmi::storage::cmdGetSelTime, ipmi::Privilege::User,
-                          ipmiStorageGetSELTime);
+    ipmi::registerHandler(
+        ipmi::prioOpenBmcBase, ipmi::netFnStorage, ipmi::storage::cmdGetSelTime,
+        ipmi::Privilege::User, ipmiStorageGetSELTime);
 
     // <Set SEL Error Info Entry Capacity>
-    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
-                          ipmi::storage::cmdSetErrorInfoCap,
-                          ipmi::Privilege::Operator,
-                          ipmiStorageSetErrorInfoCap);
+    ipmi::registerHandler(
+        ipmi::prioOpenBmcBase, ipmi::netFnStorage,
+        ipmi::storage::cmdSetErrorInfoCap, ipmi::Privilege::Operator,
+        ipmiStorageSetErrorInfoCap);
 
     // <Get SEL Error Info Entry Capacity>
-    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
-                          ipmi::storage::cmdGetErrorInfoCap,
-                          ipmi::Privilege::Operator,
-                          ipmiStorageGetErrorInfoCap);
+    ipmi::registerHandler(
+        ipmi::prioOpenBmcBase, ipmi::netFnStorage,
+        ipmi::storage::cmdGetErrorInfoCap, ipmi::Privilege::Operator,
+        ipmiStorageGetErrorInfoCap);
 
     /*Note:
      * <Set SEL Time> and  <Reserve SEl>

@@ -155,11 +155,11 @@ class IPMIStatsEntry
             // Only show this if beginning a new streak
             if (numStreakMiss == 0)
             {
-                std::cerr << "IPMI sensor " << sensorName
-                          << ": Missing reading, byte=" << raw
-                          << ", Reading counts good=" << numReadings
-                          << " miss=" << numMissings
-                          << ", Prior good streak=" << numStreakRead << "\n";
+                lg2::error(
+                    "IPMI sensor {NAME}: Missing reading, byte={BYTE}, Reading "
+                    "counts good={GOOD} miss={MISS}, Prior good streak={STREAK}",
+                    "NAME", sensorName, "BYTE", raw, "GOOD", numReadings,
+                    "MISS", numMissings, "STREAK", numStreakRead);
             }
 
             numStreakRead = 0;
@@ -172,20 +172,20 @@ class IPMIStatsEntry
         // Only show this if beginning a new streak and not the first time
         if ((numStreakRead == 0) && (numReadings != 0))
         {
-            std::cerr << "IPMI sensor " << sensorName
-                      << ": Recovered reading, value=" << reading
-                      << " byte=" << raw
-                      << ", Reading counts good=" << numReadings
-                      << " miss=" << numMissings
-                      << ", Prior miss streak=" << numStreakMiss << "\n";
+            lg2::error(
+                "IPMI sensor {NAME}: Recovered reading, value={VALUE} byte={BYTE}"
+                ", Reading counts good={GOOD} miss={MISS}, Prior miss "
+                "streak={STREAK}",
+                "NAME", sensorName, "VALUE", reading, "BYTE", raw, "GOOD",
+                numReadings, "MISS", numMissings, "STREAK", numStreakMiss);
         }
 
         // Initialize min/max if the first successful reading
         if (numReadings == 0)
         {
-            std::cerr << "IPMI sensor " << sensorName
-                      << ": First reading, value=" << reading << " byte=" << raw
-                      << "\n";
+            lg2::error(
+                "IPMI sensor {NAME}: First reading, value={VALUE} byte={BYTE}",
+                "NAME", sensorName, "VALUE", reading, "BYTE", raw);
 
             minValue = reading;
             maxValue = reading;
@@ -198,18 +198,18 @@ class IPMIStatsEntry
         // Only provide subsequent output if new min/max established
         if (reading < minValue)
         {
-            std::cerr << "IPMI sensor " << sensorName
-                      << ": Lowest reading, value=" << reading
-                      << " byte=" << raw << "\n";
+            lg2::error(
+                "IPMI sensor {NAME}: Lowest reading, value={VALUE} byte={BYTE}",
+                "NAME", sensorName, "VALUE", reading, "BYTE", raw);
 
             minValue = reading;
         }
 
         if (reading > maxValue)
         {
-            std::cerr << "IPMI sensor " << sensorName
-                      << ": Highest reading, value=" << reading
-                      << " byte=" << raw << "\n";
+            lg2::error(
+                "IPMI sensor {NAME}: Highest reading, value={VALUE} byte={BYTE}",
+                "NAME", sensorName, "VALUE", reading, "BYTE", raw);
 
             maxValue = reading;
         }
@@ -340,8 +340,8 @@ bool getSensorNumMap(std::shared_ptr<SensorNumMap>& sensorNumMap);
 bool getSensorSubtree(SensorSubTree& subtree);
 
 #ifdef FEATURE_HYBRID_SENSORS
-ipmi::sensor::IdInfoMap::const_iterator
-    findStaticSensor(const std::string& path);
+ipmi::sensor::IdInfoMap::const_iterator findStaticSensor(
+    const std::string& path);
 #endif
 
 struct CmpStr
@@ -357,16 +357,15 @@ static constexpr size_t sensorEventTypeCodes = 1;
 
 enum class SensorTypeCodes : uint8_t
 {
-    reserved = 0x0,
-    temperature = 0x1,
-    voltage = 0x2,
-    current = 0x3,
-    fan = 0x4,
-    physical_security = 0x5,
+    reserved = 0x00,
+    temperature = 0x01,
+    voltage = 0x02,
+    current = 0x03,
+    fan = 0x04,
+    physicalSecurity = 0x5,
     processor = 0x07,
-    power_supply = 0x08,
-    power_unit = 0x09,
-    other = 0xB,
+    powerUnit = 0x09,
+    other = 0x0b,
     memory = 0x0c,
     drive_slot = 0x0D,
     systemFirmwareProgress = 0xF,
@@ -392,67 +391,10 @@ enum class SensorEventTypeCodes : uint8_t
     oem = 0x70,
 };
 
-const static boost::container::flat_map<
+extern boost::container::flat_map<
     const char*, std::pair<SensorTypeCodes, SensorEventTypeCodes>, CmpStr>
-    sensorTypes{
-        {{"temperature", std::make_pair(SensorTypeCodes::temperature,
-                                        SensorEventTypeCodes::threshold)},
-         {"voltage", std::make_pair(SensorTypeCodes::voltage,
-                                    SensorEventTypeCodes::threshold)},
-         {"current", std::make_pair(SensorTypeCodes::current,
-                                    SensorEventTypeCodes::threshold)},
-         {"fan_tach", std::make_pair(SensorTypeCodes::fan,
-                                     SensorEventTypeCodes::threshold)},
-         {"fan_pwm", std::make_pair(SensorTypeCodes::fan,
-                                    SensorEventTypeCodes::threshold)},
-         {"intrusion", std::make_pair(SensorTypeCodes::physical_security,
-                                      SensorEventTypeCodes::sensorSpecified)},
-         {"processor", std::make_pair(SensorTypeCodes::processor,
-                                      SensorEventTypeCodes::sensorSpecified)},
-         {"power", std::make_pair(SensorTypeCodes::other,
-                                  SensorEventTypeCodes::threshold)},
-         {"memory", std::make_pair(SensorTypeCodes::memory,
-                                   SensorEventTypeCodes::sensorSpecified)},
-         {"state", std::make_pair(SensorTypeCodes::power_unit,
-                                  SensorEventTypeCodes::sensorSpecified)},
-         {"buttons", std::make_pair(SensorTypeCodes::buttons,
-                                    SensorEventTypeCodes::sensorSpecified)},
-         {"watchdog", std::make_pair(SensorTypeCodes::watchdog2,
-                                     SensorEventTypeCodes::sensorSpecified)},
-         {"watchdog_event",
-          std::make_pair(SensorTypeCodes::watchdog2,
-                         SensorEventTypeCodes::sensorSpecified)},
-         {"drive", std::make_pair(SensorTypeCodes::drive_slot,
-                                  SensorEventTypeCodes::sensorSpecified)},
-         {"cpu", std::make_pair(SensorTypeCodes::processor,
-                                SensorEventTypeCodes::sensorSpecified)},
-         {"critical_interrupt",
-          std::make_pair(SensorTypeCodes::critical_interrupt,
-                         SensorEventTypeCodes::sensorSpecified)},
-         {"motherboard", std::make_pair(SensorTypeCodes::power_supply,
-                                        SensorEventTypeCodes::sensorSpecified)},
-         {"cable", std::make_pair(SensorTypeCodes::cable,
-                                  SensorEventTypeCodes::sensorSpecified)},
-         {"reboot", std::make_pair(SensorTypeCodes::systemBoot,
-                                   SensorEventTypeCodes::sensorSpecified)},
-         {"shutdown", std::make_pair(SensorTypeCodes::systemShutdown,
-                                     SensorEventTypeCodes::sensorSpecified)},
-         {"software", std::make_pair(SensorTypeCodes::versionChange,
-                                     SensorEventTypeCodes::sensorSpecified)},
-         {"eventlogging",
-          std::make_pair(SensorTypeCodes::event_log,
-                         SensorEventTypeCodes::sensorSpecified)},
-         {"PSU", std::make_pair(SensorTypeCodes::power_supply,
-                                SensorEventTypeCodes::redundancy)},
-         {"GPU",
-          std::make_pair(SensorTypeCodes::module, SensorEventTypeCodes::oem)},
-         {"boot_progress",
-          std::make_pair(SensorTypeCodes::systemFirmwareProgress,
-                         SensorEventTypeCodes::sensorSpecified)},
-         {"entity", std::make_pair(SensorTypeCodes::entity,
-                                   SensorEventTypeCodes::sensorSpecified)},
-         {"energy", std::make_pair(SensorTypeCodes::other,
-                                   SensorEventTypeCodes::threshold)}}};
+    sensorTypes;
+
 std::string getSensorTypeStringFromPath(const std::string& path);
 
 uint8_t getSensorTypeFromPath(const std::string& path);
@@ -475,8 +417,8 @@ std::optional<std::map<std::string, std::vector<std::string>>>
 std::map<std::string, Value> getEntityManagerProperties(const char* path,
                                                         const char* interface);
 
-std::optional<std::unordered_set<std::string>>&
-    getIpmiDecoratorPaths(const std::optional<ipmi::Context::ptr>& ctx);
+std::optional<std::unordered_set<std::string>>& getIpmiDecoratorPaths(
+    const std::optional<ipmi::Context::ptr>& ctx);
 
 const std::string* getSensorConfigurationInterface(
     const std::map<std::string, std::vector<std::string>>&

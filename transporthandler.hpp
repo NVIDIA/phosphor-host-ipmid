@@ -335,8 +335,8 @@ void reconfigureIfAddr6(sdbusplus::bus_t& bus, const ChannelParams& params,
  *  @return An address representing the gateway address if it exists
  */
 template <int family>
-std::optional<typename AddrFamily<family>::addr>
-    getGatewayProperty(sdbusplus::bus_t& bus, const ChannelParams& params)
+std::optional<typename AddrFamily<family>::addr> getGatewayProperty(
+    sdbusplus::bus_t& bus, const ChannelParams& params)
 {
     auto objPath = "/xyz/openbmc_project/network/" + params.ifname;
     auto gatewayStr = std::get<std::string>(
@@ -350,10 +350,9 @@ std::optional<typename AddrFamily<family>::addr>
 }
 
 template <int family>
-std::optional<IfNeigh<family>>
-    findStaticNeighbor(sdbusplus::bus_t&, const ChannelParams&,
-                       typename AddrFamily<family>::addr ip,
-                       ObjectLookupCache& neighbors)
+std::optional<IfNeigh<family>> findStaticNeighbor(
+    sdbusplus::bus_t&, const ChannelParams&,
+    typename AddrFamily<family>::addr ip, ObjectLookupCache& neighbors)
 {
     using sdbusplus::server::xyz::openbmc_project::network::Neighbor;
     const auto state =
@@ -398,9 +397,9 @@ void createNeighbor(sdbusplus::bus_t& bus, const ChannelParams& params,
                     typename AddrFamily<family>::addr address,
                     stdplus::EtherAddr mac)
 {
-    auto newreq = bus.new_method_call(params.service.c_str(),
-                                      params.logicalPath.c_str(),
-                                      INTF_NEIGHBOR_CREATE_STATIC, "Neighbor");
+    auto newreq = bus.new_method_call(
+        params.service.c_str(), params.logicalPath.c_str(),
+        INTF_NEIGHBOR_CREATE_STATIC, "Neighbor");
     stdplus::ToStrHandle<stdplus::ToStr<stdplus::EtherAddr>> macToStr;
     stdplus::ToStrHandle<stdplus::ToStr<typename AddrFamily<family>::addr>>
         addrToStr;

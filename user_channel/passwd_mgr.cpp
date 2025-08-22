@@ -142,16 +142,14 @@ void PasswdMgr::checkAndReload(void)
     }
 }
 
-int PasswdMgr::encryptDecryptData(bool doEncrypt, const EVP_CIPHER* cipher,
-                                  uint8_t* key, size_t keyLen, uint8_t* iv,
-                                  size_t ivLen, uint8_t* inBytes,
-                                  size_t inBytesLen, uint8_t* mac,
-                                  size_t* macLen, unsigned char* outBytes,
-                                  size_t* outBytesLen)
+int PasswdMgr::encryptDecryptData(
+    bool doEncrypt, const EVP_CIPHER* cipher, uint8_t* key, size_t keyLen,
+    uint8_t* iv, size_t ivLen, uint8_t* inBytes, size_t inBytesLen,
+    uint8_t* mac, size_t* macLen, unsigned char* outBytes, size_t* outBytesLen)
 {
-    if (cipher == NULL || key == NULL || iv == NULL || inBytes == NULL ||
-        outBytes == NULL || mac == NULL || inBytesLen == 0 ||
-        (size_t)EVP_CIPHER_key_length(cipher) > keyLen ||
+    if (cipher == nullptr || key == nullptr || iv == nullptr ||
+        inBytes == nullptr || outBytes == nullptr || mac == nullptr ||
+        inBytesLen == 0 || (size_t)EVP_CIPHER_key_length(cipher) > keyLen ||
         (size_t)EVP_CIPHER_iv_length(cipher) > ivLen)
     {
         lg2::debug("Error Invalid Inputs");
@@ -164,9 +162,9 @@ int PasswdMgr::encryptDecryptData(bool doEncrypt, const EVP_CIPHER* cipher,
         std::array<uint8_t, EVP_MAX_MD_SIZE> calMac;
         size_t calMacLen = calMac.size();
         // calculate MAC for the encrypted message.
-        if (NULL == HMAC(EVP_sha256(), key, keyLen, inBytes, inBytesLen,
-                         calMac.data(),
-                         reinterpret_cast<unsigned int*>(&calMacLen)))
+        if (nullptr ==
+            HMAC(EVP_sha256(), key, keyLen, inBytes, inBytesLen, calMac.data(),
+                 reinterpret_cast<unsigned int*>(&calMacLen)))
         {
             lg2::debug("Error: Failed to calculate MAC");
             return -EIO;
@@ -191,8 +189,8 @@ int PasswdMgr::encryptDecryptData(bool doEncrypt, const EVP_CIPHER* cipher,
     EVP_CIPHER_CTX_set_padding(ctx.get(), 1);
 
     // Set key & IV
-    int retval = EVP_CipherInit_ex(ctx.get(), cipher, NULL, key, iv,
-                                   static_cast<int>(doEncrypt));
+    int retval = EVP_CipherInit_ex(
+        ctx.get(), cipher, nullptr, key, iv, static_cast<int>(doEncrypt));
     if (!retval)
     {
         lg2::debug("EVP_CipherInit_ex failed: {RET_VAL}", "RET_VAL", retval);
@@ -200,12 +198,12 @@ int PasswdMgr::encryptDecryptData(bool doEncrypt, const EVP_CIPHER* cipher,
     }
 
     int outLen = 0, outEVPLen = 0;
-    if ((retval = EVP_CipherUpdate(ctx.get(), outBytes + outLen, &outEVPLen,
-                                   inBytes, inBytesLen)))
+    if ((retval = EVP_CipherUpdate(
+             ctx.get(), outBytes + outLen, &outEVPLen, inBytes, inBytesLen)))
     {
         outLen += outEVPLen;
-        if ((retval = EVP_CipherFinal(ctx.get(), outBytes + outLen,
-                                      &outEVPLen)))
+        if ((retval =
+                 EVP_CipherFinal(ctx.get(), outBytes + outLen, &outEVPLen)))
         {
             outLen += outEVPLen;
             *outBytesLen = outLen;
@@ -225,8 +223,8 @@ int PasswdMgr::encryptDecryptData(bool doEncrypt, const EVP_CIPHER* cipher,
     if (doEncrypt)
     {
         // Create MAC for the encrypted message
-        if (NULL == HMAC(EVP_sha256(), key, keyLen, outBytes, *outBytesLen, mac,
-                         reinterpret_cast<unsigned int*>(macLen)))
+        if (nullptr == HMAC(EVP_sha256(), key, keyLen, outBytes, *outBytesLen,
+                            mac, reinterpret_cast<unsigned int*>(macLen)))
         {
             lg2::debug("Failed to create authentication");
             return -EIO;
@@ -256,10 +254,10 @@ void PasswdMgr::initPasswordMap(void)
     {
         // populate the user list with password
         char* outPtr = dataBuf.data();
-        char* nToken = NULL;
+        char* nToken = nullptr;
         char* linePtr = strtok_r(outPtr, "\n", &nToken);
         size_t lineSize = 0;
-        while (linePtr != NULL)
+        while (linePtr != nullptr)
         {
             size_t userEPos = 0;
             SecureString lineStr(linePtr);
@@ -270,7 +268,7 @@ void PasswdMgr::initPasswordMap(void)
                     lineStr.substr(0, userEPos),
                     lineStr.substr(userEPos + 1, lineSize - (userEPos + 1)));
             }
-            linePtr = strtok_r(NULL, "\n", &nToken);
+            linePtr = strtok_r(nullptr, "\n", &nToken);
         }
     }
 
@@ -335,9 +333,9 @@ int PasswdMgr::readPasswdFileData(SecureString& outBytes)
     // compute the key needed to decrypt
     std::array<uint8_t, EVP_MAX_KEY_LENGTH> key;
     auto keyLen = key.size();
-    if (NULL == HMAC(EVP_sha256(), keyBuff.data(), keyBuff.size(),
-                     input.data() + sizeof(*metaData), metaData->hashSize,
-                     key.data(), reinterpret_cast<unsigned int*>(&keyLen)))
+    if (nullptr == HMAC(EVP_sha256(), keyBuff.data(), keyBuff.size(),
+                        input.data() + sizeof(*metaData), metaData->hashSize,
+                        key.data(), reinterpret_cast<unsigned int*>(&keyLen)))
     {
         lg2::debug("Failed to create MAC for authentication");
         return -EIO;
@@ -399,9 +397,9 @@ int PasswdMgr::updatePasswdSpecialFile(const std::string& userName,
     if (inBytesLen != 0)
     {
         char* outPtr = reinterpret_cast<char*>(dataBuf.data());
-        char* nToken = NULL;
+        char* nToken = nullptr;
         char* linePtr = strtok_r(outPtr, "\n", &nToken);
-        while (linePtr != NULL)
+        while (linePtr != nullptr)
         {
             size_t userEPos = 0;
 
@@ -422,12 +420,12 @@ int PasswdMgr::updatePasswdSpecialFile(const std::string& userName,
                 }
                 else
                 {
-                    bytesWritten += std::snprintf(&inBytes[0] + bytesWritten,
-                                                  (inBytesLen - bytesWritten),
-                                                  "%s\n", lineStr.data());
+                    bytesWritten += std::snprintf(
+                        &inBytes[0] + bytesWritten, (inBytesLen - bytesWritten),
+                        "%s\n", lineStr.data());
                 }
             }
-            linePtr = strtok_r(NULL, "\n", &nToken);
+            linePtr = strtok_r(nullptr, "\n", &nToken);
         }
         inBytesLen = bytesWritten;
     }
@@ -464,8 +462,8 @@ int PasswdMgr::updatePasswdSpecialFile(const std::string& userName,
     // Create temporary file for write
     std::string pwdFile(passwdFileName);
     std::vector<char> tempFileName(pwdFile.begin(), pwdFile.end());
-    std::vector<char> fileTemplate = {'_', '_', 'X', 'X', 'X',
-                                      'X', 'X', 'X', '\0'};
+    std::vector<char> fileTemplate = {
+        '_', '_', 'X', 'X', 'X', 'X', 'X', 'X', '\0'};
     tempFileName.insert(tempFileName.end(), fileTemplate.begin(),
                         fileTemplate.end());
     int fd = mkstemp((char*)tempFileName.data());
@@ -480,7 +478,7 @@ int PasswdMgr::updatePasswdSpecialFile(const std::string& userName,
     // By "true", remove it at exit if still there.
     // This is needed to cleanup the temp file at exception
     phosphor::user::File temp(fd, strTempFileName, "w", true);
-    if ((temp)() == NULL)
+    if ((temp)() == nullptr)
     {
         close(fd);
         lg2::debug("Error creating temp file");
@@ -511,9 +509,9 @@ int PasswdMgr::updatePasswdSpecialFile(const std::string& userName,
         lg2::debug("Hash genertion failed, bailing out");
         return -EIO;
     }
-    if (NULL == HMAC(digest, keyBuff.data(), keyBuff.size(), hash.data(),
-                     hashLen, key.data(),
-                     reinterpret_cast<unsigned int*>(&keyLen)))
+    if (nullptr ==
+        HMAC(digest, keyBuff.data(), keyBuff.size(), hash.data(), hashLen,
+             key.data(), reinterpret_cast<unsigned int*>(&keyLen)))
     {
         lg2::debug("Failed to create MAC for authentication");
         return -EIO;

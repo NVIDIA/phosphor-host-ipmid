@@ -1,7 +1,6 @@
-#include "sample.h"
-
 #include <ipmid/api.h>
 
+#include <include/ipmid/api-types.hpp>
 #include <ipmid/oemrouter.hpp>
 
 #include <cstring>
@@ -20,8 +19,8 @@ void ipmi_register_callback(ipmi_netfn_t netfn, ipmi_cmd_t cmd,
                             ipmi_context_t context, ipmid_callback_t cb,
                             ipmi_cmd_privilege_t priv)
 {
-    EXPECT_EQ(NETFUN_OEM_GROUP, netfn);
-    EXPECT_EQ(cmdWildcard, cmd);
+    EXPECT_EQ(ipmi::netFnOem, netfn);
+    EXPECT_EQ(ipmi::cmdWildcard, cmd);
     EXPECT_EQ(reinterpret_cast<void*>(singletonUnderTest), context);
     EXPECT_EQ(PRIVILEGE_OEM, priv);
     lastNetFunction = netfn;
@@ -46,7 +45,7 @@ void ActivateRouter()
 {
     MakeRouter();
     singletonUnderTest->activate();
-    ASSERT_EQ(NETFUN_OEM_GROUP, lastNetFunction);
+    ASSERT_EQ(ipmi::netFnOem, lastNetFunction);
 }
 
 void RegisterWithRouter(Number oen, ipmi_cmd_t cmd, Handler cb)
@@ -62,8 +61,8 @@ uint8_t msgBadOen[] = {0x57, 0x34, 0x12};
 
 void RegisterTwoWays(ipmi_cmd_t* nextCmd)
 {
-    Handler f = [](ipmi_cmd_t cmd, const uint8_t* reqBuf, uint8_t* replyBuf,
-                   size_t* dataLen) {
+    Handler f = [](ipmi_cmd_t cmd, [[maybe_unused]] const uint8_t* reqBuf,
+                   uint8_t* replyBuf, size_t* dataLen) {
         // Check inputs
         EXPECT_EQ(0x78, cmd);
         EXPECT_EQ(0, *dataLen); // Excludes OEN
@@ -75,9 +74,9 @@ void RegisterTwoWays(ipmi_cmd_t* nextCmd)
     };
     RegisterWithRouter(0x123456, 0x78, f);
 
-    *nextCmd = cmdWildcard;
+    *nextCmd = ipmi::cmdWildcard;
     Handler g = [nextCmd](ipmi_cmd_t cmd, const uint8_t* reqBuf,
-                          uint8_t* replyBuf, size_t* dataLen) {
+                          [[maybe_unused]] uint8_t* replyBuf, size_t* dataLen) {
         // Check inputs
         EXPECT_EQ(*nextCmd, cmd);
         EXPECT_EQ(2, *dataLen); // Excludes OEN
@@ -92,7 +91,7 @@ void RegisterTwoWays(ipmi_cmd_t* nextCmd)
         *dataLen = 0;
         return 0;
     };
-    RegisterWithRouter(0x234567, cmdWildcard, g);
+    RegisterWithRouter(0x234567, ipmi::cmdWildcard, g);
 }
 } // namespace
 
@@ -116,7 +115,7 @@ TEST(OemRouterTest, VerifiesSpecificCommandMatches)
     RegisterTwoWays(&cmd);
 
     dataLen = 3;
-    EXPECT_EQ(0, wildHandler(NETFUN_OEM_GROUP, 0x78, msgPlain, reply, &dataLen,
+    EXPECT_EQ(0, wildHandler(ipmi::netFnOem, 0x78, msgPlain, reply, &dataLen,
                              nullptr));
     EXPECT_EQ(5, dataLen);
     EXPECT_EQ(replyPlain[0], reply[0]);
@@ -137,13 +136,13 @@ TEST(OemRouterTest, WildCardMatchesTwoRandomCodes)
     // Check two random command codes.
     dataLen = 5;
     cmd = 0x89;
-    EXPECT_EQ(0, wildHandler(NETFUN_OEM_GROUP, cmd, msgPlus2, reply, &dataLen,
+    EXPECT_EQ(0, wildHandler(ipmi::netFnOem, cmd, msgPlus2, reply, &dataLen,
                              nullptr));
     EXPECT_EQ(3, dataLen);
 
     dataLen = 5;
     cmd = 0x67;
-    EXPECT_EQ(0, wildHandler(NETFUN_OEM_GROUP, cmd, msgPlus2, reply, &dataLen,
+    EXPECT_EQ(0, wildHandler(ipmi::netFnOem, cmd, msgPlus2, reply, &dataLen,
                              nullptr));
     EXPECT_EQ(3, dataLen);
 }
@@ -158,19 +157,21 @@ TEST(OemRouterTest, CommandsAreRejectedIfInvalid)
 
     // Message too short to include whole OEN?
     dataLen = 2;
-    EXPECT_EQ(IPMI_CC_REQ_DATA_LEN_INVALID,
-              wildHandler(NETFUN_OEM_GROUP, 0x78, msgPlain, reply, &dataLen,
-                          nullptr));
+    EXPECT_EQ(
+        ipmi::ccReqDataLenInvalid,
+        wildHandler(ipmi::netFnOem, 0x78, msgPlain, reply, &dataLen, nullptr));
 
     // Wrong specific command?
     dataLen = 3;
-    EXPECT_EQ(IPMI_CC_INVALID, wildHandler(NETFUN_OEM_GROUP, 0x89, msgPlain,
-                                           reply, &dataLen, nullptr));
+    EXPECT_EQ(
+        ipmi::ccInvalidCommand,
+        wildHandler(ipmi::netFnOem, 0x89, msgPlain, reply, &dataLen, nullptr));
 
     // Wrong OEN?
     dataLen = 3;
-    EXPECT_EQ(IPMI_CC_INVALID, wildHandler(NETFUN_OEM_GROUP, 0x78, msgBadOen,
-                                           reply, &dataLen, nullptr));
+    EXPECT_EQ(
+        ipmi::ccInvalidCommand,
+        wildHandler(ipmi::netFnOem, 0x78, msgBadOen, reply, &dataLen, nullptr));
 }
 
 } // namespace oem

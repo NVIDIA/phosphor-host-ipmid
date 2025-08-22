@@ -21,9 +21,6 @@ enum CommandPrivilege
     SYSTEM_INTERFACE = 0xFF,
 };
 
-// length of Completion Code and its ALWAYS _1_
-#define IPMI_CC_LEN 1
-
 // IPMI Net Function number as specified by IPMI V2.0 spec.
 // Example :
 // NETFUN_APP      =   (0x06 << 2),
@@ -84,7 +81,9 @@ void cancelSELReservation(void);
 // the proper network function which issued the command
 // associated with a response, subtract 1.
 // Note: these are also shifted left to make room for the LUN.
-enum ipmi_net_fns
+enum __attribute__((deprecated(
+    "Deprecated enum: use netfn values from ipmi-api.hpp; this enum will be removed after 31-Dec-2025")))
+ipmi_net_fns
 {
     NETFUN_CHASSIS = 0x00,
     NETFUN_BRIDGE = 0x02,
@@ -144,7 +143,6 @@ EInterfaceIndex getInterfaceIndex(void);
 
 sd_bus* ipmid_get_sd_bus_connection(void);
 sd_event* ipmid_get_sd_event_connection(void);
-sd_bus_slot* ipmid_get_sd_bus_slot(void);
 
 // move this from ipmid.hpp, which is now gone
 // this should not be used. Use the channel API to get the channel size

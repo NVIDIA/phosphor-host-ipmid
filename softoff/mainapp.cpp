@@ -50,8 +50,8 @@ int main(int, char**)
         bus.request_name(SOFTOFF_BUSNAME);
 
         // Create the SoftPowerOff object.
-        phosphor::ipmi::SoftPowerOff powerObj(bus, event.get(),
-                                              SOFTOFF_OBJPATH);
+        phosphor::ipmi::SoftPowerOff powerObj(
+            bus, event.get(), SOFTOFF_OBJPATH);
 
         // Wait for client requests until this application has processed
         // at least one successful SoftPowerOff or we timed out

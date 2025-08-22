@@ -97,8 +97,8 @@ uint16_t convertSelIdToU16(uint32_t id)
 {
     if (id >= std::numeric_limits<uint16_t>::max())
     {
-        return static_cast<uint16_t>(id % std::numeric_limits<uint16_t>::max() +
-                                     1);
+        return static_cast<uint16_t>(
+            id % std::numeric_limits<uint16_t>::max() + 1);
     }
 
     return static_cast<uint16_t>(id);
@@ -107,16 +107,15 @@ uint16_t convertSelIdToU16(uint32_t id)
 /* Retrive entry data from dbus object such as entry ID,
  * Timestamp and recordID.
  */
-std::chrono::milliseconds getEntryData(const std::string& objPath,
-                                       entryDataMap& entryData,
-                                       uint16_t& recordId)
+std::chrono::milliseconds getEntryData(
+    const std::string& objPath, entryDataMap& entryData, uint16_t& recordId)
 {
     sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
     auto service = ipmi::getService(bus, logEntryIntf, objPath);
 
     // Read all the log entry properties.
-    auto methodCall = bus.new_method_call(service.c_str(), objPath.c_str(),
-                                          propIntf, "GetAll");
+    auto methodCall = bus.new_method_call(
+        service.c_str(), objPath.c_str(), propIntf, "GetAll");
     methodCall.append(logEntryIntf);
 
     auto reply = bus.call(methodCall);
@@ -161,8 +160,8 @@ std::chrono::seconds getEntryTimeStamp(const std::string& objPath)
     using namespace std::string_literals;
     static const auto propTimeStamp = "Timestamp"s;
 
-    auto methodCall = bus.new_method_call(service.c_str(), objPath.c_str(),
-                                          propIntf, "Get");
+    auto methodCall =
+        bus.new_method_call(service.c_str(), objPath.c_str(), propIntf, "Get");
     methodCall.append(logEntryIntf);
     methodCall.append(propTimeStamp);
 
@@ -187,8 +186,8 @@ void readLoggingObjectPaths(ObjectPaths& paths)
     auto depth = 0;
     paths.clear();
 
-    auto mapperCall = bus.new_method_call(mapperBusName, mapperObjPath,
-                                          mapperIntf, "GetSubTreePaths");
+    auto mapperCall = bus.new_method_call(
+        mapperBusName, mapperObjPath, mapperIntf, "GetSubTreePaths");
     mapperCall.append(logBasePath);
     mapperCall.append(depth);
     mapperCall.append(ObjectPaths({logEntryIntf}));

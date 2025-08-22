@@ -31,7 +31,7 @@ AssertionSet getAssertionSet(const SetSensorReadingReq& cmdData)
     return std::make_pair(assertionStates, deassertionStates);
 }
 
-ipmi_ret_t updateToDbus(IpmiUpdateData& msg)
+ipmi::Cc updateToDbus(IpmiUpdateData& msg)
 {
     sdbusplus::bus_t bus{ipmid_get_sd_bus_connection()};
     try
@@ -42,9 +42,9 @@ ipmi_ret_t updateToDbus(IpmiUpdateData& msg)
     {
         lg2::error("Error in D-Bus call: {ERROR}", "ERROR", e);
         commit<InternalFailure>();
-        return IPMI_CC_UNSPECIFIED_ERROR;
+        return ipmi::ccUnspecifiedError;
     }
-    return IPMI_CC_OK;
+    return ipmi::ccSuccess;
 }
 
 namespace get
@@ -105,8 +105,8 @@ GetSensorResponse mapDbusToEventdata2(const Info& sensorInfo)
 
     enableScanning(&response);
 
-    auto service = ipmi::getService(bus, sensorInfo.sensorInterface,
-                                    sensorInfo.sensorPath);
+    auto service = ipmi::getService(
+        bus, sensorInfo.sensorInterface, sensorInfo.sensorPath);
 
     const auto& interfaceList = sensorInfo.propertyInterfaces;
 
@@ -114,9 +114,9 @@ GetSensorResponse mapDbusToEventdata2(const Info& sensorInfo)
     {
         for (const auto& property : interface.second)
         {
-            auto propValue =
-                ipmi::getDbusProperty(bus, service, sensorInfo.sensorPath,
-                                      interface.first, property.first);
+            auto propValue = ipmi::getDbusProperty(
+                bus, service, sensorInfo.sensorPath, interface.first,
+                property.first);
 
             for (const auto& value : std::get<OffsetValueMap>(property.second))
             {
@@ -135,8 +135,8 @@ GetSensorResponse mapDbusToEventdata2(const Info& sensorInfo)
 #ifndef FEATURE_SENSORS_CACHE
 GetSensorResponse assertion(const Info& sensorInfo)
 {
-    return mapDbusToAssertion(sensorInfo, sensorInfo.sensorPath,
-                              sensorInfo.sensorInterface);
+    return mapDbusToAssertion(
+        sensorInfo, sensorInfo.sensorPath, sensorInfo.sensorInterface);
 }
 
 GetSensorResponse eventdata2(const Info& sensorInfo)
@@ -149,8 +149,8 @@ std::optional<GetSensorResponse> assertion(uint8_t id, const Info& sensorInfo,
 {
     // The assertion may contain multiple properties
     // So we have to get the properties from DBus anyway
-    auto response = mapDbusToAssertion(sensorInfo, sensorInfo.sensorPath,
-                                       sensorInfo.sensorInterface);
+    auto response = mapDbusToAssertion(
+        sensorInfo, sensorInfo.sensorPath, sensorInfo.sensorInterface);
 
     if (!sensorCacheMap[id].has_value())
     {
@@ -196,12 +196,12 @@ IpmiUpdateData makeDbusMsg(const std::string& updateInterface,
                                updateInterface.c_str(), command.c_str());
 }
 
-ipmi_ret_t eventdata(const SetSensorReadingReq&, const Info& sensorInfo,
-                     uint8_t data)
+ipmi::Cc eventdata(const SetSensorReadingReq&, const Info& sensorInfo,
+                   uint8_t data)
 {
-    auto msg = makeDbusMsg("org.freedesktop.DBus.Properties",
-                           sensorInfo.sensorPath, "Set",
-                           sensorInfo.sensorInterface);
+    auto msg =
+        makeDbusMsg("org.freedesktop.DBus.Properties", sensorInfo.sensorPath,
+                    "Set", sensorInfo.sensorInterface);
 
     const auto& interface = sensorInfo.propertyInterfaces.begin();
     msg.append(interface->first);
@@ -212,14 +212,14 @@ ipmi_ret_t eventdata(const SetSensorReadingReq&, const Info& sensorInfo,
         if (iter == std::get<OffsetValueMap>(property.second).end())
         {
             lg2::error("Invalid event data");
-            return IPMI_CC_PARM_OUT_OF_RANGE;
+            return ipmi::ccParmOutOfRange;
         }
         msg.append(iter->second.assert);
     }
     return updateToDbus(msg);
 }
 
-ipmi_ret_t assertion(const SetSensorReadingReq& cmdData, const Info& sensorInfo)
+ipmi::Cc assertion(const SetSensorReadingReq& cmdData, const Info& sensorInfo)
 {
     std::bitset<16> assertionSet(getAssertionSet(cmdData).first);
     std::bitset<16> deassertionSet(getAssertionSet(cmdData).second);
@@ -252,9 +252,9 @@ ipmi_ret_t assertion(const SetSensorReadingReq& cmdData, const Info& sensorInfo)
 
         if (tmp)
         {
-            auto msg = makeDbusMsg("org.freedesktop.DBus.Properties",
-                                   sensorInfo.sensorPath, "Set",
-                                   sensorInfo.sensorInterface);
+            auto msg = makeDbusMsg(
+                "org.freedesktop.DBus.Properties", sensorInfo.sensorPath, "Set",
+                sensorInfo.sensorInterface);
             msg.append(interface->first);
             msg.append(property.first);
             msg.append(*tmp);
@@ -267,7 +267,7 @@ ipmi_ret_t assertion(const SetSensorReadingReq& cmdData, const Info& sensorInfo)
         }
     }
 
-    return IPMI_CC_OK;
+    return ipmi::ccSuccess;
 }
 
 } // namespace set
@@ -289,7 +289,7 @@ IpmiUpdateData makeDbusMsg(const std::string& updateInterface,
                                updateInterface.c_str(), command.c_str());
 }
 
-ipmi_ret_t assertion(const SetSensorReadingReq& cmdData, const Info& sensorInfo)
+ipmi::Cc assertion(const SetSensorReadingReq& cmdData, const Info& sensorInfo)
 {
     auto msg = makeDbusMsg(sensorInfo.sensorInterface, sensorInfo.sensorPath,
                            "Notify", sensorInfo.sensorInterface);
@@ -323,7 +323,7 @@ ipmi_ret_t assertion(const SetSensorReadingReq& cmdData, const Info& sensorInfo)
                     // Skip update if skipOn is ASSERT
                     if (SkipAssertion::ASSERT == value.second.skip)
                     {
-                        return IPMI_CC_OK;
+                        return ipmi::ccSuccess;
                     }
                     result = result && std::get<bool>(value.second.assert);
                     valid = true;
@@ -333,7 +333,7 @@ ipmi_ret_t assertion(const SetSensorReadingReq& cmdData, const Info& sensorInfo)
                     // Skip update if skipOn is DEASSERT
                     if (SkipAssertion::DEASSERT == value.second.skip)
                     {
-                        return IPMI_CC_OK;
+                        return ipmi::ccSuccess;
                     }
                     result = result && std::get<bool>(value.second.deassert);
                     valid = true;

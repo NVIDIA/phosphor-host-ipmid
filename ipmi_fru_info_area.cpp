@@ -46,8 +46,8 @@ static constexpr auto maxRecordAttributeValue = 0x3F;
 static constexpr auto secs_from_1970_1996 = 820454400;
 static constexpr auto maxMfgDateValue = 0xFFFFFF; // 3 Byte length
 static constexpr auto secs_per_min = 60;
-static constexpr auto secsToMaxMfgdate = secs_from_1970_1996 +
-                                         secs_per_min * maxMfgDateValue;
+static constexpr auto secsToMaxMfgdate =
+    secs_from_1970_1996 + secs_per_min * maxMfgDateValue;
 
 // Minimum size of resulting FRU blob.
 // This is also the theoretical maximum size according to the spec:
@@ -117,8 +117,8 @@ void postFormatProcessing(FruAreaData& data)
     padData(data);
 
     // Set size of data info area
-    data.at(areaSizeOffset) = (data.size() + checksumSize) /
-                              (recordUnitOfMeasurement);
+    data.at(areaSizeOffset) =
+        (data.size() + checksumSize) / (recordUnitOfMeasurement);
 
     // Finally add area checksum
     appendDataChecksum(data);
@@ -201,8 +201,8 @@ std::time_t timeStringToRaw(const std::string& input)
     // TODO: For non-US region timestamps, pass in region information for the
     // FRU to avoid the month/day swap.
     // 2017-02-24 - 13:59:00, Tue Nov 20 23:08:00 2018
-    static const std::vector<std::string> patterns = {"%Y-%m-%d - %H:%M:%S",
-                                                      "%a %b %d %H:%M:%S %Y"};
+    static const std::vector<std::string> patterns = {
+        "%Y-%m-%d - %H:%M:%S", "%a %b %d %H:%M:%S %Y"};
 
     std::tm time = {};
 

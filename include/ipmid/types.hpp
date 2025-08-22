@@ -19,13 +19,13 @@ using DbusObjectInfo = std::pair<DbusObjectPath, DbusService>;
 using DbusProperty = std::string;
 
 using Association = std::tuple<std::string, std::string, std::string>;
+using BootProgressCode = std::tuple<std::vector<uint8_t>, std::vector<uint8_t>>;
 
-using Value =
-    std::variant<bool, uint8_t, int16_t, uint16_t, int32_t, uint32_t, int64_t,
-                 uint64_t, double, std::string, std::vector<uint8_t>,
-                 std::vector<uint16_t>, std::vector<uint32_t>,
-                 std::vector<std::string>, std::vector<Association>,
-                 std::map<std::string, bool>>;
+using Value = std::variant<
+    bool, uint8_t, int16_t, uint16_t, int32_t, uint32_t, int64_t, uint64_t,
+    double, std::string, std::vector<uint8_t>, std::vector<uint16_t>,
+    std::vector<uint32_t>, std::vector<std::string>, std::vector<Association>,
+    BootProgressCode, std::map<std::string, bool>>;
 
 using PropertyMap = std::map<DbusProperty, Value>;
 
@@ -148,14 +148,14 @@ enum class Mutability
 
 inline Mutability operator|(Mutability lhs, Mutability rhs)
 {
-    return static_cast<Mutability>(static_cast<uint8_t>(lhs) |
-                                   static_cast<uint8_t>(rhs));
+    return static_cast<Mutability>(
+        static_cast<uint8_t>(lhs) | static_cast<uint8_t>(rhs));
 }
 
 inline Mutability operator&(Mutability lhs, Mutability rhs)
 {
-    return static_cast<Mutability>(static_cast<uint8_t>(lhs) &
-                                   static_cast<uint8_t>(rhs));
+    return static_cast<Mutability>(
+        static_cast<uint8_t>(lhs) & static_cast<uint8_t>(rhs));
 }
 
 struct Info
@@ -179,8 +179,8 @@ struct Info
 #ifndef FEATURE_SENSORS_CACHE
     std::function<GetSensorResponse(const Info&)> getFunc;
 #else
-    std::function<std::optional<GetSensorResponse>(uint8_t, const Info&,
-                                                   const ipmi::PropertyMap&)>
+    std::function<std::optional<GetSensorResponse>(
+        uint8_t, const Info&, const ipmi::PropertyMap&)>
         getFunc;
 #endif
     Mutability mutability;

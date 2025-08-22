@@ -48,7 +48,7 @@ struct Context
             Privilege priv, int rqSA, int hostIdx,
             boost::asio::yield_context& yield) :
         bus(bus), netFn(netFn), lun(lun), cmd(cmd), channel(channel),
-        userId(userId), sessionId(sessionId), priv(priv), rqSA(rqSA),
+        userId(userId), sessionId(sessionId), priv(priv), group(0), rqSA(rqSA),
         hostIdx(hostIdx), yield(yield)
     {}
 
@@ -61,6 +61,8 @@ struct Context
     int userId;
     uint32_t sessionId;
     Privilege priv;
+    // defining body code for netFnGroup
+    Group group;
     // srcAddr is only set on IPMB requests because
     // Platform Event Message needs it to determine the incoming format
     int rqSA;
@@ -256,8 +258,8 @@ struct Payload
     template <typename Arg, typename... Args>
     int pack(Arg&& arg, Args&&... args)
     {
-        int packRet = details::PackSingle_t<Arg>::op(*this,
-                                                     std::forward<Arg>(arg));
+        int packRet =
+            details::PackSingle_t<Arg>::op(*this, std::forward<Arg>(arg));
         if (packRet)
         {
             return packRet;
@@ -323,8 +325,8 @@ struct Payload
             return range;
         }
         unpackError = true;
-        return std::make_tuple(reinterpret_cast<T*>(NULL),
-                               reinterpret_cast<T*>(NULL));
+        return std::make_tuple(
+            reinterpret_cast<T*>(NULL), reinterpret_cast<T*>(NULL));
     }
 
     /**
@@ -464,8 +466,8 @@ struct Payload
         size_t priorIndex = rawIndex;
         fixed_uint_t<details::bitStreamSize> priorBits = bitStream;
 
-        int ret = std::apply([this](Types&... args) { return unpack(args...); },
-                             t);
+        int ret =
+            std::apply([this](Types&... args) { return unpack(args...); }, t);
         if (ret)
         {
             bitCount = priorBitCount;

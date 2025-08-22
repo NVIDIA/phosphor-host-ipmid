@@ -295,8 +295,8 @@ void startMatch(void)
     });
 
     // call once to populate
-    auto spawnResult = boost::asio::spawn(*getIoContext(),
-                                          [](boost::asio::yield_context yield) {
+    auto spawnResult = boost::asio::spawn(
+        *getIoContext(), [](boost::asio::yield_context yield) {
         replaceCacheFru(getSdBus(), yield);
     }, {});
 }
@@ -342,12 +342,12 @@ ipmi::RspType<uint8_t,             // Count
 
     std::vector<uint8_t> requestedData;
 
-    requestedData.insert(requestedData.begin(),
-                         fru.begin() + fruInventoryOffset,
-                         fru.begin() + fruInventoryOffset + fromFruByteLen);
+    requestedData.insert(
+        requestedData.begin(), fru.begin() + fruInventoryOffset,
+        fru.begin() + fruInventoryOffset + fromFruByteLen);
 
-    return ipmi::responseSuccess(static_cast<uint8_t>(requestedData.size()),
-                                 requestedData);
+    return ipmi::responseSuccess(
+        static_cast<uint8_t>(requestedData.size()), requestedData);
 }
 
 /** @brief implements the write FRU data command
@@ -358,10 +358,9 @@ ipmi::RspType<uint8_t,             // Count
  *  @returns ipmi completion code plus response data
  *   - countWritten  - Count written
  */
-ipmi::RspType<uint8_t>
-    ipmiStorageWriteFruData(ipmi::Context::ptr ctx, uint8_t fruDeviceId,
-                            uint16_t fruInventoryOffset,
-                            std::vector<uint8_t>& dataToWrite)
+ipmi::RspType<uint8_t> ipmiStorageWriteFruData(
+    ipmi::Context::ptr ctx, uint8_t fruDeviceId, uint16_t fruInventoryOffset,
+    std::vector<uint8_t>& dataToWrite)
 {
     if (fruDeviceId == 0xFF)
     {
@@ -731,9 +730,8 @@ ipmi_ret_t getFruSdrs([[maybe_unused]] ipmi::Context::ptr ctx, size_t index,
     return IPMI_CC_OK;
 }
 
-std::vector<uint8_t>
-    getType8SDRs(ipmi::sensor::EntityInfoMap::const_iterator& entity,
-                 uint16_t recordId)
+std::vector<uint8_t> getType8SDRs(
+    ipmi::sensor::EntityInfoMap::const_iterator& entity, uint16_t recordId)
 {
     std::vector<uint8_t> resp;
     get_sdr::SensorDataEntityRecord data{};
@@ -748,8 +746,8 @@ std::vector<uint8_t>
     /* Key */
     data.key.containerEntityId = entity->second.containerEntityId;
     data.key.containerEntityInstance = entity->second.containerEntityInstance;
-    get_sdr::key::set_flags(entity->second.isList, entity->second.isLinked,
-                            &(data.key));
+    get_sdr::key::set_flags(
+        entity->second.isList, entity->second.isLinked, &(data.key));
     data.key.entityId1 = entity->second.containedEntities[0].first;
     data.key.entityInstance1 = entity->second.containedEntities[0].second;
 
@@ -785,8 +783,8 @@ std::vector<uint8_t> getType12SDRs(uint16_t index, uint16_t recordId)
     }
     else
     {
-        throw std::runtime_error("getType12SDRs:: Illegal index " +
-                                 std::to_string(index));
+        throw std::runtime_error(
+            "getType12SDRs:: Illegal index " + std::to_string(index));
     }
 
     return resp;

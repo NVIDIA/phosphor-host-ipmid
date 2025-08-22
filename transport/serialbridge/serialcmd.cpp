@@ -163,13 +163,11 @@ int SerialChannel::write(stdplus::Fd& uart, uint8_t rsAddr, uint8_t rqAddr,
             throw sdbusplus::exception::SdBusError(&error, "ipmid response");
         }
 
-        uint8_t netFn = 0xff;
-        uint8_t lun = 0xff;
-        uint8_t cmd = 0xff;
-        uint8_t cc = 0xff;
-        std::vector<uint8_t> data;
+        std::tuple<uint8_t, uint8_t, uint8_t, uint8_t, std::vector<uint8_t>>
+            ret;
+        m.read(ret);
 
-        m.read(netFn, lun, cmd, cc, data);
+        const auto& [netFn, lun, cmd, cc, data] = ret;
 
         uint8_t netFnLun = (netFn << netFnShift) | (lun & lunMask);
         uint8_t seqLun = (seq << netFnShift) | (lun & lunMask);
@@ -179,22 +177,24 @@ int SerialChannel::write(stdplus::Fd& uart, uint8_t rsAddr, uint8_t rqAddr,
 
         // Reserve the buffer size to avoid relloc and copy
         responseBuffer.clear();
-        responseBuffer.reserve(sizeof(struct IpmiSerialHeader) +
-                               2 * data.size() +
-                               4); // 4 for bmStart & bmStop & 2 checksums
+        responseBuffer.reserve(
+            sizeof(struct IpmiSerialHeader) + 2 * data.size() +
+            4); // 4 for bmStart & bmStop & 2 checksums
 
         // bmStart
         responseBuffer.push_back(bmStart);
 
         // Assemble connection header and checksum
         checksum = processEscapedCharacter(responseBuffer, connectionHeader);
-        responseBuffer.push_back(-checksum); // checksum1
+        checksum = static_cast<uint8_t>(~checksum + 1); // checksum1
+        processEscapedCharacter(responseBuffer, std::vector<uint8_t>{checksum});
 
         // Assemble response message and checksum
         checksum = processEscapedCharacter(responseBuffer, messageHeader);
-        checksum += processEscapedCharacter(responseBuffer,
-                                            std::vector<uint8_t>(data));
-        responseBuffer.push_back(-checksum); // checksum2
+        checksum +=
+            processEscapedCharacter(responseBuffer, std::vector<uint8_t>(data));
+        checksum = static_cast<uint8_t>(~checksum + 1); // checksum2
+        processEscapedCharacter(responseBuffer, std::vector<uint8_t>{checksum});
 
         // bmStop
         responseBuffer.push_back(bmStop);
@@ -266,8 +266,8 @@ void SerialChannel::read(stdplus::Fd& uart, sdbusplus::bus_t& bus,
     }
 
     // validate checksum1
-    if (calculateChecksum(std::span<uint8_t>(requestBuffer.begin(),
-                                             ipmiSerialConnectionHeaderLength)))
+    if (calculateChecksum(std::span<uint8_t>(
+            requestBuffer.begin(), ipmiSerialConnectionHeaderLength)))
     {
         lg2::error("Invalid request checksum 1 \n");
         requestBuffer.clear();
@@ -284,9 +284,9 @@ void SerialChannel::read(stdplus::Fd& uart, sdbusplus::bus_t& bus,
         return;
     }
 
-    auto m = bus.new_method_call("xyz.openbmc_project.Ipmi.Host",
-                                 "/xyz/openbmc_project/Ipmi",
-                                 "xyz.openbmc_project.Ipmi.Server", "execute");
+    auto m = bus.new_method_call(
+        "xyz.openbmc_project.Ipmi.Host", "/xyz/openbmc_project/Ipmi",
+        "xyz.openbmc_project.Ipmi.Server", "execute");
 
     std::map<std::string, std::variant<int>> options;
     struct IpmiSerialHeader* header =
@@ -299,9 +299,9 @@ void SerialChannel::read(stdplus::Fd& uart, sdbusplus::bus_t& bus,
     uint8_t seq = header->rqSeqLUN >> netFnShift;
     uint8_t cmd = header->cmd;
 
-    std::span reqSpan{requestBuffer.begin(),
-                      requestBuffer.end() -
-                          ipmiSerialChecksumSize}; // remove checksum 2
+    std::span reqSpan{
+        requestBuffer.begin(),
+        requestBuffer.end() - ipmiSerialChecksumSize}; // remove checksum 2
     m.append(netFn, lun, cmd, reqSpan.subspan(sizeof(IpmiSerialHeader)),
              options);
 

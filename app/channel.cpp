@@ -4,7 +4,6 @@
 
 #include <arpa/inet.h>
 
-#include <boost/process/child.hpp>
 #include <ipmid/types.hpp>
 #include <ipmid/utils.hpp>
 #include <phosphor-logging/elog-errors.hpp>
@@ -17,6 +16,16 @@
 
 using namespace phosphor::logging;
 using namespace sdbusplus::error::xyz::openbmc_project::common;
+
+namespace ipmi
+{
+constexpr Cc ccPayloadTypeNotSupported = 0x80;
+
+static inline auto responsePayloadTypeNotSupported()
+{
+    return response(ccPayloadTypeNotSupported);
+}
+} // namespace ipmi
 
 namespace cipher
 {
@@ -132,16 +141,15 @@ ipmi::RspType<uint8_t,             // Channel Number
     if (!ipmi::isValidPayloadType(static_cast<ipmi::PayloadType>(payloadType)))
     {
         lg2::debug("Get channel cipher suites - Invalid payload type");
-        constexpr uint8_t ccPayloadTypeNotSupported = 0x80;
-        return ipmi::response(ccPayloadTypeNotSupported);
+        return ipmi::responsePayloadTypeNotSupported();
     }
 
     if (!recordInit)
     {
         try
         {
-            std::tie(cipherRecords,
-                     supportedAlgorithms) = cipher::getCipherRecords();
+            std::tie(cipherRecords, supportedAlgorithms) =
+                cipher::getCipherRecords();
             recordInit = true;
         }
         catch (const std::exception& e)
@@ -150,8 +158,8 @@ ipmi::RspType<uint8_t,             // Channel Number
         }
     }
 
-    const std::vector<uint8_t>& records = algoSelectBit ? cipherRecords
-                                                        : supportedAlgorithms;
+    const std::vector<uint8_t>& records =
+        algoSelectBit ? cipherRecords : supportedAlgorithms;
     static constexpr auto respSize = 16;
 
     // Session support is available in active LAN channels.
@@ -167,8 +175,8 @@ ipmi::RspType<uint8_t,             // Channel Number
     // set of 16 and so on.
 
     // Calculate the number of record data bytes to be returned.
-    auto start = std::min(static_cast<size_t>(listIndex) * respSize,
-                          records.size());
+    auto start =
+        std::min(static_cast<size_t>(listIndex) * respSize, records.size());
     auto end = std::min((static_cast<size_t>(listIndex) * respSize) + respSize,
                         records.size());
     auto size = end - start;

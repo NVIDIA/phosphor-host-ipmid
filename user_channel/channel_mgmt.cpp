@@ -152,7 +152,7 @@ std::string ChannelConfig::getChannelName(const uint8_t chNum)
     if (!isValidChannel(chNum))
     {
         lg2::error("Invalid channel number: {CHANNEL_ID}", "CHANNEL_ID", chNum);
-        return "";
+        throw std::invalid_argument("Invalid channel number");
     }
 
     return channelData[chNum].chName;
@@ -378,16 +378,11 @@ bool ChannelConfig::isValidChannel(const uint8_t chNum)
         return false;
     }
 
-    if (channelData[chNum].isChValid == false)
-    {
-        lg2::debug("Channel is not valid");
-    }
-
     return channelData[chNum].isChValid;
 }
 
-EChannelSessSupported
-    ChannelConfig::getChannelSessionSupport(const uint8_t chNum)
+EChannelSessSupported ChannelConfig::getChannelSessionSupport(
+    const uint8_t chNum)
 {
     EChannelSessSupported chSessSupport =
         (EChannelSessSupported)channelData[chNum].chInfo.sessionSupported;
@@ -432,7 +427,8 @@ Cc ChannelConfig::getChannelInfo(const uint8_t chNum, ChannelInfo& chInfo)
 {
     if (!isValidChannel(chNum))
     {
-        lg2::debug("Invalid channel");
+        lg2::debug("Get channel info - Invalid channel: {CHANNEL}", "CHANNEL",
+                   chNum);
         return ccInvalidFieldRequest;
     }
 
@@ -447,7 +443,8 @@ Cc ChannelConfig::getChannelAccessData(const uint8_t chNum,
 {
     if (!isValidChannel(chNum))
     {
-        lg2::debug("Invalid channel");
+        lg2::debug("Get channel access data - Invalid channel: {CHANNEL}",
+                   "CHANNEL", chNum);
         return ccInvalidFieldRequest;
     }
 
@@ -476,7 +473,8 @@ Cc ChannelConfig::setChannelAccessData(const uint8_t chNum,
 {
     if (!isValidChannel(chNum))
     {
-        lg2::debug("Invalid channel");
+        lg2::debug("Set channel info - Invalid channel: {CHANNEL}", "CHANNEL",
+                   chNum);
         return ccInvalidFieldRequest;
     }
 
@@ -546,7 +544,9 @@ Cc ChannelConfig::getChannelAccessPersistData(const uint8_t chNum,
 {
     if (!isValidChannel(chNum))
     {
-        lg2::debug("Invalid channel");
+        lg2::debug(
+            "Get channel access persist data - Invalid channel: {CHANNEL}",
+            "CHANNEL", chNum);
         return ccInvalidFieldRequest;
     }
 
@@ -575,7 +575,9 @@ Cc ChannelConfig::setChannelAccessPersistData(const uint8_t chNum,
 {
     if (!isValidChannel(chNum))
     {
-        lg2::debug("Invalid channel");
+        lg2::debug(
+            "Set channel access persist data - Invalid channel: {CHANNEL}",
+            "CHANNEL", chNum);
         return ccInvalidFieldRequest;
     }
 
@@ -666,7 +668,9 @@ Cc ChannelConfig::getChannelAuthTypeSupported(const uint8_t chNum,
 {
     if (!isValidChannel(chNum))
     {
-        lg2::debug("Invalid channel");
+        lg2::debug(
+            "Get channel auth type supported - Invalid channel: {CHANNEL}",
+            "CHANNEL", chNum);
         return ccInvalidFieldRequest;
     }
 
@@ -674,13 +678,13 @@ Cc ChannelConfig::getChannelAuthTypeSupported(const uint8_t chNum,
     return ccSuccess;
 }
 
-Cc ChannelConfig::getChannelEnabledAuthType(const uint8_t chNum,
-                                            const uint8_t priv,
-                                            EAuthType& authType)
+Cc ChannelConfig::getChannelEnabledAuthType(
+    const uint8_t chNum, const uint8_t priv, EAuthType& authType)
 {
     if (!isValidChannel(chNum))
     {
-        lg2::debug("Invalid channel");
+        lg2::debug("Get channel enabled auth type - Invalid channel: {CHANNEL}",
+                   "CHANNEL", chNum);
         return ccInvalidFieldRequest;
     }
 
@@ -702,8 +706,8 @@ Cc ChannelConfig::getChannelEnabledAuthType(const uint8_t chNum,
     return ccSuccess;
 }
 
-EChannelAccessMode
-    ChannelConfig::convertToAccessModeIndex(const std::string& mode)
+EChannelAccessMode ChannelConfig::convertToAccessModeIndex(
+    const std::string& mode)
 {
     auto iter = std::find(accessModeList.begin(), accessModeList.end(), mode);
     if (iter == accessModeList.end())
@@ -727,8 +731,8 @@ std::string ChannelConfig::convertToAccessModeString(const uint8_t value)
     return accessModeList.at(value);
 }
 
-CommandPrivilege
-    ChannelConfig::convertToPrivLimitIndex(const std::string& value)
+CommandPrivilege ChannelConfig::convertToPrivLimitIndex(
+    const std::string& value)
 {
     auto iter = std::find(privList.begin(), privList.end(), value);
     if (iter == privList.end())
@@ -751,11 +755,11 @@ std::string ChannelConfig::convertToPrivLimitString(const uint8_t value)
     return privList.at(value);
 }
 
-EChannelSessSupported
-    ChannelConfig::convertToSessionSupportIndex(const std::string& value)
+EChannelSessSupported ChannelConfig::convertToSessionSupportIndex(
+    const std::string& value)
 {
-    auto iter = std::find(sessionSupportList.begin(), sessionSupportList.end(),
-                          value);
+    auto iter =
+        std::find(sessionSupportList.begin(), sessionSupportList.end(), value);
     if (iter == sessionSupportList.end())
     {
         lg2::error("Invalid session supported: {SESS_STR}", "SESS_STR", value);
@@ -766,8 +770,8 @@ EChannelSessSupported
         std::distance(sessionSupportList.begin(), iter));
 }
 
-EChannelMediumType
-    ChannelConfig::convertToMediumTypeIndex(const std::string& value)
+EChannelMediumType ChannelConfig::convertToMediumTypeIndex(
+    const std::string& value)
 {
     std::unordered_map<std::string, EChannelMediumType>::iterator it =
         mediumTypeMap.find(value);
@@ -780,8 +784,8 @@ EChannelMediumType
     return static_cast<EChannelMediumType>(it->second);
 }
 
-EChannelProtocolType
-    ChannelConfig::convertToProtocolTypeIndex(const std::string& value)
+EChannelProtocolType ChannelConfig::convertToProtocolTypeIndex(
+    const std::string& value)
 {
     std::unordered_map<std::string, EChannelProtocolType>::iterator it =
         protocolTypeMap.find(value);
@@ -943,7 +947,7 @@ int ChannelConfig::loadChannelConfig()
             if (jsonChInfo[mediumTypeString].get<std::string>() == "lan-802.3")
             {
                 channelFound = false;
-                for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next)
+                for (ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next)
                 {
                     if (jsonChData[nameString].get<std::string>() ==
                         ifa->ifa_name)
@@ -959,8 +963,8 @@ int ChannelConfig::loadChannelConfig()
             chData.isChValid = channelFound &&
                                jsonChData[isValidString].get<bool>();
             chData.activeSessCount = jsonChData.value(activeSessionsString, 0);
-            chData.maxTransferSize = jsonChData.value(maxTransferSizeString,
-                                                      smallChannelSize);
+            chData.maxTransferSize =
+                jsonChData.value(maxTransferSizeString, smallChannelSize);
             if (jsonChData.count(isManagementNIC) != 0)
             {
                 chData.isManagementNIC =
@@ -1260,17 +1264,16 @@ int ChannelConfig::reloadVolatileData()
     return ret;
 }
 
-int ChannelConfig::setDbusProperty(const std::string& service,
-                                   const std::string& objPath,
-                                   const std::string& interface,
-                                   const std::string& property,
-                                   const DbusVariant& value)
+int ChannelConfig::setDbusProperty(
+    const std::string& service, const std::string& objPath,
+    const std::string& interface, const std::string& property,
+    const DbusVariant& value)
 {
     try
     {
-        auto method = bus.new_method_call(service.c_str(), objPath.c_str(),
-                                          "org.freedesktop.DBus.Properties",
-                                          "Set");
+        auto method = bus.new_method_call(
+            service.c_str(), objPath.c_str(), "org.freedesktop.DBus.Properties",
+            "Set");
 
         method.append(interface, property, value);
 
@@ -1281,7 +1284,7 @@ int ChannelConfig::setDbusProperty(const std::string& service,
         lg2::debug(
             "set-property {SERVICE}:{OBJPATH}/{INTERFACE}.{PROP} failed: {MSG}",
             "SERVICE", service, "OBJPATH", objPath, "INTERFACE", interface,
-            "PROP", property);
+            "PROP", property, "MSG", e);
         return -EIO;
     }
 
@@ -1376,8 +1379,8 @@ void ChannelConfig::initChannelPersistData()
     if (readChannelPersistData() != 0)
     {
         // Copy default NV data to RW location
-        std::filesystem::copy_file(channelAccessDefaultFilename,
-                                   channelNvDataFilename);
+        std::filesystem::copy_file(
+            channelAccessDefaultFilename, channelNvDataFilename);
 
         // Load the channel access NV data
         if (readChannelPersistData() != 0)
@@ -1394,8 +1397,8 @@ void ChannelConfig::initChannelPersistData()
     {
         // Copy default volatile data to temporary location
         // NV file(channelNvDataFilename) must have created by now.
-        std::filesystem::copy_file(channelNvDataFilename,
-                                   channelVolatileDataFilename);
+        std::filesystem::copy_file(
+            channelNvDataFilename, channelVolatileDataFilename);
 
         // Load the channel access volatile data
         if (readChannelVolatileData() != 0)

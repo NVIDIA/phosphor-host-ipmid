@@ -43,16 +43,16 @@ namespace ipmi
 {
 
 template <typename... Args>
-static inline message::Response::ptr
-    errorResponse(message::Request::ptr request, ipmi::Cc cc, Args&&... args)
+static inline message::Response::ptr errorResponse(
+    message::Request::ptr request, ipmi::Cc cc, Args&&... args)
 {
     message::Response::ptr response = request->makeResponse();
     response->cc = cc;
     response->pack(args...);
     return response;
 }
-static inline message::Response::ptr
-    errorResponse(message::Request::ptr request, ipmi::Cc cc)
+static inline message::Response::ptr errorResponse(
+    message::Request::ptr request, ipmi::Cc cc)
 {
     message::Response::ptr response = request->makeResponse();
     response->cc = cc;
@@ -90,8 +90,8 @@ class HandlerException : public HandlerCompletion, public std::runtime_error
 static inline const char* currentExceptionType()
 {
     int status;
-    return abi::__cxa_demangle(abi::__cxa_current_exception_type()->name(), 0,
-                               0, &status);
+    return abi::__cxa_demangle(
+        abi::__cxa_current_exception_type()->name(), nullptr, nullptr, &status);
 }
 
 /**
@@ -141,8 +141,8 @@ class HandlerBase
      *
      * @return a shared_ptr to a Response object
      */
-    virtual message::Response::ptr
-        executeCallback(message::Request::ptr request) = 0;
+    virtual message::Response::ptr executeCallback(
+        message::Request::ptr request) = 0;
 };
 
 /**
@@ -181,8 +181,8 @@ class IpmiHandler final : public HandlerBase
      *
      * @return a shared_ptr to a Response object
      */
-    message::Response::ptr
-        executeCallback(message::Request::ptr request) override
+    message::Response::ptr executeCallback(
+        message::Request::ptr request) override
     {
         message::Response::ptr response = request->makeResponse();
 
@@ -346,8 +346,8 @@ class IpmiHandler<ipmid_callback_t> final : public HandlerBase
      *
      * @return a shared_ptr to a Response object
      */
-    message::Response::ptr
-        executeCallback(message::Request::ptr request) override
+    message::Response::ptr executeCallback(
+        message::Request::ptr request) override
     {
         message::Response::ptr response = request->makeResponse();
         // allocate a big response buffer here
@@ -357,10 +357,10 @@ class IpmiHandler<ipmid_callback_t> final : public HandlerBase
         Cc ccRet{ccSuccess};
         try
         {
-            ccRet =
-                handler_(request->ctx->netFn, request->ctx->cmd,
-                         request->payload.data() + request->payload.rawIndex,
-                         response->payload.data(), &len, handlerCtx);
+            ccRet = handler_(
+                request->ctx->netFn, request->ctx->cmd,
+                request->payload.data() + request->payload.rawIndex,
+                response->payload.data(), &len, handlerCtx);
         }
         catch (const HandlerException& e)
         {
@@ -432,8 +432,8 @@ class IpmiHandler<oem::Handler> final : public HandlerBase
      *
      * @return a shared_ptr to a Response object
      */
-    message::Response::ptr
-        executeCallback(message::Request::ptr request) override
+    message::Response::ptr executeCallback(
+        message::Request::ptr request) override
     {
         message::Response::ptr response = request->makeResponse();
         // allocate a big response buffer here
@@ -443,10 +443,10 @@ class IpmiHandler<oem::Handler> final : public HandlerBase
         Cc ccRet{ccSuccess};
         try
         {
-            ccRet =
-                handler_(request->ctx->cmd,
-                         request->payload.data() + request->payload.rawIndex,
-                         response->payload.data(), &len);
+            ccRet = handler_(
+                request->ctx->cmd,
+                request->payload.data() + request->payload.rawIndex,
+                response->payload.data(), &len);
         }
         catch (const HandlerException& e)
         {

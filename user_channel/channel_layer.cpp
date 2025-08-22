@@ -107,14 +107,14 @@ Cc getChannelAccessData(const uint8_t chNum, ChannelAccess& chAccessData)
 Cc setChannelAccessData(const uint8_t chNum, const ChannelAccess& chAccessData,
                         const uint8_t setFlag)
 {
-    return getChannelConfigObject().setChannelAccessData(chNum, chAccessData,
-                                                         setFlag);
+    return getChannelConfigObject().setChannelAccessData(
+        chNum, chAccessData, setFlag);
 }
 
 Cc getChannelAccessPersistData(const uint8_t chNum, ChannelAccess& chAccessData)
 {
-    return getChannelConfigObject().getChannelAccessPersistData(chNum,
-                                                                chAccessData);
+    return getChannelConfigObject().getChannelAccessPersistData(
+        chNum, chAccessData);
 }
 
 Cc setChannelAccessPersistData(const uint8_t chNum,
@@ -134,8 +134,8 @@ Cc getChannelAuthTypeSupported(const uint8_t chNum, uint8_t& authTypeSupported)
 Cc getChannelEnabledAuthType(const uint8_t chNum, const uint8_t priv,
                              EAuthType& authType)
 {
-    return getChannelConfigObject().getChannelEnabledAuthType(chNum, priv,
-                                                              authType);
+    return getChannelConfigObject().getChannelEnabledAuthType(
+        chNum, priv, authType);
 }
 
 std::string getChannelName(const uint8_t chNum)

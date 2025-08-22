@@ -62,8 +62,8 @@ ipmi::PropertyMap readAllProperties(const std::string& intf,
         objPath = invObjPath + path;
     }
 
-    auto method = bus.new_method_call(service.c_str(), objPath.c_str(),
-                                      propInterface, "GetAll");
+    auto method = bus.new_method_call(
+        service.c_str(), objPath.c_str(), propInterface, "GetAll");
     method.append(intf);
     try
     {
@@ -144,8 +144,8 @@ FruInventoryData readDataFromInventory(const FRUId& fruNum)
     {
         for (auto& intf : instance.interfaces)
         {
-            ipmi::PropertyMap allProp = readAllProperties(intf.first,
-                                                          instance.path);
+            ipmi::PropertyMap allProp =
+                readAllProperties(intf.first, instance.path);
             for (auto& properties : intf.second)
             {
                 auto iter = allProp.find(properties.first);

@@ -39,10 +39,9 @@ bool isLinkLocalIP(const std::string& ipaddress);
 //  Currently mapper doesn't give the readable busname(gives busid) so we can't
 //  use busname to find the object,will do later once the support is there.
 
-DbusObjectInfo getDbusObject(sdbusplus::bus_t& bus,
-                             const std::string& interface,
-                             const std::string& serviceRoot,
-                             const std::string& match)
+DbusObjectInfo getDbusObject(
+    sdbusplus::bus_t& bus, const std::string& interface,
+    const std::string& serviceRoot, const std::string& match)
 {
     std::vector<DbusInterface> interfaces;
     interfaces.emplace_back(interface);
@@ -67,8 +66,8 @@ DbusObjectInfo getDbusObject(sdbusplus::bus_t& bus,
     }
 
     // else search the match string in the object path
-    auto found = std::find_if(objectTree.begin(), objectTree.end(),
-                              [&match](const auto& object) {
+    auto found = std::find_if(
+        objectTree.begin(), objectTree.end(), [&match](const auto& object) {
         return (object.first.find(match) != std::string::npos);
     });
 
@@ -90,8 +89,8 @@ Value getDbusProperty(sdbusplus::bus_t& bus, const std::string& service,
 {
     Value value;
 
-    auto method = bus.new_method_call(service.c_str(), objPath.c_str(),
-                                      PROP_INTF, METHOD_GET);
+    auto method = bus.new_method_call(
+        service.c_str(), objPath.c_str(), PROP_INTF, METHOD_GET);
 
     method.append(interface, property);
 
@@ -101,16 +100,15 @@ Value getDbusProperty(sdbusplus::bus_t& bus, const std::string& service,
     return value;
 }
 
-PropertyMap getAllDbusProperties(sdbusplus::bus_t& bus,
-                                 const std::string& service,
-                                 const std::string& objPath,
-                                 const std::string& interface,
-                                 std::chrono::microseconds timeout)
+PropertyMap getAllDbusProperties(
+    sdbusplus::bus_t& bus, const std::string& service,
+    const std::string& objPath, const std::string& interface,
+    std::chrono::microseconds timeout)
 {
     PropertyMap properties;
 
-    auto method = bus.new_method_call(service.c_str(), objPath.c_str(),
-                                      PROP_INTF, METHOD_GET_ALL);
+    auto method = bus.new_method_call(
+        service.c_str(), objPath.c_str(), PROP_INTF, METHOD_GET_ALL);
 
     method.append(interface);
 
@@ -126,9 +124,9 @@ ObjectValueTree getManagedObjects(sdbusplus::bus_t& bus,
 {
     ipmi::ObjectValueTree interfaces;
 
-    auto method = bus.new_method_call(service.c_str(), objPath.c_str(),
-                                      "org.freedesktop.DBus.ObjectManager",
-                                      "GetManagedObjects");
+    auto method = bus.new_method_call(
+        service.c_str(), objPath.c_str(), "org.freedesktop.DBus.ObjectManager",
+        "GetManagedObjects");
     auto reply = bus.call(method);
     reply.read(interfaces);
 
@@ -140,8 +138,8 @@ void setDbusProperty(sdbusplus::bus_t& bus, const std::string& service,
                      const std::string& property, const Value& value,
                      std::chrono::microseconds timeout)
 {
-    auto method = bus.new_method_call(service.c_str(), objPath.c_str(),
-                                      PROP_INTF, METHOD_SET);
+    auto method = bus.new_method_call(
+        service.c_str(), objPath.c_str(), PROP_INTF, METHOD_SET);
 
     method.append(interface, property, value);
 
@@ -172,6 +170,11 @@ const std::string& ServiceCache::getService(sdbusplus::bus_t& bus)
         cachedBusName = bus.get_unique_name();
         cachedService = ::ipmi::getService(bus, intf, path);
     }
+
+    if (!cachedService)
+    {
+        throw std::runtime_error("Service not cached");
+    }
     return cachedService.value();
 }
 
@@ -181,12 +184,11 @@ void ServiceCache::invalidate()
     cachedService = std::nullopt;
 }
 
-sdbusplus::message_t ServiceCache::newMethodCall(sdbusplus::bus_t& bus,
-                                                 const char* intf,
-                                                 const char* method)
+sdbusplus::message_t ServiceCache::newMethodCall(
+    sdbusplus::bus_t& bus, const char* intf, const char* method)
 {
-    return bus.new_method_call(getService(bus).c_str(), path.c_str(), intf,
-                               method);
+    return bus.new_method_call(
+        getService(bus).c_str(), path.c_str(), intf, method);
 }
 
 bool ServiceCache::isValid(sdbusplus::bus_t& bus) const
@@ -197,10 +199,10 @@ bool ServiceCache::isValid(sdbusplus::bus_t& bus) const
 std::string getService(sdbusplus::bus_t& bus, const std::string& intf,
                        const std::string& path)
 {
-    auto mapperCall = bus.new_method_call("xyz.openbmc_project.ObjectMapper",
-                                          "/xyz/openbmc_project/object_mapper",
-                                          "xyz.openbmc_project.ObjectMapper",
-                                          "GetObject");
+    auto mapperCall = bus.new_method_call(
+        "xyz.openbmc_project.ObjectMapper",
+        "/xyz/openbmc_project/object_mapper",
+        "xyz.openbmc_project.ObjectMapper", "GetObject");
 
     mapperCall.append(path);
     mapperCall.append(std::vector<std::string>({intf}));
@@ -221,8 +223,8 @@ std::string getService(sdbusplus::bus_t& bus, const std::string& intf,
 ObjectTree getSubTree(sdbusplus::bus_t& bus, const InterfaceList& interfaces,
                       const std::string& subtreePath, int32_t depth)
 {
-    auto mapperCall = bus.new_method_call(MAPPER_BUS_NAME, MAPPER_OBJ,
-                                          MAPPER_INTF, "GetSubTree");
+    auto mapperCall = bus.new_method_call(
+        MAPPER_BUS_NAME, MAPPER_OBJ, MAPPER_INTF, "GetSubTree");
 
     mapperCall.append(subtreePath, depth, interfaces);
 
@@ -233,10 +235,9 @@ ObjectTree getSubTree(sdbusplus::bus_t& bus, const InterfaceList& interfaces,
     return objectTree;
 }
 
-ipmi::ObjectTree getAllDbusObjects(sdbusplus::bus_t& bus,
-                                   const std::string& serviceRoot,
-                                   const std::string& interface,
-                                   const std::string& match)
+ipmi::ObjectTree getAllDbusObjects(
+    sdbusplus::bus_t& bus, const std::string& serviceRoot,
+    const std::string& interface, const std::string& match)
 {
     std::vector<std::string> interfaces;
     interfaces.emplace_back(interface);
@@ -257,61 +258,6 @@ ipmi::ObjectTree getAllDbusObjects(sdbusplus::bus_t& bus,
     return objectTree;
 }
 
-void deleteAllDbusObjects(sdbusplus::bus_t& bus, const std::string& serviceRoot,
-                          const std::string& interface,
-                          const std::string& match)
-{
-    try
-    {
-        auto objectTree = getAllDbusObjects(bus, serviceRoot, interface, match);
-
-        for (auto& object : objectTree)
-        {
-            method_no_args::callDbusMethod(bus, object.second.begin()->first,
-                                           object.first, DELETE_INTERFACE,
-                                           "Delete");
-        }
-    }
-    catch (const sdbusplus::exception_t& e)
-    {
-        lg2::info("sdbusplus exception - Unable to delete the objects, "
-                  "service: {SERVICE}, interface: {INTERFACE}, error: {ERROR}",
-                  "SERVICE", serviceRoot, "INTERFACE", interface, "ERROR", e);
-    }
-}
-
-static inline std::string convertToString(const InterfaceList& interfaces)
-{
-    std::string intfStr;
-    for (const auto& intf : interfaces)
-    {
-        intfStr += "," + intf;
-    }
-    return intfStr;
-}
-
-ObjectTree getAllAncestors(sdbusplus::bus_t& bus, const std::string& path,
-                           InterfaceList&& interfaces)
-{
-    auto mapperCall = bus.new_method_call(MAPPER_BUS_NAME, MAPPER_OBJ,
-                                          MAPPER_INTF, "GetAncestors");
-    mapperCall.append(path, interfaces);
-
-    auto mapperReply = bus.call(mapperCall);
-    ObjectTree objectTree;
-    mapperReply.read(objectTree);
-
-    if (objectTree.empty())
-    {
-        lg2::error("No Object has implemented the interface: {INTERFACE}, "
-                   "path: {PATH}",
-                   "INTERFACE", convertToString(interfaces), "PATH", path);
-        elog<InternalFailure>();
-    }
-
-    return objectTree;
-}
-
 namespace method_no_args
 {
 
@@ -320,8 +266,8 @@ void callDbusMethod(sdbusplus::bus_t& bus, const std::string& service,
                     const std::string& method)
 
 {
-    auto busMethod = bus.new_method_call(service.c_str(), objPath.c_str(),
-                                         interface.c_str(), method.c_str());
+    auto busMethod = bus.new_method_call(
+        service.c_str(), objPath.c_str(), interface.c_str(), method.c_str());
     auto reply = bus.call(busMethod);
 }
 
@@ -348,10 +294,9 @@ boost::system::error_code getService(Context::ptr ctx, const std::string& intf,
     return ec;
 }
 
-boost::system::error_code getSubTree(Context::ptr ctx,
-                                     const InterfaceList& interfaces,
-                                     const std::string& subtreePath,
-                                     int32_t depth, ObjectTree& objectTree)
+boost::system::error_code getSubTree(
+    Context::ptr ctx, const InterfaceList& interfaces,
+    const std::string& subtreePath, int32_t depth, ObjectTree& objectTree)
 {
     boost::system::error_code ec;
     objectTree = ctx->bus->yield_method_call<ObjectTree>(
@@ -361,19 +306,18 @@ boost::system::error_code getSubTree(Context::ptr ctx,
     return ec;
 }
 
-boost::system::error_code getDbusObject(Context::ptr ctx,
-                                        const std::string& interface,
-                                        const std::string& subtreePath,
-                                        const std::string& match,
-                                        DbusObjectInfo& dbusObject)
+boost::system::error_code getDbusObject(
+    Context::ptr ctx, const std::string& interface,
+    const std::string& subtreePath, const std::string& match,
+    DbusObjectInfo& dbusObject)
 {
     std::vector<DbusInterface> interfaces;
     interfaces.emplace_back(interface);
 
     auto depth = 0;
     ObjectTree objectTree;
-    boost::system::error_code ec = getSubTree(ctx, interfaces, subtreePath,
-                                              depth, objectTree);
+    boost::system::error_code ec =
+        getSubTree(ctx, interfaces, subtreePath, depth, objectTree);
 
     if (ec)
     {
@@ -400,8 +344,8 @@ boost::system::error_code getDbusObject(Context::ptr ctx,
     }
 
     // else search the match string in the object path
-    auto found = std::find_if(objectTree.begin(), objectTree.end(),
-                              [&match](const auto& object) {
+    auto found = std::find_if(
+        objectTree.begin(), objectTree.end(), [&match](const auto& object) {
         return (object.first.find(match) != std::string::npos);
     });
 
@@ -416,16 +360,14 @@ boost::system::error_code getDbusObject(Context::ptr ctx,
             boost::system::errc::no_such_file_or_directory);
     }
 
-    dbusObject = std::make_pair(std::move(found->first),
-                                std::move(found->second.begin()->first));
+    dbusObject = std::make_pair(
+        std::move(found->first), std::move(found->second.begin()->first));
     return ec;
 }
 
-boost::system::error_code getAllDbusProperties(Context::ptr ctx,
-                                               const std::string& service,
-                                               const std::string& objPath,
-                                               const std::string& interface,
-                                               PropertyMap& properties)
+boost::system::error_code getAllDbusProperties(
+    Context::ptr ctx, const std::string& service, const std::string& objPath,
+    const std::string& interface, PropertyMap& properties)
 {
     boost::system::error_code ec;
     properties = ctx->bus->yield_method_call<PropertyMap>(
@@ -434,30 +376,29 @@ boost::system::error_code getAllDbusProperties(Context::ptr ctx,
     return ec;
 }
 
-boost::system::error_code
-    setDbusProperty(Context::ptr ctx, const std::string& service,
-                    const std::string& objPath, const std::string& interface,
-                    const std::string& property, const Value& value)
+boost::system::error_code setDbusProperty(
+    Context::ptr ctx, const std::string& service, const std::string& objPath,
+    const std::string& interface, const std::string& property,
+    const Value& value)
 {
     boost::system::error_code ec;
-    ctx->bus->yield_method_call(ctx->yield, ec, service.c_str(),
-                                objPath.c_str(), PROP_INTF, METHOD_SET,
-                                interface, property, value);
+    ctx->bus->yield_method_call(
+        ctx->yield, ec, service.c_str(), objPath.c_str(), PROP_INTF, METHOD_SET,
+        interface, property, value);
     return ec;
 }
 
-boost::system::error_code getAllDbusObjects(Context::ptr ctx,
-                                            const std::string& serviceRoot,
-                                            const std::string& interface,
-                                            const std::string& match,
-                                            ObjectTree& objectTree)
+boost::system::error_code getAllDbusObjects(
+    Context::ptr ctx, const std::string& serviceRoot,
+    const std::string& interface, const std::string& match,
+    ObjectTree& objectTree)
 {
     std::vector<std::string> interfaces;
     interfaces.emplace_back(interface);
 
     auto depth = 0;
-    boost::system::error_code ec = getSubTree(ctx, interfaces, serviceRoot,
-                                              depth, objectTree);
+    boost::system::error_code ec =
+        getSubTree(ctx, interfaces, serviceRoot, depth, objectTree);
     if (ec)
     {
         return ec;
@@ -478,42 +419,9 @@ boost::system::error_code getAllDbusObjects(Context::ptr ctx,
     return ec;
 }
 
-boost::system::error_code deleteAllDbusObjects(Context::ptr ctx,
-                                               const std::string& serviceRoot,
-                                               const std::string& interface,
-                                               const std::string& match)
-{
-    ObjectTree objectTree;
-    boost::system::error_code ec =
-        getAllDbusObjects(ctx, serviceRoot, interface, match, objectTree);
-    if (ec)
-    {
-        return ec;
-    }
-
-    for (auto& object : objectTree)
-    {
-        ctx->bus->yield_method_call(ctx->yield, ec,
-                                    object.second.begin()->first, object.first,
-                                    DELETE_INTERFACE, "Delete");
-        if (ec)
-        {
-            lg2::error("Failed to delete all objects, service: {SERVICE}, "
-                       "interface: {INTERFACE}, NetFn: {NETFN}, "
-                       "Cmd: {CMD}, Error: {ERROR}",
-                       "SERVICE", serviceRoot, "INTERFACE", interface, "NETFN",
-                       lg2::hex, ctx->netFn, "CMD", lg2::hex, ctx->cmd, "ERROR",
-                       ec.message());
-            break;
-        }
-    }
-    return ec;
-}
-
-boost::system::error_code getManagedObjects(Context::ptr ctx,
-                                            const std::string& service,
-                                            const std::string& objPath,
-                                            ObjectValueTree& objects)
+boost::system::error_code getManagedObjects(
+    Context::ptr ctx, const std::string& service, const std::string& objPath,
+    ObjectValueTree& objects)
 {
     boost::system::error_code ec;
     objects = ctx->bus->yield_method_call<ipmi::ObjectValueTree>(
@@ -522,43 +430,13 @@ boost::system::error_code getManagedObjects(Context::ptr ctx,
     return ec;
 }
 
-boost::system::error_code getAllAncestors(Context::ptr ctx,
-                                          const std::string& path,
-                                          const InterfaceList& interfaces,
-                                          ObjectTree& objectTree)
-{
-    std::string interfaceList = convertToString(interfaces);
-
-    boost::system::error_code ec;
-    objectTree = ctx->bus->yield_method_call<ObjectTree>(
-        ctx->yield, ec, MAPPER_BUS_NAME, MAPPER_OBJ, MAPPER_INTF,
-        "GetAncestors", path, interfaceList);
-
-    if (ec)
-    {
-        return ec;
-    }
-
-    if (objectTree.empty())
-    {
-        lg2::error("No Object has implemented the interface: {INTERFACE}, "
-                   "path: {PATH}",
-                   "INTERFACE", interfaceList, "PATH", path);
-        elog<InternalFailure>();
-    }
-
-    return ec;
-}
-
-boost::system::error_code callDbusMethod(Context::ptr ctx,
-                                         const std::string& service,
-                                         const std::string& objPath,
-                                         const std::string& interface,
-                                         const std::string& method)
+boost::system::error_code callDbusMethod(
+    Context::ptr ctx, const std::string& service, const std::string& objPath,
+    const std::string& interface, const std::string& method)
 {
     boost::system::error_code ec;
-    ctx->bus->yield_method_call(ctx->yield, ec, service, objPath, interface,
-                                method);
+    ctx->bus->yield_method_call(
+        ctx->yield, ec, service, objPath, interface, method);
     return ec;
 }
 

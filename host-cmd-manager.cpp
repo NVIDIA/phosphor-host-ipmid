@@ -127,9 +127,9 @@ void Manager::checkQueueAndAlertHost()
             return;
         }
 
-        auto method =
-            this->bus.new_method_call(HOST_IPMI_SVC.c_str(), IPMI_PATH.c_str(),
-                                      IPMI_INTERFACE.c_str(), "setAttention");
+        auto method = this->bus.new_method_call(
+            HOST_IPMI_SVC.c_str(), IPMI_PATH.c_str(), IPMI_INTERFACE.c_str(),
+            "setAttention");
 
         try
         {

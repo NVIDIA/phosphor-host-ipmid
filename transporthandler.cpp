@@ -70,6 +70,32 @@ namespace ipmi
 namespace transport
 {
 
+// LAN Handler specific response codes
+constexpr Cc ccParamNotSupported = 0x80;
+constexpr Cc ccParamSetLocked = 0x81;
+constexpr Cc ccParamReadOnly = 0x82;
+constexpr Cc ccWriteReadParameter = 0x82;
+
+static inline auto responseParamNotSupported()
+{
+    return response(ccParamNotSupported);
+}
+
+static inline auto responseParamSetLocked()
+{
+    return response(ccParamSetLocked);
+}
+
+static inline auto responseParamReadOnly()
+{
+    return response(ccParamReadOnly);
+}
+
+static inline auto responseWriteReadParameter()
+{
+    return response(ccWriteReadParameter);
+}
+
 /** @brief Valid address origins for IPv4 */
 const std::unordered_set<IP::AddressOrigin> originsV4 = {
     IP::AddressOrigin::Static,
@@ -88,7 +114,9 @@ bool ifnameInPath(std::string_view ifname, std::string_view path)
     constexpr auto rs = PATH_ROOT.size() + 1; // ROOT + separator
     const auto is = rs + ifname.size();       // ROOT + sep + ifname
     return path.size() > rs && path.substr(rs).starts_with(ifname) &&
-           (path.size() == is || path[is] == '/' || path[is] == '_');
+           (path.size() == is || path[is] == '/' ||
+            path[is] == '_'); // handle VLAN IF uses '_' e.g.
+                              // /xyz/openbmc_project/network/eth0_2
 }
 
 std::optional<ChannelParams> maybeGetChannelParams(sdbusplus::bus_t& bus,
@@ -102,8 +130,8 @@ std::optional<ChannelParams> maybeGetChannelParams(sdbusplus::bus_t& bus,
 
     // Enumerate all VLAN + ETHERNET interfaces
     std::vector<std::string> interfaces = {INTF_VLAN, INTF_ETHERNET};
-    ipmi::ObjectTree objs = ipmi::getSubTree(bus, interfaces,
-                                             std::string{PATH_ROOT});
+    ipmi::ObjectTree objs =
+        ipmi::getSubTree(bus, interfaces, std::string{PATH_ROOT});
 
     ChannelParams params;
     for (const auto& [path, impls] : objs)
@@ -176,15 +204,15 @@ template <typename T>
 static T getEthProp(sdbusplus::bus_t& bus, const ChannelParams& params,
                     const std::string& prop)
 {
-    return std::get<T>(getDbusProperty(bus, params.service, params.logicalPath,
-                                       INTF_ETHERNET, prop));
+    return std::get<T>(getDbusProperty(
+        bus, params.service, params.logicalPath, INTF_ETHERNET, prop));
 }
 template <typename T>
 static void setEthProp(sdbusplus::bus_t& bus, const ChannelParams& params,
                        const std::string& prop, const T& t)
 {
-    return setDbusProperty(bus, params.service, params.logicalPath,
-                           INTF_ETHERNET, prop, t);
+    return setDbusProperty(
+        bus, params.service, params.logicalPath, INTF_ETHERNET, prop, t);
 }
 
 /** @brief Determines the MAC of the ethernet interface
@@ -196,8 +224,8 @@ static void setEthProp(sdbusplus::bus_t& bus, const ChannelParams& params,
 stdplus::EtherAddr getMACProperty(sdbusplus::bus_t& bus,
                                   const ChannelParams& params)
 {
-    auto prop = getDbusProperty(bus, params.service, params.ifPath, INTF_MAC,
-                                "MACAddress");
+    auto prop = getDbusProperty(
+        bus, params.service, params.ifPath, INTF_MAC, "MACAddress");
     return stdplus::fromStr<stdplus::EtherAddr>(std::get<std::string>(prop));
 }
 
@@ -210,8 +238,9 @@ stdplus::EtherAddr getMACProperty(sdbusplus::bus_t& bus,
 void setMACProperty(sdbusplus::bus_t& bus, const ChannelParams& params,
                     stdplus::EtherAddr mac)
 {
+    std::string macStr = stdplus::toStr(mac);
     setDbusProperty(bus, params.service, params.ifPath, INTF_MAC, "MACAddress",
-                    stdplus::toStr(mac));
+                    macStr);
 }
 
 void deleteObjectIfExists(sdbusplus::bus_t& bus, const std::string& service,
@@ -223,12 +252,13 @@ void deleteObjectIfExists(sdbusplus::bus_t& bus, const std::string& service,
     }
     try
     {
-        auto req = bus.new_method_call(service.c_str(), path.c_str(),
-                                       ipmi::DELETE_INTERFACE, "Delete");
+        auto req = bus.new_method_call(
+            service.c_str(), path.c_str(), ipmi::DELETE_INTERFACE, "Delete");
         bus.call_noreply(req);
     }
     catch (const sdbusplus::exception_t& e)
     {
+        // handle Delete Interface DBus errors
         if (strcmp(e.name(),
                    "xyz.openbmc_project.Common.Error.InternalFailure") != 0 &&
             strcmp(e.name(), "org.freedesktop.DBus.Error.UnknownObject") != 0 &&
@@ -254,9 +284,9 @@ template <int family>
 void createIfAddr(sdbusplus::bus_t& bus, const ChannelParams& params,
                   typename AddrFamily<family>::addr address, uint8_t prefix)
 {
-    auto newreq = bus.new_method_call(params.service.c_str(),
-                                      params.logicalPath.c_str(),
-                                      INTF_IP_CREATE, "IP");
+    auto newreq = bus.new_method_call(
+        params.service.c_str(), params.logicalPath.c_str(), INTF_IP_CREATE,
+        "IP");
     std::string protocol =
         sdbusplus::common::xyz::openbmc_project::network::convertForMessage(
             AddrFamily<family>::protocol);
@@ -292,9 +322,9 @@ auto getIfAddr4(sdbusplus::bus_t& bus, const ChannelParams& params)
 
     try
     {
-        src = std::get<bool>(getDbusProperty(bus, params.service,
-                                             params.logicalPath, INTF_ETHERNET,
-                                             "DHCP4"))
+        src = std::get<bool>(
+                  getDbusProperty(bus, params.service, params.logicalPath,
+                                  INTF_ETHERNET, "DHCP4"))
                   ? IP::AddressOrigin::DHCP
                   : IP::AddressOrigin::Static;
     }
@@ -409,8 +439,8 @@ void reconfigureGatewayMAC(sdbusplus::bus_t& bus, const ChannelParams& params,
     }
 
     ObjectLookupCache neighbors(bus, params, INTF_NEIGHBOR);
-    auto neighbor = findStaticNeighbor<family>(bus, params, *gateway,
-                                               neighbors);
+    auto neighbor =
+        findStaticNeighbor<family>(bus, params, *gateway, neighbors);
     if (neighbor)
     {
         deleteObjectIfExists(bus, params.service, neighbor->path);
@@ -544,9 +574,9 @@ uint16_t getVLANProperty(sdbusplus::bus_t& bus, const ChannelParams& params)
 void deconfigureChannel(sdbusplus::bus_t& bus, ChannelParams& params)
 {
     // Delete all objects associated with the interface
-    ObjectTree objs =
-        ipmi::getSubTree(bus, std::vector<std::string>{DELETE_INTERFACE},
-                         std::string{PATH_ROOT});
+    ObjectTree objs = ipmi::getSubTree(
+        bus, std::vector<std::string>{DELETE_INTERFACE},
+        std::string{PATH_ROOT});
     for (const auto& [path, impls] : objs)
     {
         if (!ifnameInPath(params.ifname, path))
@@ -582,8 +612,8 @@ void createVLAN(sdbusplus::bus_t& bus, ChannelParams& params, uint16_t vlan)
     {
         return;
     }
-    auto req = bus.new_method_call(params.service.c_str(), PATH_ROOT.c_str(),
-                                   INTF_VLAN_CREATE, "VLAN");
+    auto req = bus.new_method_call(
+        params.service.c_str(), PATH_ROOT.c_str(), INTF_VLAN_CREATE, "VLAN");
     req.append(params.ifname, static_cast<uint32_t>(vlan));
     auto reply = bus.call(req);
     sdbusplus::message::object_path newPath;
@@ -614,8 +644,8 @@ void reconfigureVLAN(sdbusplus::bus_t& bus, ChannelParams& params,
     std::vector<IfAddr<AF_INET6>> ifaddrs6;
     for (uint8_t i = 0; i < MAX_IPV6_STATIC_ADDRESSES; ++i)
     {
-        auto ifaddr6 = findIfAddr<AF_INET6>(bus, params, i, originsV6Static,
-                                            ips);
+        auto ifaddr6 =
+            findIfAddr<AF_INET6>(bus, params, i, originsV6Static, ips);
         if (!ifaddr6)
         {
             break;
@@ -625,31 +655,17 @@ void reconfigureVLAN(sdbusplus::bus_t& bus, ChannelParams& params,
     ObjectLookupCache neighbors(bus, params, INTF_NEIGHBOR);
     auto neighbor4 = findGatewayNeighbor<AF_INET>(bus, params, neighbors);
     auto neighbor6 = findGatewayNeighbor<AF_INET6>(bus, params, neighbors);
-    // parentIntParams  - if VLAN is created those are the parameters  of the
-    // physical interface
+    // Make copy of params to retain the previous configs
     ChannelParams parentIntParams = params;
+
     deconfigureChannel(bus, params);
-    // If VLAN is been created (vlan !=0)
-    // reconstruct the VLAN
-    if (vlan != 0)
-    {
-        createVLAN(bus, params, vlan);
-        /*Re-establish the saved settings
-        Now params are the VLAN parameters  and
-        parentIntParams  are the are the parameters
-        of the physical interface
-        Set the ETH properties of the physical interface:
-         */
-        setEthProp(bus, parentIntParams, "DHCP4", dhcp4);
-        setEthProp(bus, parentIntParams, "DHCP6", dhcp6);
-        setEthProp(bus, parentIntParams, "IPv6AcceptRA", ra);
-    }
-    /*
-    If VALN is crated:
-        Set the ETH properties of the VLAN interface
-    If not :
-        Set the ETH properties of the physical interface
-    */
+    createVLAN(bus, params, vlan);
+
+    // Re-establish the saved settings
+    setEthProp(bus, parentIntParams, "DHCP4", dhcp4);
+    setEthProp(bus, parentIntParams, "DHCP6", dhcp6);
+    setEthProp(bus, parentIntParams, "IPv6AcceptRA", ra);
+
     setEthProp(bus, params, "DHCP4", dhcp4);
     setEthProp(bus, params, "DHCP6", dhcp6);
     setEthProp(bus, params, "IPv6AcceptRA", ra);
@@ -763,12 +779,12 @@ RspType<message::Payload> getLanOem(uint8_t channel, uint8_t parameter,
 RspType<> setLanOem(uint8_t, uint8_t, message::Payload& req)
 {
     req.trailingOk = true;
-    return response(ccParamNotSupported);
+    return responseParamNotSupported();
 }
 
 RspType<message::Payload> getLanOem(uint8_t, uint8_t, uint8_t, uint8_t)
 {
-    return response(ccParamNotSupported);
+    return responseParamNotSupported();
 }
 
 /**
@@ -839,7 +855,7 @@ RspType<> setLanInt(Context::ptr ctx, uint4_t channelBits, uint4_t reserved1,
                     auto& storedStatus = getSetStatus(channel);
                     if (storedStatus == SetStatus::InProgress)
                     {
-                        return response(ccParamSetLocked);
+                        return responseParamSetLocked();
                     }
                     storedStatus = status;
                     return responseSuccess();
@@ -851,17 +867,17 @@ RspType<> setLanInt(Context::ptr ctx, uint4_t channelBits, uint4_t reserved1,
                     }
                     return responseSuccess();
             }
-            return response(ccParamNotSupported);
+            return responseParamNotSupported();
         }
         case LanParam::AuthSupport:
         {
             req.trailingOk = true;
-            return response(ccParamReadOnly);
+            return responseParamReadOnly();
         }
         case LanParam::AuthEnables:
         {
             req.trailingOk = true;
-            return response(ccParamReadOnly);
+            return responseParamReadOnly();
         }
         case LanParam::IP:
         {
@@ -905,7 +921,7 @@ RspType<> setLanInt(Context::ptr ctx, uint4_t channelBits, uint4_t reserved1,
                 case IPSrc::BMC:
                     return responseInvalidFieldRequest();
             }
-            return response(ccParamNotSupported);
+            return responseParamNotSupported();
         }
         case LanParam::MAC:
         {
@@ -982,7 +998,7 @@ RspType<> setLanInt(Context::ptr ctx, uint4_t channelBits, uint4_t reserved1,
         case LanParam::IPFamilySupport:
         {
             req.trailingOk = true;
-            return response(ccParamReadOnly);
+            return responseParamReadOnly();
         }
         case LanParam::IPFamilyEnables:
         {
@@ -998,14 +1014,14 @@ RspType<> setLanInt(Context::ptr ctx, uint4_t channelBits, uint4_t reserved1,
                     return responseSuccess();
                 case IPFamilyEnables::IPv4Only:
                 case IPFamilyEnables::IPv6Only:
-                    return response(ccParamNotSupported);
+                    return responseParamNotSupported();
             }
-            return response(ccParamNotSupported);
+            return responseParamNotSupported();
         }
         case LanParam::IPv6Status:
         {
             req.trailingOk = true;
-            return response(ccParamReadOnly);
+            return responseParamReadOnly();
         }
         case LanParam::IPv6StaticAddresses:
         {
@@ -1046,7 +1062,7 @@ RspType<> setLanInt(Context::ptr ctx, uint4_t channelBits, uint4_t reserved1,
         case LanParam::IPv6DynamicAddresses:
         {
             req.trailingOk = true;
-            return response(ccParamReadOnly);
+            return responseParamReadOnly();
         }
         case LanParam::IPv6RouterControl:
         {
@@ -1057,11 +1073,11 @@ RspType<> setLanInt(Context::ptr ctx, uint4_t channelBits, uint4_t reserved1,
                 return responseReqDataLenInvalid();
             }
             unpackFinal(req);
-            if (std::bitset<8> expected(control &
-                                        std::bitset<8>(reservedRACCBits));
+            if (std::bitset<8> expected(
+                    control & std::bitset<8>(reservedRACCBits));
                 expected.any())
             {
-                return response(ccParamNotSupported);
+                return responseParamNotSupported();
             }
 
             bool enableRA = control[IPv6RouterControlFlag::Dynamic];
@@ -1120,9 +1136,9 @@ RspType<> setLanInt(Context::ptr ctx, uint4_t channelBits, uint4_t reserved1,
                 return responseInvalidFieldRequest();
             }
 
-            uint8_t resp = getCipherConfigObject(csPrivFileName,
-                                                 csPrivDefaultFileName)
-                               .setCSPrivilegeLevels(channel, cipherSuitePrivs);
+            uint8_t resp =
+                getCipherConfigObject(csPrivFileName, csPrivDefaultFileName)
+                    .setCSPrivilegeLevels(channel, cipherSuitePrivs);
             if (!resp)
             {
                 return responseSuccess();
@@ -1141,7 +1157,7 @@ RspType<> setLanInt(Context::ptr ctx, uint4_t channelBits, uint4_t reserved1,
     }
 
     req.trailingOk = true;
-    return response(ccParamNotSupported);
+    return responseParamNotSupported();
 }
 
 RspType<> setLan(Context::ptr ctx, uint4_t channelBits, uint4_t reserved1,
@@ -1434,8 +1450,8 @@ RspType<message::Payload> getLan(Context::ptr ctx, uint4_t channelBits,
         {
             std::bitset<8> control;
 
-            bool enableRA = channelCall<getEthProp<bool>>(channel,
-                                                          "IPv6AcceptRA");
+            bool enableRA =
+                channelCall<getEthProp<bool>>(channel, "IPv6AcceptRA");
             bool enableDHCP6 = channelCall<getEthProp<bool>>(channel, "DHCP6");
             control[IPv6RouterControlFlag::Dynamic] = enableRA;
             control[IPv6RouterControlFlag::Static] = !(enableDHCP6 && enableRA);
@@ -1500,7 +1516,7 @@ RspType<message::Payload> getLan(Context::ptr ctx, uint4_t channelBits,
         return getLanOem(channel, parameter, set, block);
     }
 
-    return response(ccParamNotSupported);
+    return responseParamNotSupported();
 }
 
 constexpr const char* solInterface = "xyz.openbmc_project.Ipmi.SOL";
@@ -1598,16 +1614,16 @@ RspType<> setSolConfParams(Context::ptr ctx, uint4_t channelBits,
                 return responseUnspecifiedError();
             }
 
-            if (ipmi::setDbusProperty(ctx, solService, solPathWitheEthName,
-                                      solInterface, "ForceEncryption",
-                                      forceEncrypt))
+            if (ipmi::setDbusProperty(
+                    ctx, solService, solPathWitheEthName, solInterface,
+                    "ForceEncryption", forceEncrypt))
             {
                 return responseUnspecifiedError();
             }
 
-            if (ipmi::setDbusProperty(ctx, solService, solPathWitheEthName,
-                                      solInterface, "ForceAuthentication",
-                                      forceAuth))
+            if (ipmi::setDbusProperty(
+                    ctx, solService, solPathWitheEthName, solInterface,
+                    "ForceAuthentication", forceAuth))
             {
                 return responseUnspecifiedError();
             }
@@ -1627,9 +1643,9 @@ RspType<> setSolConfParams(Context::ptr ctx, uint4_t channelBits,
                 return responseInvalidFieldRequest();
             }
 
-            if (ipmi::setDbusProperty(ctx, solService, solPathWitheEthName,
-                                      solInterface, "AccumulateIntervalMS",
-                                      interval))
+            if (ipmi::setDbusProperty(
+                    ctx, solService, solPathWitheEthName, solInterface,
+                    "AccumulateIntervalMS", interval))
             {
                 return responseUnspecifiedError();
             }
@@ -1660,9 +1676,9 @@ RspType<> setSolConfParams(Context::ptr ctx, uint4_t channelBits,
                 return responseUnspecifiedError();
             }
 
-            if (ipmi::setDbusProperty(ctx, solService, solPathWitheEthName,
-                                      solInterface, "RetryIntervalMS",
-                                      interval))
+            if (ipmi::setDbusProperty(
+                    ctx, solService, solPathWitheEthName, solInterface,
+                    "RetryIntervalMS", interval))
             {
                 return responseUnspecifiedError();
             }
@@ -1670,22 +1686,20 @@ RspType<> setSolConfParams(Context::ptr ctx, uint4_t channelBits,
         }
         case SolConfParam::Port:
         {
-            return response(ipmiCCWriteReadParameter);
+            return responseWriteReadParameter();
         }
         case SolConfParam::NonVbitrate:
         case SolConfParam::Vbitrate:
         case SolConfParam::Channel:
         default:
-            return response(ipmiCCParamNotSupported);
+            return responseParamNotSupported();
     }
     return responseSuccess();
 }
 
-RspType<message::Payload> getSolConfParams(Context::ptr ctx,
-                                           uint4_t channelBits,
-                                           uint3_t /*reserved*/, bool revOnly,
-                                           uint8_t parameter, uint8_t /*set*/,
-                                           uint8_t /*block*/)
+RspType<message::Payload> getSolConfParams(
+    Context::ptr ctx, uint4_t channelBits, uint3_t /*reserved*/, bool revOnly,
+    uint8_t parameter, uint8_t /*set*/, uint8_t /*block*/)
 {
     message::Payload ret;
     constexpr uint8_t current_revision = 0x11;
@@ -1758,16 +1772,16 @@ RspType<message::Payload> getSolConfParams(Context::ptr ctx,
                 return responseUnspecifiedError();
             }
 
-            if (ipmi::getDbusProperty(ctx, solService, solPathWitheEthName,
-                                      solInterface, "ForceAuthentication",
-                                      forceAuth))
+            if (ipmi::getDbusProperty(
+                    ctx, solService, solPathWitheEthName, solInterface,
+                    "ForceAuthentication", forceAuth))
             {
                 return responseUnspecifiedError();
             }
 
-            if (ipmi::getDbusProperty(ctx, solService, solPathWitheEthName,
-                                      solInterface, "ForceEncryption",
-                                      forceEncrypt))
+            if (ipmi::getDbusProperty(
+                    ctx, solService, solPathWitheEthName, solInterface,
+                    "ForceEncryption", forceEncrypt))
             {
                 return responseUnspecifiedError();
             }
@@ -1778,9 +1792,9 @@ RspType<message::Payload> getSolConfParams(Context::ptr ctx,
         {
             uint8_t interval{}, threshold{};
 
-            if (ipmi::getDbusProperty(ctx, solService, solPathWitheEthName,
-                                      solInterface, "AccumulateIntervalMS",
-                                      interval))
+            if (ipmi::getDbusProperty(
+                    ctx, solService, solPathWitheEthName, solInterface,
+                    "AccumulateIntervalMS", interval))
             {
                 return responseUnspecifiedError();
             }
@@ -1805,9 +1819,9 @@ RspType<message::Payload> getSolConfParams(Context::ptr ctx,
                 return responseUnspecifiedError();
             }
 
-            if (ipmi::getDbusProperty(ctx, solService, solPathWitheEthName,
-                                      solInterface, "RetryIntervalMS",
-                                      interval))
+            if (ipmi::getDbusProperty(
+                    ctx, solService, solPathWitheEthName, solInterface,
+                    "RetryIntervalMS", interval))
             {
                 return responseUnspecifiedError();
             }
@@ -1834,7 +1848,7 @@ RspType<message::Payload> getSolConfParams(Context::ptr ctx,
                     "/xyz/openbmc_project/console/default",
                     "xyz.openbmc_project.Console.UART", "Baud", baudRate))
             {
-                return ipmi::responseUnspecifiedError();
+                return responseParamNotSupported();
             }
             switch (baudRate)
             {
@@ -1861,18 +1875,18 @@ RspType<message::Payload> getSolConfParams(Context::ptr ctx,
         }
         case SolConfParam::Vbitrate:
         default:
-            return response(ipmiCCParamNotSupported);
+            return responseParamNotSupported();
     }
 
-    return response(ccParamNotSupported);
+    return responseParamNotSupported();
 }
 
 } // namespace transport
 } // namespace ipmi
 
-void register_netfn_transport_functions() __attribute__((constructor));
+void registerNetFnTransportFunctions() __attribute__((constructor));
 
-void register_netfn_transport_functions()
+void registerNetFnTransportFunctions()
 {
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnTransport,
                           ipmi::transport::cmdSetLanConfigParameters,
@@ -1880,12 +1894,12 @@ void register_netfn_transport_functions()
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnTransport,
                           ipmi::transport::cmdGetLanConfigParameters,
                           ipmi::Privilege::Operator, ipmi::transport::getLan);
-    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnTransport,
-                          ipmi::transport::cmdSetSolConfigParameters,
-                          ipmi::Privilege::Admin,
-                          ipmi::transport::setSolConfParams);
-    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnTransport,
-                          ipmi::transport::cmdGetSolConfigParameters,
-                          ipmi::Privilege::User,
-                          ipmi::transport::getSolConfParams);
+    ipmi::registerHandler(
+        ipmi::prioOpenBmcBase, ipmi::netFnTransport,
+        ipmi::transport::cmdSetSolConfigParameters, ipmi::Privilege::Admin,
+        ipmi::transport::setSolConfParams);
+    ipmi::registerHandler(
+        ipmi::prioOpenBmcBase, ipmi::netFnTransport,
+        ipmi::transport::cmdGetSolConfigParameters, ipmi::Privilege::User,
+        ipmi::transport::getSolConfParams);
 }

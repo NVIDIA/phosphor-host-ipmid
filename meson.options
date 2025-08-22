@@ -308,6 +308,16 @@ option(
     value: 'disabled',
     description: 'Request to compile storage commands in the libipmi20 library',
 )
+# arm-sbmr specific functionality.
+option(
+    'arm-sbmr',
+    type: 'feature',
+    description: 'Support Arm SBMR specific functions',
+)
+
+#######################################################################
+# Transport options
+#######################################################################
 
 # HW transport
 option(
@@ -323,4 +333,25 @@ option(
     type: 'string',
     value: 'dropbear',
     description: 'Service name used for user PAM authentication',
+)
+
+#######################################################################
+# OEM Libraries
+#######################################################################
+option(
+    'oem-libraries',
+    type: 'array',
+    choices: [
+        # will build all of the OEM libraries - default
+        'all',
+        # don't build any OEM libraries
+        'none',
+        #######################################
+        # keep list below sorted alphabetically
+        #######################################
+        'example',
+        'nvidia',
+    ],
+    value: ['all'],
+    description: 'Build selected OEM IPMI provider libraries',
 )

@@ -18,12 +18,11 @@ std::unordered_map<uint8_t, uint8_t> testsets = {
 
 TEST(TestSpecialCharact, getUnescapedCharact)
 {
-    uint8_t c;
     auto channel = std::make_shared<SerialChannel>(0);
 
     for (const auto& set : testsets)
     {
-        c = channel->getUnescapedCharacter(set.second);
+        uint8_t c = channel->getUnescapedCharacter(set.second);
         ASSERT_EQ(c, set.first);
     }
 }
@@ -59,8 +58,8 @@ TEST(TestChecksum, calculateChecksum)
 
 TEST(TestIpmiSerialPacket, consumeIpmiSerialPacket)
 {
-    std::vector<uint8_t> dataBytes{bmStart, 0x20, 0x18, 0xc8, 0x81,
-                                   0xc,     0x46, 0x01, 0x2c, bmStop};
+    std::vector<uint8_t> dataBytes{
+        bmStart, 0x20, 0x18, 0xc8, 0x81, 0xc, 0x46, 0x01, 0x2c, bmStop};
     std::vector<uint8_t> dataBytesSplit1{bmStart, 0x20, 0x18, 0xc8};
     std::vector<uint8_t> dataBytesSplit2{0x81, 0xc, 0x46, 0x01, 0x2c, bmStop};
     std::span<uint8_t> input(dataBytes);

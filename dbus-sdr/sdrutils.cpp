@@ -39,6 +39,68 @@ extern const IdInfoMap sensors;
 
 #endif
 
+boost::container::flat_map<
+    const char*, std::pair<SensorTypeCodes, SensorEventTypeCodes>, CmpStr>
+    sensorTypes{
+        {{"temperature", std::make_pair(SensorTypeCodes::temperature,
+                                        SensorEventTypeCodes::threshold)},
+         {"voltage", std::make_pair(SensorTypeCodes::voltage,
+                                    SensorEventTypeCodes::threshold)},
+         {"current", std::make_pair(SensorTypeCodes::current,
+                                    SensorEventTypeCodes::threshold)},
+         {"fan_tach", std::make_pair(SensorTypeCodes::fan,
+                                     SensorEventTypeCodes::threshold)},
+         {"fan_pwm", std::make_pair(SensorTypeCodes::fan,
+                                    SensorEventTypeCodes::threshold)},
+         {"intrusion", std::make_pair(SensorTypeCodes::physicalSecurity,
+                                      SensorEventTypeCodes::sensorSpecified)},
+         {"processor", std::make_pair(SensorTypeCodes::processor,
+                                      SensorEventTypeCodes::sensorSpecified)},
+         {"power", std::make_pair(SensorTypeCodes::other,
+                                  SensorEventTypeCodes::threshold)},
+         {"memory", std::make_pair(SensorTypeCodes::memory,
+                                   SensorEventTypeCodes::sensorSpecified)},
+         {"state", std::make_pair(SensorTypeCodes::powerUnit,
+                                  SensorEventTypeCodes::sensorSpecified)},
+         {"buttons", std::make_pair(SensorTypeCodes::buttons,
+                                    SensorEventTypeCodes::sensorSpecified)},
+         {"watchdog", std::make_pair(SensorTypeCodes::watchdog2,
+                                     SensorEventTypeCodes::sensorSpecified)},
+         {"watchdog_event",
+          std::make_pair(SensorTypeCodes::watchdog2,
+                         SensorEventTypeCodes::sensorSpecified)},
+         {"drive", std::make_pair(SensorTypeCodes::drive_slot,
+                                  SensorEventTypeCodes::sensorSpecified)},
+         {"cpu", std::make_pair(SensorTypeCodes::processor,
+                                SensorEventTypeCodes::sensorSpecified)},
+         {"critical_interrupt",
+          std::make_pair(SensorTypeCodes::critical_interrupt,
+                         SensorEventTypeCodes::sensorSpecified)},
+         {"motherboard", std::make_pair(SensorTypeCodes::powerUnit,
+                                        SensorEventTypeCodes::sensorSpecified)},
+         {"cable", std::make_pair(SensorTypeCodes::cable,
+                                  SensorEventTypeCodes::sensorSpecified)},
+         {"reboot", std::make_pair(SensorTypeCodes::systemBoot,
+                                   SensorEventTypeCodes::sensorSpecified)},
+         {"shutdown", std::make_pair(SensorTypeCodes::systemShutdown,
+                                     SensorEventTypeCodes::sensorSpecified)},
+         {"software", std::make_pair(SensorTypeCodes::versionChange,
+                                     SensorEventTypeCodes::sensorSpecified)},
+         {"eventlogging",
+          std::make_pair(SensorTypeCodes::event_log,
+                         SensorEventTypeCodes::sensorSpecified)},
+         {"PSU", std::make_pair(SensorTypeCodes::powerUnit,
+                                SensorEventTypeCodes::redundancy)},
+         {"GPU",
+          std::make_pair(SensorTypeCodes::module, SensorEventTypeCodes::oem)},
+         {"boot_progress",
+          std::make_pair(SensorTypeCodes::systemFirmwareProgress,
+                         SensorEventTypeCodes::sensorSpecified)},
+         {"entity", std::make_pair(SensorTypeCodes::entity,
+                                   SensorEventTypeCodes::sensorSpecified)},
+         {"energy", std::make_pair(SensorTypeCodes::other,
+                                   SensorEventTypeCodes::threshold)}}};
+
 namespace details
 {
 
@@ -55,8 +117,8 @@ static void filterSensors(SensorSubTree& subtree)
     {
         return;
     }
-    nlohmann::json sensorFilterJSON = nlohmann::json::parse(filterFile, nullptr,
-                                                            false);
+    nlohmann::json sensorFilterJSON =
+        nlohmann::json::parse(filterFile, nullptr, false);
     nlohmann::json::iterator svcFilterit =
         sensorFilterJSON.find("ServiceFilter");
     if (svcFilterit == sensorFilterJSON.end())
@@ -116,8 +178,8 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
 
     static constexpr const int32_t depth = 2;
 
-    auto lbdUpdateSensorTree = [&dbus](const char* path,
-                                       const auto& interfaces) {
+    auto lbdUpdateSensorTree =
+        [&dbus](const char* path, const auto& interfaces) {
         auto mapperCall = dbus->new_method_call(
             "xyz.openbmc_project.ObjectMapper",
             "/xyz/openbmc_project/object_mapper",
@@ -173,8 +235,8 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
     static constexpr const std::array processorInterfaces = {
         "xyz.openbmc_project.Inventory.Item.CpuCore"};
 
-    bool sensorRez = lbdUpdateSensorTree("/xyz/openbmc_project/sensors",
-                                         sensorInterfaces);
+    bool sensorRez =
+        lbdUpdateSensorTree("/xyz/openbmc_project/sensors", sensorInterfaces);
 #ifdef FEATURE_HYBRID_SENSORS
 
     if (!ipmi::sensor::sensors.empty())
@@ -220,9 +282,9 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
             double max = 127;
             double min = -128;
 
-            auto method =
-                dbus->new_method_call(service.c_str(), sensorObjPath.c_str(),
-                                      "org.freedesktop.DBus.Properties", "Get");
+            auto method = dbus->new_method_call(
+                service.c_str(), sensorObjPath.c_str(),
+                "org.freedesktop.DBus.Properties", "Get");
             method.append(valueInterface, "MaxValue");
             try
             {
@@ -238,9 +300,9 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
                 continue;
             }
 
-            method =
-                dbus->new_method_call(service.c_str(), sensorObjPath.c_str(),
-                                      "org.freedesktop.DBus.Properties", "Get");
+            method = dbus->new_method_call(
+                service.c_str(), sensorObjPath.c_str(),
+                "org.freedesktop.DBus.Properties", "Get");
             method.append(valueInterface, "MinValue");
             try
             {
@@ -262,8 +324,8 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
             int8_t bExp = 0;
             bool bSigned = false;
 
-            if (!ipmi::getSensorAttributes(max, min, mValue, rExp, bValue, bExp,
-                                           bSigned))
+            if (!ipmi::getSensorAttributes(
+                    max, min, mValue, rExp, bValue, bExp, bSigned))
             {
                 removeobjecpaths.emplace_back(sensorObjPath);
                 continue;
@@ -271,9 +333,9 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
 
             // Sensor Availability check
             bool isAvailable = true;
-            auto method2 =
-                dbus->new_method_call(service.c_str(), sensorObjPath.c_str(),
-                                      "org.freedesktop.DBus.Properties", "Get");
+            auto method2 = dbus->new_method_call(
+                service.c_str(), sensorObjPath.c_str(),
+                "org.freedesktop.DBus.Properties", "Get");
             method2.append(availabilityInterface, "Available");
             try
             {
@@ -306,28 +368,28 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
     // Add VR control as optional search path.
     (void)lbdUpdateSensorTree("/xyz/openbmc_project/vr", vrInterfaces);
     // Add Power Supply sensors
-    (void)lbdUpdateSensorTree("/xyz/openbmc_project/sensors/system/chassis",
-                              discreteInterfaces);
+    (void)lbdUpdateSensorTree(
+        "/xyz/openbmc_project/sensors/system/chassis", discreteInterfaces);
     // Add discrete sensors
-    (void)lbdUpdateSensorTree("/xyz/openbmc_project/sensors/motherboard",
-                              discreteInterfaces);
-    (void)lbdUpdateSensorTree("/xyz/openbmc_project/sensors/cable",
-                              discreteInterfaces);
-    (void)lbdUpdateSensorTree("/xyz/openbmc_project/sensors/power",
-                              discreteInterfaces);
-    (void)lbdUpdateSensorTree("/xyz/openbmc_project/sensors/gpuboard/",
-                              discreteInterfaces);
-    (void)lbdUpdateSensorTree("/xyz/openbmc_project/sensors/drive",
-                              discreteInterfaces);
+    (void)lbdUpdateSensorTree(
+        "/xyz/openbmc_project/sensors/motherboard", discreteInterfaces);
+    (void)lbdUpdateSensorTree(
+        "/xyz/openbmc_project/sensors/cable", discreteInterfaces);
+    (void)lbdUpdateSensorTree(
+        "/xyz/openbmc_project/sensors/power", discreteInterfaces);
+    (void)lbdUpdateSensorTree(
+        "/xyz/openbmc_project/sensors/gpuboard/", discreteInterfaces);
+    (void)lbdUpdateSensorTree(
+        "/xyz/openbmc_project/sensors/drive", discreteInterfaces);
     // Add boot progress sensor
-    (void)lbdUpdateSensorTree("/xyz/openbmc_project/state",
-                              bootProgressInterfaces);
+    (void)lbdUpdateSensorTree(
+        "/xyz/openbmc_project/state", bootProgressInterfaces);
     // Add watchdog event sensor
-    (void)lbdUpdateSensorTree("/xyz/openbmc_project/state",
-                              watchdogEventInterfaces);
+    (void)lbdUpdateSensorTree(
+        "/xyz/openbmc_project/state", watchdogEventInterfaces);
     // Add processor sensor
-    (void)lbdUpdateSensorTree("/xyz/openbmc_project/state",
-                              processorInterfaces);
+    (void)lbdUpdateSensorTree(
+        "/xyz/openbmc_project/state", processorInterfaces);
     // Add discrete sensors that returns Event-Only Record
     (void)lbdUpdateSensorTree("/xyz/openbmc_project/sensors/motherboard",
                               discreteInterfacesEventOnly);
@@ -409,8 +471,8 @@ bool getSensorSubtree(SensorSubTree& subtree)
 
 #ifdef FEATURE_HYBRID_SENSORS
 // Static sensors are listed in sensor-gen.cpp.
-ipmi::sensor::IdInfoMap::const_iterator
-    findStaticSensor(const std::string& path)
+ipmi::sensor::IdInfoMap::const_iterator findStaticSensor(
+    const std::string& path)
 {
     return std::find_if(
         ipmi::sensor::sensors.begin(), ipmi::sensor::sensors.end(),
@@ -618,7 +680,7 @@ const struct ipmi_event_sensor_types generic_event_types[] = {
     {0x0c, 0x02, 0xff, "D2 Power State"},
     {0x0c, 0x03, 0xff, "D3 Power State"},
     /* END */
-    {0x00, 0x00, 0xff, NULL},
+    {0x00, 0x00, 0xff, nullptr},
 };
 
 const struct ipmi_event_sensor_types sensor_specific_event_types[] = {
@@ -1030,7 +1092,7 @@ const struct ipmi_event_sensor_types sensor_specific_event_types[] = {
     {0xF2, 0x00, 0xff, "Module Handle Closed"},
     {0xF2, 0x01, 0xff, "Module Handle Opened"},
     {0xF2, 0x02, 0xff, "Quiesced"},
-    {0x00, 0x00, 0xff, NULL},
+    {0x00, 0x00, 0xff, nullptr},
 };
 
 #define DATA_BYTE2_SPECIFIED_MASK 0xc0 /* event_data[0] bit mask */
@@ -1076,10 +1138,10 @@ std::optional<std::map<std::string, std::vector<std::string>>>
     std::vector<std::string> interfaces;
     std::shared_ptr<sdbusplus::asio::connection> dbus = getSdBus();
 
-    sdbusplus::message_t getObjectMessage =
-        dbus->new_method_call("xyz.openbmc_project.ObjectMapper",
-                              "/xyz/openbmc_project/object_mapper",
-                              "xyz.openbmc_project.ObjectMapper", "GetObject");
+    sdbusplus::message_t getObjectMessage = dbus->new_method_call(
+        "xyz.openbmc_project.ObjectMapper",
+        "/xyz/openbmc_project/object_mapper",
+        "xyz.openbmc_project.ObjectMapper", "GetObject");
     getObjectMessage.append(path, interfaces);
 
     try
@@ -1101,9 +1163,9 @@ std::map<std::string, Value> getEntityManagerProperties(const char* path,
     std::map<std::string, Value> properties;
     std::shared_ptr<sdbusplus::asio::connection> dbus = getSdBus();
 
-    sdbusplus::message_t getProperties =
-        dbus->new_method_call("xyz.openbmc_project.EntityManager", path,
-                              "org.freedesktop.DBus.Properties", "GetAll");
+    sdbusplus::message_t getProperties = dbus->new_method_call(
+        "xyz.openbmc_project.EntityManager", path,
+        "org.freedesktop.DBus.Properties", "GetAll");
     getProperties.append(interface);
 
     try
@@ -1123,8 +1185,8 @@ std::map<std::string, Value> getEntityManagerProperties(const char* path,
 
 // Fetch the ipmiDecoratorPaths to get the list of dbus objects that
 // have ipmi decorator to prevent unnessary dbus call to fetch the info
-std::optional<std::unordered_set<std::string>>&
-    getIpmiDecoratorPaths(const std::optional<ipmi::Context::ptr>& ctx)
+std::optional<std::unordered_set<std::string>>& getIpmiDecoratorPaths(
+    const std::optional<ipmi::Context::ptr>& ctx)
 {
     static std::optional<std::unordered_set<std::string>> ipmiDecoratorPaths;
 
@@ -1133,22 +1195,22 @@ std::optional<std::unordered_set<std::string>>&
         return ipmiDecoratorPaths;
     }
 
+    using Paths = std::vector<std::string>;
     boost::system::error_code ec;
-    std::vector<std::string> paths =
-        (*ctx)->bus->yield_method_call<std::vector<std::string>>(
-            (*ctx)->yield, ec, "xyz.openbmc_project.ObjectMapper",
-            "/xyz/openbmc_project/object_mapper",
-            "xyz.openbmc_project.ObjectMapper", "GetSubTreePaths", "/",
-            int32_t(0),
-            std::array<const char*, 1>{
-                "xyz.openbmc_project.Inventory.Decorator.Ipmi"});
+    Paths paths = ipmi::callDbusMethod<Paths>(
+        *ctx, ec, "xyz.openbmc_project.ObjectMapper",
+        "/xyz/openbmc_project/object_mapper",
+        "xyz.openbmc_project.ObjectMapper", "GetSubTreePaths", "/", int32_t(0),
+        std::array<const char*, 1>{
+            "xyz.openbmc_project.Inventory.Decorator.Ipmi"});
+
     if (ec)
     {
         return ipmiDecoratorPaths;
     }
 
-    ipmiDecoratorPaths = std::unordered_set<std::string>(paths.begin(),
-                                                         paths.end());
+    ipmiDecoratorPaths =
+        std::unordered_set<std::string>(paths.begin(), paths.end());
     return ipmiDecoratorPaths;
 }
 
@@ -1177,8 +1239,8 @@ const std::string* getSensorConfigurationInterface(
 
     for (const auto& entry : entityManagerService->second)
     {
-        if (boost::algorithm::starts_with(entry,
-                                          "xyz.openbmc_project.Configuration."))
+        if (boost::algorithm::starts_with(
+                entry, "xyz.openbmc_project.Configuration."))
         {
             return &entry;
         }
@@ -1306,8 +1368,8 @@ void updateIpmiFromAssociation(
 
         // We found a configuration interface.
         std::map<std::string, Value> configurationProperties =
-            getEntityManagerProperties(sensorConfigPath.c_str(),
-                                       configurationInterface->c_str());
+            getEntityManagerProperties(
+                sensorConfigPath.c_str(), configurationInterface->c_str());
 
         entityIdProp = configurationProperties.find("EntityId");
         entityInstanceProp = configurationProperties.find("EntityInstance");

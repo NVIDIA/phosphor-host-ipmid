@@ -157,8 +157,8 @@ TEST(Uints, Uint64)
 
 TEST(Uints, Uint64TooManyBytes)
 {
-    ipmi::SecureBuffer i = {0x04, 0x86, 0x00, 0x02, 0x44,
-                            0x33, 0x22, 0x11, 0x55};
+    ipmi::SecureBuffer i = {
+        0x04, 0x86, 0x00, 0x02, 0x44, 0x33, 0x22, 0x11, 0x55};
     ipmi::message::Payload p(std::forward<ipmi::SecureBuffer>(i));
     uint64_t v;
     // check that the number of bytes matches
@@ -584,9 +584,9 @@ TEST(Arrays, Array4xUint32TooManyBytes)
     // v[1][7:0] v[1][15:9] v[1][23:16] v[1][31:24]
     // v[2][7:0] v[2][15:9] v[2][23:16] v[2][31:24]
     // v[3][7:0] v[3][15:9] v[3][23:16] v[3][31:24]
-    ipmi::SecureBuffer i = {0x44, 0x33, 0x22, 0x11, 0x88, 0x66,
-                            0x44, 0x22, 0x99, 0x77, 0x55, 0x33,
-                            0x78, 0x56, 0x34, 0x12, 0xaa};
+    ipmi::SecureBuffer i = {
+        0x44, 0x33, 0x22, 0x11, 0x88, 0x66, 0x44, 0x22, 0x99,
+        0x77, 0x55, 0x33, 0x78, 0x56, 0x34, 0x12, 0xaa};
     ipmi::message::Payload p(std::forward<ipmi::SecureBuffer>(i));
     std::array<uint32_t, 4> v;
     // check that the number of bytes matches

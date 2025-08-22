@@ -109,9 +109,9 @@ struct Type12Record
         header.sdr_version = ipmiSdrVersion;
         header.record_type = 0x12;
         size_t nameLen = std::min(sensorname.size(), sizeof(name));
-        header.record_length = sizeof(Type12Record) -
-                               sizeof(get_sdr::SensorDataRecordHeader) -
-                               sizeof(name) + nameLen;
+        header.record_length =
+            sizeof(Type12Record) - sizeof(get_sdr::SensorDataRecordHeader) -
+            sizeof(name) + nameLen;
         typeLengthCode = 0xc0 | nameLen;
         std::copy(sensorname.begin(), sensorname.begin() + nameLen, name);
     }
@@ -124,14 +124,13 @@ namespace storage
 {
 
 constexpr const size_t type12Count = 2;
-ipmi_ret_t getFruSdrs(ipmi::Context::ptr ctx, size_t index,
-                      get_sdr::SensorDataFruRecord& resp);
+ipmi::Cc getFruSdrs(ipmi::Context::ptr ctx, size_t index,
+                    get_sdr::SensorDataFruRecord& resp);
 
-ipmi_ret_t getFruSdrCount(ipmi::Context::ptr ctx, size_t& count);
+ipmi::Cc getFruSdrCount(ipmi::Context::ptr ctx, size_t& count);
 
-std::vector<uint8_t>
-    getType8SDRs(ipmi::sensor::EntityInfoMap::const_iterator& entity,
-                 uint16_t recordId);
+std::vector<uint8_t> getType8SDRs(
+    ipmi::sensor::EntityInfoMap::const_iterator& entity, uint16_t recordId);
 std::vector<uint8_t> getType12SDRs(uint16_t index, uint16_t recordId);
 std::vector<uint8_t> getNMDiscoverySDR(uint16_t index, uint16_t recordId);
 } // namespace storage

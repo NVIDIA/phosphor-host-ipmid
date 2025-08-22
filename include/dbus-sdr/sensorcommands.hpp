@@ -245,47 +245,11 @@ namespace ipmi
 
 uint16_t getNumberOfSensors();
 
-SensorSubTree& getSensorTree()
-{
-    static SensorSubTree sensorTree;
-    return sensorTree;
-}
+SensorSubTree& getSensorTree();
 
-static ipmi_ret_t
-    getSensorConnection(ipmi::Context::ptr ctx, uint8_t sensnum,
-                        std::string& connection, std::string& path,
-                        std::vector<std::string>* interfaces = nullptr)
-{
-    auto& sensorTree = getSensorTree();
-    if (!getSensorSubtree(sensorTree) && sensorTree.empty())
-    {
-        return IPMI_CC_RESPONSE_ERROR;
-    }
-
-    if (ctx == nullptr)
-    {
-        return IPMI_CC_RESPONSE_ERROR;
-    }
-
-    path = getPathFromSensorNumber((ctx->lun << 8) | sensnum);
-    if (path.empty())
-    {
-        return IPMI_CC_INVALID_FIELD_REQUEST;
-    }
-
-    for (const auto& sensor : sensorTree)
-    {
-        if (path == sensor.first)
-        {
-            connection = sensor.second.begin()->first;
-            if (interfaces)
-                *interfaces = sensor.second.begin()->second;
-            break;
-        }
-    }
-
-    return 0;
-}
+ipmi::Cc getSensorConnection(ipmi::Context::ptr ctx, uint8_t sensnum,
+                             std::string& connection, std::string& path,
+                             std::vector<std::string>* interfaces = nullptr);
 
 struct IPMIThresholds
 {

@@ -57,7 +57,7 @@ static constexpr auto activationIntf =
     "xyz.openbmc_project.Software.Activation";
 static constexpr auto softwareRoot = "/xyz/openbmc_project/software";
 
-void register_netfn_app_functions() __attribute__((constructor));
+void registerNetFnAppFunctions() __attribute__((constructor));
 
 using namespace phosphor::logging;
 using namespace sdbusplus::error::xyz::openbmc_project::common;
@@ -118,8 +118,8 @@ std::string getActiveSoftwareVersionInfo(ipmi::Context::ptr ctx)
     ipmi::ObjectTree objectTree;
     try
     {
-        objectTree = ipmi::getAllDbusObjects(*ctx->bus, softwareRoot,
-                                             redundancyIntf);
+        objectTree =
+            ipmi::getAllDbusObjects(*ctx->bus, softwareRoot, redundancyIntf);
     }
     catch (const sdbusplus::exception_t& e)
     {
@@ -132,10 +132,10 @@ std::string getActiveSoftwareVersionInfo(ipmi::Context::ptr ctx)
     auto objectFound = false;
     for (auto& softObject : objectTree)
     {
-        auto service = ipmi::getService(*ctx->bus, redundancyIntf,
-                                        softObject.first);
-        auto objValueTree = ipmi::getManagedObjects(*ctx->bus, service,
-                                                    softwareRoot);
+        auto service =
+            ipmi::getService(*ctx->bus, redundancyIntf, softObject.first);
+        auto objValueTree =
+            ipmi::getManagedObjects(*ctx->bus, service, softwareRoot);
 
         auto minPriority = 0xFF;
         for (const auto& objIter : objValueTree)
@@ -188,11 +188,11 @@ bool getCurrentBmcState()
     sdbusplus::bus_t bus{ipmid_get_sd_bus_connection()};
 
     // Get the Inventory object implementing the BMC interface
-    ipmi::DbusObjectInfo bmcObject = ipmi::getDbusObject(bus,
-                                                         bmc_state_interface);
-    auto variant = ipmi::getDbusProperty(bus, bmcObject.second, bmcObject.first,
-                                         bmc_state_interface,
-                                         bmc_state_property);
+    ipmi::DbusObjectInfo bmcObject =
+        ipmi::getDbusObject(bus, bmc_state_interface);
+    auto variant = ipmi::getDbusProperty(
+        bus, bmcObject.second, bmcObject.first, bmc_state_interface,
+        bmc_state_property);
 
     return std::holds_alternative<std::string>(variant) &&
            BMC::convertBMCStateFromString(std::get<std::string>(variant)) ==
@@ -339,9 +339,9 @@ ipmi::RspType<> ipmiSetAcpiPowerState(uint8_t sysAcpiState,
         }
         else
         {
-            auto found = std::find_if(acpi_state::dbusToIPMI.begin(),
-                                      acpi_state::dbusToIPMI.end(),
-                                      [&s](const auto& iter) {
+            auto found = std::find_if(
+                acpi_state::dbusToIPMI.begin(), acpi_state::dbusToIPMI.end(),
+                [&s](const auto& iter) {
                 return (static_cast<uint8_t>(iter.second) == s);
             });
 
@@ -351,10 +351,10 @@ ipmi::RspType<> ipmiSetAcpiPowerState(uint8_t sysAcpiState,
             {
                 auto acpiObject =
                     ipmi::getDbusObject(bus, acpi_state::acpiInterface);
-                ipmi::setDbusProperty(bus, acpiObject.second, acpiObject.first,
-                                      acpi_state::acpiInterface,
-                                      acpi_state::sysACPIProp,
-                                      convertForMessage(value));
+                ipmi::setDbusProperty(
+                    bus, acpiObject.second, acpiObject.first,
+                    acpi_state::acpiInterface, acpi_state::sysACPIProp,
+                    convertForMessage(value));
             }
             catch (const InternalFailure& e)
             {
@@ -387,9 +387,9 @@ ipmi::RspType<> ipmiSetAcpiPowerState(uint8_t sysAcpiState,
         }
         else
         {
-            auto found = std::find_if(acpi_state::dbusToIPMI.begin(),
-                                      acpi_state::dbusToIPMI.end(),
-                                      [&s](const auto& iter) {
+            auto found = std::find_if(
+                acpi_state::dbusToIPMI.begin(), acpi_state::dbusToIPMI.end(),
+                [&s](const auto& iter) {
                 return (static_cast<uint8_t>(iter.second) == s);
             });
 
@@ -399,10 +399,10 @@ ipmi::RspType<> ipmiSetAcpiPowerState(uint8_t sysAcpiState,
             {
                 auto acpiObject =
                     ipmi::getDbusObject(bus, acpi_state::acpiInterface);
-                ipmi::setDbusProperty(bus, acpiObject.second, acpiObject.first,
-                                      acpi_state::acpiInterface,
-                                      acpi_state::devACPIProp,
-                                      convertForMessage(value));
+                ipmi::setDbusProperty(
+                    bus, acpiObject.second, acpiObject.first,
+                    acpi_state::acpiInterface, acpi_state::devACPIProp,
+                    convertForMessage(value));
             }
             catch (const InternalFailure& e)
             {
@@ -524,8 +524,8 @@ int convertVersion(std::string s, Revision& rev)
         // convert major
         {
             std::string str = m[matches[0]].str();
-            auto [ptr, ec]{
-                std::from_chars(str.data(), str.data() + str.size(), val)};
+            const auto& [ptr, ec] =
+                std::from_chars(str.data(), str.data() + str.size(), val);
             if (ec != std::errc() || ptr != str.data() + str.size())
             { // failed to convert major string
                 return -1;
@@ -547,8 +547,8 @@ int convertVersion(std::string s, Revision& rev)
         // convert minor
         {
             std::string str = m[matches[1]].str();
-            auto [ptr, ec]{
-                std::from_chars(str.data(), str.data() + str.size(), val)};
+            const auto& [ptr, ec] =
+                std::from_chars(str.data(), str.data() + str.size(), val);
             if (ec != std::errc() || ptr != str.data() + str.size())
             { // failed to convert minor string
                 return -1;
@@ -567,9 +567,10 @@ int convertVersion(std::string s, Revision& rev)
                 }
 
                 std::string str = m[matches[i + 2]].str();
-                auto [ptr, ec]{std::from_chars(
-                    str.data(), str.data() + str.size(), val, 16)};
-                if (ec != std::errc() || ptr != str.data() + str.size())
+                const char* cstr = str.c_str();
+                auto [ptr,
+                      ec] = std::from_chars(cstr, cstr + str.size(), val, 16);
+                if (ec != std::errc() || ptr != cstr + str.size())
                 { // failed to convert aux byte string
                     break;
                 }
@@ -639,7 +640,7 @@ ipmi::RspType<uint8_t,  // Device ID
     if (!haveBMCVersion || !dev_id_initialized)
     {
         int r = -1;
-        Revision rev = {0, 0, 0, 0};
+        Revision rev = {0, 0, {0, 0, 0, 0}};
         try
         {
             auto version = getActiveSoftwareVersionInfo(ctx);
@@ -864,16 +865,16 @@ auto ipmiAppGetBtCapabilities()
 auto ipmiAppGetSystemGuid(ipmi::Context::ptr& ctx)
     -> ipmi::RspType<std::array<uint8_t, 16>>
 {
+    static constexpr auto uuidService = "xyz.openbmc_project.Settings";
+    static constexpr auto uuidObject = "/xyz/openbmc_project/Common/UUID";
     static constexpr auto uuidInterface = "xyz.openbmc_project.Common.UUID";
     static constexpr auto uuidProperty = "UUID";
-    static constexpr auto uuidPath = "/xyz/openbmc_project/Common/UUID";
-    static constexpr auto uuidService = "xyz.openbmc_project.Settings";
 
-    // Read UUID property value from bmcObject
+    // Read UUID property value from settings object
     // UUID is in RFC4122 format Ex: 61a39523-78f2-11e5-9862-e6402cfc3223
     std::string rfc4122Uuid{};
     boost::system::error_code ec = ipmi::getDbusProperty(
-        ctx, uuidService, uuidPath, uuidInterface, uuidProperty, rfc4122Uuid);
+        ctx, uuidService, uuidObject, uuidInterface, uuidProperty, rfc4122Uuid);
     if (ec.value())
     {
         lg2::error("Failed to read System UUID property, "
@@ -1042,11 +1043,10 @@ uint8_t getTotalSessionCount()
  * @return success completion code if request data is valid
  * else return the correcponding error completion code.
  **/
-uint8_t getSessionInfoRequestData(const ipmi::Context::ptr ctx,
-                                  const uint8_t sessionIndex,
-                                  ipmi::message::Payload& payload,
-                                  uint32_t& reqSessionId,
-                                  uint8_t& reqSessionHandle)
+uint8_t getSessionInfoRequestData(
+    const ipmi::Context::ptr ctx, const uint8_t sessionIndex,
+    ipmi::message::Payload& payload, uint32_t& reqSessionId,
+    uint8_t& reqSessionHandle)
 {
     if ((sessionIndex > session::maxSessionCountPerChannel) &&
         (sessionIndex < session::searchSessionByHandle))
@@ -1186,23 +1186,23 @@ ipmi::Cc getSessionDetails(ipmi::Context::ptr ctx, const std::string& service,
         sessionProps, "State", static_cast<uint8_t>(session::State::inactive));
     if (sessionState == static_cast<uint8_t>(session::State::active))
     {
-        sessionHandle = ipmi::mappedVariant<uint8_t>(sessionProps,
-                                                     "SessionHandle", 0);
-        std::get<0>(details) = ipmi::mappedVariant<uint8_t>(sessionProps,
-                                                            "UserID", 0xff);
+        sessionHandle =
+            ipmi::mappedVariant<uint8_t>(sessionProps, "SessionHandle", 0);
+        std::get<0>(details) =
+            ipmi::mappedVariant<uint8_t>(sessionProps, "UserID", 0xff);
         // std::get<1>(details) = 0; // (default constructed to 0)
         std::get<2>(details) =
             ipmi::mappedVariant<uint8_t>(sessionProps, "CurrentPrivilege", 0);
         // std::get<3>(details) = 0; // (default constructed to 0)
-        std::get<4>(details) = ipmi::mappedVariant<uint8_t>(sessionProps,
-                                                            "ChannelNum", 0xff);
+        std::get<4>(details) =
+            ipmi::mappedVariant<uint8_t>(sessionProps, "ChannelNum", 0xff);
         constexpr uint4_t rmcpPlusProtocol = 1;
         std::get<5>(details) = rmcpPlusProtocol;
-        std::get<6>(details) = ipmi::mappedVariant<uint32_t>(sessionProps,
-                                                             "RemoteIPAddr", 0);
+        std::get<6>(details) =
+            ipmi::mappedVariant<uint32_t>(sessionProps, "RemoteIPAddr", 0);
         // std::get<7>(details) = {{0}}; // default constructed to all 0
-        std::get<8>(details) = ipmi::mappedVariant<uint16_t>(sessionProps,
-                                                             "RemotePort", 0);
+        std::get<8>(details) =
+            ipmi::mappedVariant<uint16_t>(sessionProps, "RemotePort", 0);
     }
 
     return ipmi::ccSuccess;
@@ -1249,8 +1249,8 @@ ipmi::RspType<uint8_t, // session handle,
         uint32_t sessionId = 0;
         std::string objectPath = objectTreeItr.first;
 
-        if (!parseCloseSessionInputPayload(objectPath, sessionId,
-                                           sessionHandle))
+        if (!parseCloseSessionInputPayload(
+                objectPath, sessionId, sessionHandle))
         {
             continue;
         }
@@ -1265,8 +1265,8 @@ ipmi::RspType<uint8_t, // session handle,
 
         std::string service = itr->first;
         uint8_t sessionState = 0;
-        completionCode = getSessionState(ctx, service, objectPath,
-                                         sessionState);
+        completionCode =
+            getSessionState(ctx, service, objectPath, sessionState);
         if (completionCode)
         {
             return ipmi::response(completionCode);
@@ -1281,8 +1281,8 @@ ipmi::RspType<uint8_t, // session handle,
             reqSessionHandle == sessionHandle)
         {
             SessionDetails details{};
-            completionCode = getSessionDetails(ctx, service, objectPath,
-                                               sessionHandle, state, details);
+            completionCode = getSessionDetails(
+                ctx, service, objectPath, sessionHandle, state, details);
 
             if (completionCode)
             {
@@ -1327,8 +1327,8 @@ std::optional<std::string> getSysFWVersion(ipmi::Context::ptr& ctx)
         for (const auto& [service, intfs] : serviceMap)
         {
             ipmi::PropertyMap props;
-            ec = ipmi::getAllDbusProperties(ctx, service, objPath, versionIntf,
-                                            props);
+            ec = ipmi::getAllDbusProperties(
+                ctx, service, objPath, versionIntf, props);
             if (ec.value())
             {
                 continue;
@@ -1439,26 +1439,33 @@ ipmi::RspType<uint8_t,                // Parameter revision
         if (setSelector != 0)
             return ipmi::responseInvalidFieldRequest();
 
-        return ipmi::responseSuccess(paramRevision, transferStatus,
-                                     std::nullopt);
+        return ipmi::responseSuccess(
+            paramRevision, transferStatus, std::nullopt);
     }
 
     if (sysInfoParamStore == nullptr)
     {
         sysInfoParamStore = std::make_unique<SysInfoParamStore>();
-        sysInfoParamStore->update(IPMI_SYSINFO_SYSTEM_NAME,
-                                  sysInfoReadSystemName);
+        sysInfoParamStore->update(
+            IPMI_SYSINFO_SYSTEM_NAME, sysInfoReadSystemName);
     }
 
     if (paramSelector == IPMI_SYSINFO_SYSTEM_FW_VERSION)
     {
-        auto fwVersion = getSysFWVersion(ctx);
+        // If the system firmware version is not cached, get it from the D-Bus.
+        const auto& [found, paramString] =
+            sysInfoParamStore->lookup(IPMI_SYSINFO_SYSTEM_FW_VERSION);
 
-        if (fwVersion == std::nullopt)
+        if (!found || paramString.empty())
         {
-            return ipmi::responseUnspecifiedError();
+            auto fwVersion = getSysFWVersion(ctx);
+            if (fwVersion == std::nullopt)
+            {
+                return ipmi::responseUnspecifiedError();
+            }
+            sysInfoParamStore->update(
+                IPMI_SYSINFO_SYSTEM_FW_VERSION, *fwVersion);
         }
-        sysInfoParamStore->update(IPMI_SYSINFO_SYSTEM_FW_VERSION, *fwVersion);
     }
 
     // Parameters other than Set In Progress are assumed to be strings.
@@ -1555,8 +1562,8 @@ ipmi::RspType<> ipmiAppSetSystemInfo(uint8_t paramSelector, uint8_t data1,
     if (!sysInfoParamStore)
     {
         sysInfoParamStore = std::make_unique<SysInfoParamStore>();
-        sysInfoParamStore->update(IPMI_SYSINFO_SYSTEM_NAME,
-                                  sysInfoReadSystemName);
+        sysInfoParamStore->update(
+            IPMI_SYSINFO_SYSTEM_NAME, sysInfoReadSystemName);
     }
 
     // lookup
@@ -1773,11 +1780,10 @@ static bool populateI2CControllerWRAllowlist()
  *  @returns IPMI completion code plus response data
  *   - readData - i2c response data
  */
-ipmi::RspType<std::vector<uint8_t>>
-    ipmiControllerWriteRead([[maybe_unused]] bool isPrivateBus, uint3_t busId,
-                            [[maybe_unused]] uint4_t channelNum, bool reserved,
-                            uint7_t targetAddr, uint8_t readCount,
-                            std::vector<uint8_t> writeData)
+ipmi::RspType<std::vector<uint8_t>> ipmiControllerWriteRead(
+    [[maybe_unused]] bool isPrivateBus, uint3_t busId,
+    [[maybe_unused]] uint4_t channelNum, bool reserved, uint7_t targetAddr,
+    uint8_t readCount, std::vector<uint8_t> writeData)
 {
     if (reserved)
     {
@@ -1800,11 +1806,11 @@ ipmi::RspType<std::vector<uint8_t>>
     }
 #endif // ENABLE_I2C_WHITELIST_CHECK
     std::vector<uint8_t> readBuf(readCount);
-    std::string i2cBus = "/dev/i2c-" +
-                         std::to_string(static_cast<uint8_t>(busId));
+    std::string i2cBus =
+        "/dev/i2c-" + std::to_string(static_cast<uint8_t>(busId));
 
-    ipmi::Cc ret = ipmi::i2cWriteRead(i2cBus, static_cast<uint8_t>(targetAddr),
-                                      writeData, readBuf);
+    ipmi::Cc ret = ipmi::i2cWriteRead(
+        i2cBus, static_cast<uint8_t>(targetAddr), writeData, readBuf);
     if (ret != ipmi::ccSuccess)
     {
         return ipmi::response(ret);
@@ -1813,17 +1819,17 @@ ipmi::RspType<std::vector<uint8_t>>
 }
 
 // return value is the IPMB formatted message
-ipmi::RspType<std::vector<uint8_t>>
-    ipmiAppSendMessage(uint8_t chanNum, std::vector<uint8_t> data)
+ipmi::RspType<std::vector<uint8_t>> ipmiAppSendMessage(
+    uint8_t chanNum, std::vector<uint8_t> data)
 {
     sd_bus* bus;
     int rc;
-    sd_bus_message* request = NULL;
+    sd_bus_message* request = nullptr;
     uint8_t netFn, lun, cmd;
     int ipmb_rc;
     uint8_t recv_netfn, recv_lun, recv_cmd, recv_cc;
     sd_bus_error error = SD_BUS_ERROR_NULL;
-    sd_bus_message* reply = NULL;
+    sd_bus_message* reply = nullptr;
     const void* rspData;
     size_t rspDataLen;
     bool success = false;
@@ -1862,8 +1868,8 @@ ipmi::RspType<std::vector<uint8_t>>
     }
 
     // Forward the data to IPMB
-    rc = sd_bus_message_new_method_call(bus, &request, destination, objectPath,
-                                        interface, method);
+    rc = sd_bus_message_new_method_call(
+        bus, &request, destination, objectPath, interface, method);
     if (rc < 0)
     {
         log<level::ERR>("Failed to create message");
@@ -1875,8 +1881,8 @@ ipmi::RspType<std::vector<uint8_t>>
     cmd = data[5];
 
     /* pack the header: channel, netfn, lun, cmd */
-    rc = sd_bus_message_append(request, SD_BUS_TYPE_4_BYTES, 0, netFn, lun,
-                               cmd);
+    rc =
+        sd_bus_message_append(request, SD_BUS_TYPE_4_BYTES, 0, netFn, lun, cmd);
     if (rc < 0)
     {
         log<level::ERR>("ipmiAppSendMessage failed to append parameters");
@@ -1884,8 +1890,8 @@ ipmi::RspType<std::vector<uint8_t>>
     }
 
     /* pack the variable length data */
-    rc = sd_bus_message_append_array(request, SD_BUS_TYPE_BYTE, &data[6],
-                                     data.size() - 7);
+    rc = sd_bus_message_append_array(
+        request, SD_BUS_TYPE_BYTE, &data[6], data.size() - 7);
     if (rc < 0)
     {
         log<level::ERR>("ipmiAppSendMessage failed to append data body");
@@ -1900,8 +1906,8 @@ ipmi::RspType<std::vector<uint8_t>>
     }
 
     /* unpack the response; check that it has the expected types */
-    rc = sd_bus_message_enter_container(reply, SD_BUS_TYPE_STRUCT,
-                                        SD_BUS_TYPE_IPMI_RESPONSE);
+    rc = sd_bus_message_enter_container(
+        reply, SD_BUS_TYPE_STRUCT, SD_BUS_TYPE_IPMI_RESPONSE);
     if (rc < 0)
     {
         log<level::ERR>("ipmiAppSendMessage failed to parse reply");
@@ -1918,8 +1924,8 @@ ipmi::RspType<std::vector<uint8_t>>
     }
 
     /* read the variable length data */
-    rc = sd_bus_message_read_array(reply, SD_BUS_TYPE_BYTE, &rspData,
-                                   &rspDataLen);
+    rc = sd_bus_message_read_array(
+        reply, SD_BUS_TYPE_BYTE, &rspData, &rspDataLen);
     if (rc < 0)
     {
         log<level::ERR>("ipmiAppSendMessage failed to read reply data");
@@ -1948,12 +1954,12 @@ out_free_request:
         return ipmi::responseUnspecifiedError();
 }
 
-void register_netfn_app_functions()
+void registerNetFnAppFunctions()
 {
     // <Get Device ID>
-    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnApp,
-                          ipmi::app::cmdGetDeviceId, ipmi::Privilege::User,
-                          ipmiAppGetDeviceId);
+    ipmi::registerHandler(
+        ipmi::prioOpenBmcBase, ipmi::netFnApp, ipmi::app::cmdGetDeviceId,
+        ipmi::Privilege::User, ipmiAppGetDeviceId);
 
     // <Get BT Interface Capabilities>
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnApp,
@@ -1961,46 +1967,46 @@ void register_netfn_app_functions()
                           ipmi::Privilege::User, ipmiAppGetBtCapabilities);
 
     // <Reset Watchdog Timer>
-    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnApp,
-                          ipmi::app::cmdResetWatchdogTimer,
-                          ipmi::Privilege::Operator, ipmiAppResetWatchdogTimer);
+    ipmi::registerHandler(
+        ipmi::prioOpenBmcBase, ipmi::netFnApp, ipmi::app::cmdResetWatchdogTimer,
+        ipmi::Privilege::Operator, ipmiAppResetWatchdogTimer);
 
-    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnApp,
-                          ipmi::app::cmdGetSessionInfo, ipmi::Privilege::User,
-                          ipmiAppGetSessionInfo);
+    ipmi::registerHandler(
+        ipmi::prioOpenBmcBase, ipmi::netFnApp, ipmi::app::cmdGetSessionInfo,
+        ipmi::Privilege::User, ipmiAppGetSessionInfo);
 
     // <Set Watchdog Timer>
-    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnApp,
-                          ipmi::app::cmdSetWatchdogTimer,
-                          ipmi::Privilege::Operator, ipmiSetWatchdogTimer);
+    ipmi::registerHandler(
+        ipmi::prioOpenBmcBase, ipmi::netFnApp, ipmi::app::cmdSetWatchdogTimer,
+        ipmi::Privilege::Operator, ipmiSetWatchdogTimer);
 
-    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnApp,
-                          ipmi::app::cmdCloseSession, ipmi::Privilege::Callback,
-                          ipmiAppCloseSession);
+    ipmi::registerHandler(
+        ipmi::prioOpenBmcBase, ipmi::netFnApp, ipmi::app::cmdCloseSession,
+        ipmi::Privilege::Callback, ipmiAppCloseSession);
 
     // <Get Watchdog Timer>
-    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnApp,
-                          ipmi::app::cmdGetWatchdogTimer, ipmi::Privilege::User,
-                          ipmiGetWatchdogTimer);
+    ipmi::registerHandler(
+        ipmi::prioOpenBmcBase, ipmi::netFnApp, ipmi::app::cmdGetWatchdogTimer,
+        ipmi::Privilege::User, ipmiGetWatchdogTimer);
 
     // <Get Self Test Results>
-    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnApp,
-                          ipmi::app::cmdGetSelfTestResults,
-                          ipmi::Privilege::User, ipmiAppGetSelfTestResults);
+    ipmi::registerHandler(
+        ipmi::prioOpenBmcBase, ipmi::netFnApp, ipmi::app::cmdGetSelfTestResults,
+        ipmi::Privilege::User, ipmiAppGetSelfTestResults);
 
     // <Get Device GUID>
-    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnApp,
-                          ipmi::app::cmdGetDeviceGuid, ipmi::Privilege::User,
-                          ipmiAppGetDeviceGuid);
+    ipmi::registerHandler(
+        ipmi::prioOpenBmcBase, ipmi::netFnApp, ipmi::app::cmdGetDeviceGuid,
+        ipmi::Privilege::User, ipmiAppGetDeviceGuid);
 
     // <Set ACPI Power State>
-    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnApp,
-                          ipmi::app::cmdSetAcpiPowerState,
-                          ipmi::Privilege::Admin, ipmiSetAcpiPowerState);
+    ipmi::registerHandler(
+        ipmi::prioOpenBmcBase, ipmi::netFnApp, ipmi::app::cmdSetAcpiPowerState,
+        ipmi::Privilege::Admin, ipmiSetAcpiPowerState);
     // <Get ACPI Power State>
-    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnApp,
-                          ipmi::app::cmdGetAcpiPowerState,
-                          ipmi::Privilege::User, ipmiGetAcpiPowerState);
+    ipmi::registerHandler(
+        ipmi::prioOpenBmcBase, ipmi::netFnApp, ipmi::app::cmdGetAcpiPowerState,
+        ipmi::Privilege::User, ipmiGetAcpiPowerState);
 
     // Note: For security reason, this command will be registered only when
     // there are proper I2C Controller write read allowlist
@@ -2015,9 +2021,9 @@ void register_netfn_app_functions()
     }
 
     // <Get System GUID Command>
-    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnApp,
-                          ipmi::app::cmdGetSystemGuid, ipmi::Privilege::User,
-                          ipmiAppGetSystemGuid);
+    ipmi::registerHandler(
+        ipmi::prioOpenBmcBase, ipmi::netFnApp, ipmi::app::cmdGetSystemGuid,
+        ipmi::Privilege::User, ipmiAppGetSystemGuid);
 
     // <Get Channel Cipher Suites Command>
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnApp,
@@ -2033,8 +2039,8 @@ void register_netfn_app_functions()
                           ipmi::app::cmdSetSystemInfoParameters,
                           ipmi::Privilege::Admin, ipmiAppSetSystemInfo);
     // <Set Message>
-    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnApp,
-                          ipmi::app::cmdSendMessage, ipmi::Privilege::User,
-                          ipmiAppSendMessage);
+    ipmi::registerHandler(
+        ipmi::prioOpenBmcBase, ipmi::netFnApp, ipmi::app::cmdSendMessage,
+        ipmi::Privilege::User, ipmiAppSendMessage);
     return;
 }

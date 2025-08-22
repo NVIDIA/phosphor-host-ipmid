@@ -4,6 +4,7 @@
 #include <ipmid/api-types.hpp>
 #include <ipmid/message.hpp>
 #include <ipmid/types.hpp>
+#include <phosphor-logging/lg2.hpp>
 #include <sdbusplus/server.hpp>
 
 #include <chrono>
@@ -120,10 +121,9 @@ ObjectTree getSubTree(sdbusplus::bus_t& bus, const InterfaceList& interface,
  *  @param[in] match - identifier for object.
  *  @return On success returns the object having objectpath and servicename.
  */
-DbusObjectInfo getDbusObject(sdbusplus::bus_t& bus,
-                             const std::string& interface,
-                             const std::string& subtreePath = ROOT,
-                             const std::string& match = {});
+DbusObjectInfo getDbusObject(
+    sdbusplus::bus_t& bus, const std::string& interface,
+    const std::string& subtreePath = ROOT, const std::string& match = {});
 
 /** @brief Gets the value associated with the given object
  *         and the interface.
@@ -147,11 +147,10 @@ Value getDbusProperty(sdbusplus::bus_t& bus, const std::string& service,
  *  @param[in] interface - Dbus interface.
  *  @return On success returns the map of name value pair.
  */
-PropertyMap
-    getAllDbusProperties(sdbusplus::bus_t& bus, const std::string& service,
-                         const std::string& objPath,
-                         const std::string& interface,
-                         std::chrono::microseconds timeout = IPMI_DBUS_TIMEOUT);
+PropertyMap getAllDbusProperties(
+    sdbusplus::bus_t& bus, const std::string& service,
+    const std::string& objPath, const std::string& interface,
+    std::chrono::microseconds timeout = IPMI_DBUS_TIMEOUT);
 
 /** @brief Gets all managed objects associated with the given object
  *         path and service.
@@ -185,33 +184,9 @@ void setDbusProperty(sdbusplus::bus_t& bus, const std::string& service,
  *  @param[in] match - Identifier for a path.
  *  @returns map of object path and service info.
  */
-ObjectTree getAllDbusObjects(sdbusplus::bus_t& bus,
-                             const std::string& serviceRoot,
-                             const std::string& interface,
-                             const std::string& match = {});
-
-/** @brief Deletes all the dbus objects from the given service root
-           which matches the object identifier.
- *  @param[in] bus - DBUS Bus Object.
- *  @param[in] serviceRoot - Service root path.
- *  @param[in] interface - Dbus interface.
- *  @param[in] match - Identifier for object.
- */
-void deleteAllDbusObjects(sdbusplus::bus_t& bus, const std::string& serviceRoot,
-                          const std::string& interface,
-                          const std::string& match = {})
-    __attribute__((deprecated));
-
-/** @brief Gets the ancestor objects of the given object
-           which implements the given interface.
- *  @param[in] bus - Dbus bus object.
- *  @param[in] path - Child Dbus object path.
- *  @param[in] interfaces - Dbus interface list.
- *  @return map of object path and service info.
- */
-ObjectTree getAllAncestors(sdbusplus::bus_t& bus, const std::string& path,
-                           InterfaceList&& interfaces)
-    __attribute__((deprecated));
+ObjectTree getAllDbusObjects(
+    sdbusplus::bus_t& bus, const std::string& serviceRoot,
+    const std::string& interface, const std::string& match = {});
 
 /********* Begin co-routine yielding alternatives ***************/
 
@@ -237,10 +212,9 @@ boost::system::error_code getService(Context::ptr ctx, const std::string& intf,
  *  @param[out] objectTree - map of object path and service info.
  *  @return map of object path and service info.
  */
-boost::system::error_code getSubTree(Context::ptr ctx,
-                                     const InterfaceList& interface,
-                                     const std::string& subtreePath,
-                                     int32_t depth, ObjectTree& objectTree);
+boost::system::error_code getSubTree(
+    Context::ptr ctx, const InterfaceList& interface,
+    const std::string& subtreePath, int32_t depth, ObjectTree& objectTree);
 
 /** @brief Gets the D-Bus object info implementing the given interface
  *         from the given subtree.
@@ -251,24 +225,22 @@ boost::system::error_code getSubTree(Context::ptr ctx,
  *  @param[out] D-Bus object with path and service name
  *  @return - boost error code object
  */
-boost::system::error_code getDbusObject(Context::ptr ctx,
-                                        const std::string& interface,
-                                        const std::string& subtreePath,
-                                        const std::string& match,
-                                        DbusObjectInfo& dbusObject);
+boost::system::error_code getDbusObject(
+    Context::ptr ctx, const std::string& interface,
+    const std::string& subtreePath, const std::string& match,
+    DbusObjectInfo& dbusObject);
 
 // default for ROOT for subtreePath and std::string{} for match
-static inline boost::system::error_code
-    getDbusObject(Context::ptr ctx, const std::string& interface,
-                  DbusObjectInfo& dbusObject)
+static inline boost::system::error_code getDbusObject(
+    Context::ptr ctx, const std::string& interface, DbusObjectInfo& dbusObject)
 {
     return getDbusObject(ctx, interface, ROOT, {}, dbusObject);
 }
 
 // default std::string{} for match
-static inline boost::system::error_code
-    getDbusObject(Context::ptr ctx, const std::string& interface,
-                  const std::string& subtreePath, DbusObjectInfo& dbusObject)
+static inline boost::system::error_code getDbusObject(
+    Context::ptr ctx, const std::string& interface,
+    const std::string& subtreePath, DbusObjectInfo& dbusObject)
 {
     return getDbusObject(ctx, interface, subtreePath, {}, dbusObject);
 }
@@ -284,10 +256,10 @@ static inline boost::system::error_code
  *  @return - boost error code object
  */
 template <typename Type>
-boost::system::error_code
-    getDbusProperty(Context::ptr ctx, const std::string& service,
-                    const std::string& objPath, const std::string& interface,
-                    const std::string& property, Type& propertyValue)
+boost::system::error_code getDbusProperty(
+    Context::ptr ctx, const std::string& service, const std::string& objPath,
+    const std::string& interface, const std::string& property,
+    Type& propertyValue)
 {
     boost::system::error_code ec;
     auto variant = ctx->bus->yield_method_call<std::variant<Type>>(
@@ -317,11 +289,9 @@ boost::system::error_code
  *  @param[out] properties - map of name value pair.
  *  @return - boost error code object
  */
-boost::system::error_code getAllDbusProperties(Context::ptr ctx,
-                                               const std::string& service,
-                                               const std::string& objPath,
-                                               const std::string& interface,
-                                               PropertyMap& properties);
+boost::system::error_code getAllDbusProperties(
+    Context::ptr ctx, const std::string& service, const std::string& objPath,
+    const std::string& interface, PropertyMap& properties);
 
 /** @brief Sets the property value of the given object.
  *  @param[in] ctx - ipmi::Context::ptr
@@ -332,10 +302,10 @@ boost::system::error_code getAllDbusProperties(Context::ptr ctx,
  *  @param[in] value - value which needs to be set.
  *  @return - boost error code object
  */
-boost::system::error_code
-    setDbusProperty(Context::ptr ctx, const std::string& service,
-                    const std::string& objPath, const std::string& interface,
-                    const std::string& property, const Value& value);
+boost::system::error_code setDbusProperty(
+    Context::ptr ctx, const std::string& service, const std::string& objPath,
+    const std::string& interface, const std::string& property,
+    const Value& value);
 
 /** @brief  Gets all the D-Bus objects from the given service root
  *          which matches the object identifier.
@@ -346,33 +316,18 @@ boost::system::error_code
  *  @param[out] objectree - map of object path and service info.
  *  @return - boost error code object
  */
-boost::system::error_code getAllDbusObjects(Context::ptr ctx,
-                                            const std::string& serviceRoot,
-                                            const std::string& interface,
-                                            const std::string& match,
-                                            ObjectTree& objectTree);
+boost::system::error_code getAllDbusObjects(
+    Context::ptr ctx, const std::string& serviceRoot,
+    const std::string& interface, const std::string& match,
+    ObjectTree& objectTree);
 
 // default std::string{} for match
-static inline boost::system::error_code
-    getAllDbusObjects(Context::ptr ctx, const std::string& serviceRoot,
-                      const std::string& interface, ObjectTree& objectTree)
+static inline boost::system::error_code getAllDbusObjects(
+    Context::ptr ctx, const std::string& serviceRoot,
+    const std::string& interface, ObjectTree& objectTree)
 {
     return getAllDbusObjects(ctx, serviceRoot, interface, {}, objectTree);
 }
-
-/** @brief Deletes all the D-Bus objects from the given service root
-           which matches the object identifier.
- *  @param[in] ctx - ipmi::Context::ptr
- *  @param[out] ec - boost error code object
- *  @param[in] serviceRoot - Service root path.
- *  @param[in] interface - D-Bus interface.
- *  @param[in] match - Identifier for object.
- */
-boost::system::error_code deleteAllDbusObjects(Context::ptr ctx,
-                                               const std::string& serviceRoot,
-                                               const std::string& interface,
-                                               const std::string& match = {})
-    __attribute__((deprecated));
 
 /** @brief Gets all managed objects associated with the given object
  *         path and service.
@@ -382,23 +337,9 @@ boost::system::error_code deleteAllDbusObjects(Context::ptr ctx,
  *  @param[out] objects - map of name value pair.
  *  @return - boost error code object
  */
-boost::system::error_code getManagedObjects(Context::ptr ctx,
-                                            const std::string& service,
-                                            const std::string& objPath,
-                                            ObjectValueTree& objects);
-
-/** @brief Gets the ancestor objects of the given object
-           which implements the given interface.
- *  @param[in] ctx - ipmi::Context::ptr
- *  @param[in] path - Child D-Bus object path.
- *  @param[in] interfaces - D-Bus interface list.
- *  @param[out] ObjectTree - map of object path and service info.
- *  @return - boost error code object
- */
-boost::system::error_code
-    getAllAncestors(Context::ptr ctx, const std::string& path,
-                    const InterfaceList& interfaces, ObjectTree& objectTree)
-        __attribute__((deprecated));
+boost::system::error_code getManagedObjects(
+    Context::ptr ctx, const std::string& service, const std::string& objPath,
+    ObjectValueTree& objects);
 
 /** @brief Gets the value associated with the given object
  *         and the interface.
@@ -410,11 +351,9 @@ boost::system::error_code
  *  @return - boost error code object
  */
 
-boost::system::error_code callDbusMethod(Context::ptr ctx,
-                                         const std::string& service,
-                                         const std::string& objPath,
-                                         const std::string& interface,
-                                         const std::string& method);
+boost::system::error_code callDbusMethod(
+    Context::ptr ctx, const std::string& service, const std::string& objPath,
+    const std::string& interface, const std::string& method);
 
 /********* End co-routine yielding alternatives ***************/
 
@@ -452,15 +391,15 @@ T mappedVariant(const ipmi::PropertyMap& props, const std::string& name,
 struct VariantToDoubleVisitor
 {
     template <typename T>
-    std::enable_if_t<std::is_arithmetic<T>::value, double>
-        operator()(const T& t) const
+    std::enable_if_t<std::is_arithmetic<T>::value, double> operator()(
+        const T& t) const
     {
         return static_cast<double>(t);
     }
 
     template <typename T>
-    std::enable_if_t<!std::is_arithmetic<T>::value, double>
-        operator()(const T&) const
+    std::enable_if_t<!std::is_arithmetic<T>::value, double> operator()(
+        const T&) const
     {
         throw std::invalid_argument("Cannot translate type to double");
     }
@@ -481,6 +420,31 @@ void callDbusMethod(sdbusplus::bus_t& bus, const std::string& service,
                     const std::string& method);
 
 } // namespace method_no_args
+
+template <typename... InputArgs>
+boost::system::error_code callDbusMethod(
+    ipmi::Context::ptr ctx, const std::string& service,
+    const std::string& objPath, const std::string& interface,
+    const std::string& method, const InputArgs&... args)
+{
+    boost::system::error_code ec;
+    ctx->bus->yield_method_call(
+        ctx->yield, ec, service, objPath, interface, method, args...);
+
+    return ec;
+}
+
+template <typename RetType, typename... InputArgs>
+RetType callDbusMethod(ipmi::Context::ptr ctx, boost::system::error_code& ec,
+                       const std::string& service, const std::string& objPath,
+                       const std::string& interface, const std::string& method,
+                       const InputArgs&... args)
+{
+    auto rc = ctx->bus->yield_method_call<RetType>(
+        ctx->yield, ec, service, objPath, interface, method, args...);
+
+    return rc;
+}
 
 /** @brief Perform the low-level i2c bus write-read.
  *  @param[in] i2cBus - i2c bus device node name, such as /dev/i2c-2.

@@ -37,8 +37,6 @@
 #include <stdexcept>
 #include <string_view>
 
-static constexpr bool DEBUG = false;
-
 namespace dynamic_sensors::ipmi::sel
 {
 static const std::filesystem::path selLogDir = "/var/log";
@@ -70,7 +68,7 @@ void save()
     }
 
     // update the file timestamp to the current time
-    if (futimens(fd, NULL) < 0)
+    if (futimens(fd, nullptr) < 0)
     {
         std::cerr << "Failed to update timestamp: "
                   << std::string(strerror(errno));
@@ -105,8 +103,8 @@ static bool getSELLogFiles(std::vector<std::filesystem::path>& selLogFiles)
                                dynamic_sensors::ipmi::sel::selLogFilename))
         {
             // If we find an ipmi_sel log file, save the path
-            selLogFiles.emplace_back(dynamic_sensors::ipmi::sel::selLogDir /
-                                     filename);
+            selLogFiles.emplace_back(
+                dynamic_sensors::ipmi::sel::selLogDir / filename);
         }
     }
     // As the log files rotate, they are appended with a ".#" that is higher for
@@ -173,9 +171,9 @@ static bool findSELEntry(const int recordID,
     return false;
 }
 
-static uint16_t
-    getNextRecordID(const uint16_t recordID,
-                    const std::vector<std::filesystem::path>& selLogFiles)
+static uint16_t getNextRecordID(
+    const uint16_t recordID,
+    const std::vector<std::filesystem::path>& selLogFiles)
 {
     uint16_t nextRecordID = recordID + 1;
     std::string entry;
@@ -546,9 +544,9 @@ ipmi::RspType<uint32_t> ipmiStorageGetSELTime()
 void registerStorageFunctions()
 {
     // <Get SEL Info>
-    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
-                          ipmi::storage::cmdGetSelInfo, ipmi::Privilege::User,
-                          ipmiStorageGetSELInfo);
+    ipmi::registerHandler(
+        ipmi::prioOpenBmcBase, ipmi::netFnStorage, ipmi::storage::cmdGetSelInfo,
+        ipmi::Privilege::User, ipmiStorageGetSELInfo);
 
     // <Get SEL Entry>
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
@@ -561,14 +559,14 @@ void registerStorageFunctions()
                           ipmi::Privilege::Operator, ipmiStorageAddSELEntry);
 
     // <Clear SEL>
-    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
-                          ipmi::storage::cmdClearSel, ipmi::Privilege::Operator,
-                          ipmiStorageClearSEL);
+    ipmi::registerHandler(
+        ipmi::prioOpenBmcBase, ipmi::netFnStorage, ipmi::storage::cmdClearSel,
+        ipmi::Privilege::Operator, ipmiStorageClearSEL);
 
     // <Get SEL Time>
-    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnStorage,
-                          ipmi::storage::cmdGetSelTime, ipmi::Privilege::User,
-                          ipmiStorageGetSELTime);
+    ipmi::registerHandler(
+        ipmi::prioOpenBmcBase, ipmi::netFnStorage, ipmi::storage::cmdGetSelTime,
+        ipmi::Privilege::User, ipmiStorageGetSELTime);
 
     /*Note:
      * <Set SEL Time> and  <Reserve SEl>

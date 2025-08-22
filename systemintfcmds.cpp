@@ -13,7 +13,7 @@
 #include <cstring>
 #include <fstream>
 
-void register_netfn_app_functions() __attribute__((constructor));
+void registerNetFnAppFunctions() __attribute__((constructor));
 
 using namespace sdbusplus::server::xyz::openbmc_project::control;
 
@@ -101,8 +101,8 @@ ipmi::RspType<bool,    // Receive Message Queue Interrupt Enabled
               >
     ipmiAppGetBMCGlobalEnable()
 {
-    return ipmi::responseSuccess(true, false, false, true, 0, false, false,
-                                 false);
+    return ipmi::responseSuccess(
+        true, false, false, true, 0, false, false, false);
 }
 
 ipmi::RspType<> ipmiAppSetBMCGlobalEnable(
@@ -149,7 +149,7 @@ std::unique_ptr<sdbusplus::server::manager_t> objManager
     __attribute__((init_priority(101)));
 } // namespace
 
-void register_netfn_app_functions()
+void registerNetFnAppFunctions()
 {
     // <Read Event Message Buffer>
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnApp,
@@ -167,9 +167,9 @@ void register_netfn_app_functions()
                           ipmi::Privilege::User, ipmiAppGetBMCGlobalEnable);
 
     // <Get Message Flags>
-    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnApp,
-                          ipmi::app::cmdGetMessageFlags, ipmi::Privilege::Admin,
-                          ipmiAppGetMessageFlags);
+    ipmi::registerHandler(
+        ipmi::prioOpenBmcBase, ipmi::netFnApp, ipmi::app::cmdGetMessageFlags,
+        ipmi::Privilege::Admin, ipmiAppGetMessageFlags);
 
     // Create new xyz.openbmc_project.host object on the bus
     auto objPath = std::string{CONTROL_HOST_OBJ_MGR} + '/' + HOST_NAME + '0';
@@ -181,8 +181,8 @@ void register_netfn_app_functions()
     objManager = std::make_unique<sdbusplus::server::manager_t>(
         *sdbusp, CONTROL_HOST_OBJ_MGR);
 
-    host = std::make_unique<phosphor::host::command::Host>(*sdbusp,
-                                                           objPath.c_str());
+    host = std::make_unique<phosphor::host::command::Host>(
+        *sdbusp, objPath.c_str());
     sdbusp->request_name(CONTROL_HOST_BUSNAME);
 
     return;

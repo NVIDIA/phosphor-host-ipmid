@@ -229,9 +229,8 @@ uint16_t convertSelIdToU16(uint32_t id);
 /* Retrive entry data from dbus object such as entry ID,
  * Timestamp and recordID.
  */
-std::chrono::milliseconds getEntryData(const std::string& objPath,
-                                       entryDataMap& entryData,
-                                       uint16_t& recordId);
+std::chrono::milliseconds getEntryData(
+    const std::string& objPath, entryDataMap& entryData, uint16_t& recordId);
 
 /** Construct OEM SEL record according to IPMI spec 32.2, 32.3. */
 void constructOEMSEL(uint8_t recordType, std::chrono::milliseconds timestamp,

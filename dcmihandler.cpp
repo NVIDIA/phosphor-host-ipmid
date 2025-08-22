@@ -24,7 +24,7 @@ using sdbusplus::server::xyz::openbmc_project::network::EthernetInterface;
 using InternalFailure =
     sdbusplus::error::xyz::openbmc_project::common::InternalFailure;
 
-void register_netfn_dcmi_functions() __attribute__((constructor));
+void registerNetFnDcmiFunctions() __attribute__((constructor));
 
 constexpr auto pcapPath = "/xyz/openbmc_project/control/host0/power_cap";
 constexpr auto pcapInterface = "xyz.openbmc_project.Control.Power.Cap";
@@ -107,15 +107,15 @@ bool isDCMIPowerMgmtSupported()
 std::optional<uint32_t> getPcap(ipmi::Context::ptr& ctx)
 {
     std::string service{};
-    boost::system::error_code ec = ipmi::getService(ctx, pcapInterface,
-                                                    pcapPath, service);
+    boost::system::error_code ec =
+        ipmi::getService(ctx, pcapInterface, pcapPath, service);
     if (ec.value())
     {
         return std::nullopt;
     }
     uint32_t pcap{};
-    ec = ipmi::getDbusProperty(ctx, service, pcapPath, pcapInterface,
-                               powerCapProp, pcap);
+    ec = ipmi::getDbusProperty(
+        ctx, service, pcapPath, pcapInterface, powerCapProp, pcap);
     if (ec.value())
     {
         lg2::error("Error in getPcap prop: {ERROR}", "ERROR", ec.message());
@@ -128,15 +128,15 @@ std::optional<uint32_t> getPcap(ipmi::Context::ptr& ctx)
 std::optional<bool> getPcapEnabled(ipmi::Context::ptr& ctx)
 {
     std::string service{};
-    boost::system::error_code ec = ipmi::getService(ctx, pcapInterface,
-                                                    pcapPath, service);
+    boost::system::error_code ec =
+        ipmi::getService(ctx, pcapInterface, pcapPath, service);
     if (ec.value())
     {
         return std::nullopt;
     }
     bool pcapEnabled{};
-    ec = ipmi::getDbusProperty(ctx, service, pcapPath, pcapInterface,
-                               powerCapEnableProp, pcapEnabled);
+    ec = ipmi::getDbusProperty(
+        ctx, service, pcapPath, pcapInterface, powerCapEnableProp, pcapEnabled);
     if (ec.value())
     {
         lg2::error("Error in getPcap prop");
@@ -149,15 +149,15 @@ std::optional<bool> getPcapEnabled(ipmi::Context::ptr& ctx)
 bool setPcap(ipmi::Context::ptr& ctx, const uint32_t powerCap)
 {
     std::string service{};
-    boost::system::error_code ec = ipmi::getService(ctx, pcapInterface,
-                                                    pcapPath, service);
+    boost::system::error_code ec =
+        ipmi::getService(ctx, pcapInterface, pcapPath, service);
     if (ec.value())
     {
         return false;
     }
 
-    ec = ipmi::setDbusProperty(ctx, service, pcapPath, pcapInterface,
-                               powerCapProp, powerCap);
+    ec = ipmi::setDbusProperty(
+        ctx, service, pcapPath, pcapInterface, powerCapProp, powerCap);
     if (ec.value())
     {
         lg2::error("Error in setPcap property: {ERROR}", "ERROR", ec.message());
@@ -170,15 +170,15 @@ bool setPcap(ipmi::Context::ptr& ctx, const uint32_t powerCap)
 bool setPcapEnable(ipmi::Context::ptr& ctx, bool enabled)
 {
     std::string service{};
-    boost::system::error_code ec = ipmi::getService(ctx, pcapInterface,
-                                                    pcapPath, service);
+    boost::system::error_code ec =
+        ipmi::getService(ctx, pcapInterface, pcapPath, service);
     if (ec.value())
     {
         return false;
     }
 
-    ec = ipmi::setDbusProperty(ctx, service, pcapPath, pcapInterface,
-                               powerCapEnableProp, enabled);
+    ec = ipmi::setDbusProperty(
+        ctx, service, pcapPath, pcapInterface, powerCapEnableProp, enabled);
     if (ec.value())
     {
         lg2::error("Error in setPcapEnabled property: {ERROR}", "ERROR",
@@ -202,9 +202,9 @@ std::optional<std::string> readAssetTag(ipmi::Context::ptr& ctx)
     }
 
     std::string assetTag{};
-    ec = ipmi::getDbusProperty(ctx, objectInfo.second, objectInfo.first,
-                               dcmi::assetTagIntf, dcmi::assetTagProp,
-                               assetTag);
+    ec = ipmi::getDbusProperty(
+        ctx, objectInfo.second, objectInfo.first, dcmi::assetTagIntf,
+        dcmi::assetTagProp, assetTag);
     if (ec.value())
     {
         lg2::error("Error in reading asset tag: {ERROR}", "ERROR",
@@ -228,9 +228,9 @@ bool writeAssetTag(ipmi::Context::ptr& ctx, const std::string& assetTag)
         return false;
     }
 
-    ec = ipmi::setDbusProperty(ctx, objectInfo.second, objectInfo.first,
-                               dcmi::assetTagIntf, dcmi::assetTagProp,
-                               assetTag);
+    ec = ipmi::setDbusProperty(
+        ctx, objectInfo.second, objectInfo.first, dcmi::assetTagIntf,
+        dcmi::assetTagProp, assetTag);
     if (ec.value())
     {
         lg2::error("Error in writing asset tag: {ERROR}", "ERROR",
@@ -244,8 +244,8 @@ bool writeAssetTag(ipmi::Context::ptr& ctx, const std::string& assetTag)
 std::optional<std::string> getHostName(ipmi::Context::ptr& ctx)
 {
     std::string service{};
-    boost::system::error_code ec = ipmi::getService(ctx, networkConfigIntf,
-                                                    networkConfigObj, service);
+    boost::system::error_code ec =
+        ipmi::getService(ctx, networkConfigIntf, networkConfigObj, service);
     if (ec.value())
     {
         return std::nullopt;
@@ -262,8 +262,8 @@ std::optional<std::string> getHostName(ipmi::Context::ptr& ctx)
     return hostname;
 }
 
-std::optional<EthernetInterface::DHCPConf>
-    getDHCPEnabled(ipmi::Context::ptr& ctx)
+std::optional<EthernetInterface::DHCPConf> getDHCPEnabled(
+    ipmi::Context::ptr& ctx)
 {
     auto ethdevice = ipmi::getChannelName(ethernetDefaultChannelNum);
     if (ethdevice.empty())
@@ -284,8 +284,8 @@ std::optional<EthernetInterface::DHCPConf>
         return std::nullopt;
     }
     std::string dhcpVal{};
-    ec = ipmi::getDbusProperty(ctx, service, ethernetObj.first, ethernetIntf,
-                               "DHCPEnabled", dhcpVal);
+    ec = ipmi::getDbusProperty(
+        ctx, service, ethernetObj.first, ethernetIntf, "DHCPEnabled", dhcpVal);
     if (ec.value())
     {
         return std::nullopt;
@@ -392,9 +392,9 @@ ipmi::RspType<uint16_t, // reserved
     if (*pcapEnable == false)
     {
         constexpr ipmi::Cc responseNoPowerLimitSet = 0x80;
-        return ipmi::response(responseNoPowerLimitSet, reserved1, exception,
-                              *pcapValue, correctionTime, reserved2,
-                              statsPeriod);
+        return ipmi::response(
+            responseNoPowerLimitSet, reserved1, exception, *pcapValue,
+            correctionTime, reserved2, statsPeriod);
     }
     return ipmi::responseSuccess(reserved1, exception, *pcapValue,
                                  correctionTime, reserved2, statsPeriod);
@@ -492,8 +492,8 @@ ipmi::RspType<uint8_t,          // total tag length
     }
 
     auto totalTagSize = static_cast<uint8_t>(assetTag.size());
-    std::vector<char> data{assetTag.begin() + offset,
-                           assetTag.begin() + offset + count};
+    std::vector<char> data{
+        assetTag.begin() + offset, assetTag.begin() + offset + count};
 
     return ipmi::responseSuccess(totalTagSize, data);
 }
@@ -577,8 +577,8 @@ ipmi::RspType<uint8_t,          // length
     }
 
     auto nameSize = static_cast<uint8_t>(hostname.size());
-    std::vector<char> data{hostname.begin() + offset,
-                           hostname.begin() + offset + count};
+    std::vector<char> data{
+        hostname.begin() + offset, hostname.begin() + offset + count};
 
     return ipmi::responseSuccess(nameSize, data);
 }
@@ -693,8 +693,8 @@ ipmi::RspType<ipmi::message::Payload> getDCMICapabilities(uint8_t parameter)
                 data.value("FlushEntireSELUponRollOver", 0);
             bool recordLevelSELFlushUponRollOver =
                 data.value("RecordLevelSELFlushUponRollOver", 0);
-            uint12_t numberOfSELEntries = data.value("NumberOfSELEntries",
-                                                     0xcac);
+            uint12_t numberOfSELEntries =
+                data.value("NumberOfSELEntries", 0xcac);
             uint8_t tempMonitoringSamplingFreq =
                 data.value("TempMonitoringSamplingFreq", 0);
             payload.pack(numberOfSELEntries, reserved1,
@@ -760,8 +760,8 @@ std::tuple<bool, bool, uint8_t> readTemp(ipmi::Context::ptr& ctx,
     {
         return std::make_tuple(false, false, 0);
     }
-    auto temperature = std::visit(ipmi::VariantToDoubleVisitor(),
-                                  result.at("Value"));
+    auto temperature =
+        std::visit(ipmi::VariantToDoubleVisitor(), result.at("Value"));
     double absTemp = std::abs(temperature);
 
     auto findFactor = result.find("Scale");
@@ -780,13 +780,13 @@ std::tuple<bool, bool, uint8_t> readTemp(ipmi::Context::ptr& ctx,
         tempDegrees = maxTemp;
     }
 
-    return std::make_tuple(true, (temperature < 0),
-                           static_cast<uint8_t>(tempDegrees));
+    return std::make_tuple(
+        true, (temperature < 0), static_cast<uint8_t>(tempDegrees));
 }
 
-std::tuple<std::vector<std::tuple<uint7_t, bool, uint8_t>>, uint8_t>
-    read(ipmi::Context::ptr& ctx, const std::string& type, uint8_t instance,
-         size_t count)
+std::tuple<std::vector<std::tuple<uint7_t, bool, uint8_t>>, uint8_t> read(
+    ipmi::Context::ptr& ctx, const std::string& type, uint8_t instance,
+    size_t count)
 {
     std::vector<std::tuple<uint7_t, bool, uint8_t>> response{};
 
@@ -937,9 +937,8 @@ ipmi::RspType<> setDCMIConfParams(ipmi::Context::ptr& ctx, uint8_t parameter,
     return ipmi::responseSuccess();
 }
 
-ipmi::RspType<ipmi::message::Payload> getDCMIConfParams(ipmi::Context::ptr& ctx,
-                                                        uint8_t parameter,
-                                                        uint8_t setSelector)
+ipmi::RspType<ipmi::message::Payload> getDCMIConfParams(
+    ipmi::Context::ptr& ctx, uint8_t parameter, uint8_t setSelector)
 {
     if (setSelector)
     {
@@ -1019,8 +1018,8 @@ static std::optional<uint16_t> readPower(ipmi::Context::ptr& ctx)
 
     // Return default value if failed to read from D-Bus object
     std::string service{};
-    boost::system::error_code ec = ipmi::getService(ctx, dcmi::sensorValueIntf,
-                                                    objectPath, service);
+    boost::system::error_code ec =
+        ipmi::getService(ctx, dcmi::sensorValueIntf, objectPath, service);
     if (ec.value())
     {
         lg2::error("Failed to fetch service for D-Bus object, "
@@ -1100,9 +1099,9 @@ ipmi::RspType<uint16_t, // current power
     constexpr bool measurementActive = true;
     constexpr bool reserved2 = false;
     auto timestamp = time(nullptr);
-    return ipmi::responseSuccess(power, power, power, power, timestamp,
-                                 samplePeriod, reserved1, measurementActive,
-                                 reserved2);
+    return ipmi::responseSuccess(
+        power, power, power, power, timestamp, samplePeriod, reserved1,
+        measurementActive, reserved2);
 }
 
 namespace dcmi
@@ -1110,10 +1109,9 @@ namespace dcmi
 namespace sensor_info
 {
 
-std::tuple<std::vector<uint16_t>, uint8_t> read(const std::string& type,
-                                                uint8_t instance,
-                                                const nlohmann::json& config,
-                                                uint8_t count)
+std::tuple<std::vector<uint16_t>, uint8_t> read(
+    const std::string& type, uint8_t instance, const nlohmann::json& config,
+    uint8_t count)
 {
     std::vector<uint16_t> responses{};
 
@@ -1177,17 +1175,17 @@ ipmi::RspType<uint8_t,              // total available instances
     return ipmi::responseSuccess(totalInstances, numRecords, sensors);
 }
 
-void register_netfn_dcmi_functions()
+void registerNetFnDcmiFunctions()
 {
     // <Get Power Limit>
-    registerGroupHandler(ipmi::prioOpenBmcBase, ipmi::groupDCMI,
-                         ipmi::dcmi::cmdGetPowerLimit, ipmi::Privilege::User,
-                         getPowerLimit);
+    registerGroupHandler(
+        ipmi::prioOpenBmcBase, ipmi::groupDCMI, ipmi::dcmi::cmdGetPowerLimit,
+        ipmi::Privilege::User, getPowerLimit);
 
     // <Set Power Limit>
-    registerGroupHandler(ipmi::prioOpenBmcBase, ipmi::groupDCMI,
-                         ipmi::dcmi::cmdSetPowerLimit,
-                         ipmi::Privilege::Operator, setPowerLimit);
+    registerGroupHandler(
+        ipmi::prioOpenBmcBase, ipmi::groupDCMI, ipmi::dcmi::cmdSetPowerLimit,
+        ipmi::Privilege::Operator, setPowerLimit);
 
     // <Activate/Deactivate Power Limit>
     registerGroupHandler(ipmi::prioOpenBmcBase, ipmi::groupDCMI,
@@ -1195,14 +1193,14 @@ void register_netfn_dcmi_functions()
                          ipmi::Privilege::Operator, applyPowerLimit);
 
     // <Get Asset Tag>
-    registerGroupHandler(ipmi::prioOpenBmcBase, ipmi::groupDCMI,
-                         ipmi::dcmi::cmdGetAssetTag, ipmi::Privilege::User,
-                         getAssetTag);
+    registerGroupHandler(
+        ipmi::prioOpenBmcBase, ipmi::groupDCMI, ipmi::dcmi::cmdGetAssetTag,
+        ipmi::Privilege::User, getAssetTag);
 
     // <Set Asset Tag>
-    registerGroupHandler(ipmi::prioOpenBmcBase, ipmi::groupDCMI,
-                         ipmi::dcmi::cmdSetAssetTag, ipmi::Privilege::Operator,
-                         setAssetTag);
+    registerGroupHandler(
+        ipmi::prioOpenBmcBase, ipmi::groupDCMI, ipmi::dcmi::cmdSetAssetTag,
+        ipmi::Privilege::Operator, setAssetTag);
 
     // <Get Management Controller Identifier String>
     registerGroupHandler(ipmi::prioOpenBmcBase, ipmi::groupDCMI,
@@ -1220,9 +1218,9 @@ void register_netfn_dcmi_functions()
                          ipmi::Privilege::User, getDCMICapabilities);
 
     // <Get Power Reading>
-    registerGroupHandler(ipmi::prioOpenBmcBase, ipmi::groupDCMI,
-                         ipmi::dcmi::cmdGetPowerReading, ipmi::Privilege::User,
-                         getPowerReading);
+    registerGroupHandler(
+        ipmi::prioOpenBmcBase, ipmi::groupDCMI, ipmi::dcmi::cmdGetPowerReading,
+        ipmi::Privilege::User, getPowerReading);
 
 // The Get sensor should get the senor details dynamically when
 // FEATURE_DYNAMIC_SENSORS is enabled.

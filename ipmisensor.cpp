@@ -50,33 +50,34 @@ struct event_data_t
     char text[64];
 };
 
-event_data_t g_fwprogress02h[] = {{0x00, "Unspecified"},
-                                  {0x01, "Memory Init"},
-                                  {0x02, "HD Init"},
-                                  {0x03, "Secondary Proc Init"},
-                                  {0x04, "User Authentication"},
-                                  {0x05, "User init system setup"},
-                                  {0x06, "USB configuration"},
-                                  {0x07, "PCI configuration"},
-                                  {0x08, "Option ROM Init"},
-                                  {0x09, "Video Init"},
-                                  {0x0A, "Cache Init"},
-                                  {0x0B, "SM Bus init"},
-                                  {0x0C, "Keyboard Init"},
-                                  {0x0D, "Embedded ctrl init"},
-                                  {0x0E, "Docking station attachment"},
-                                  {0x0F, "Enable docking station"},
-                                  {0x10, "Docking station ejection"},
-                                  {0x11, "Disabling docking station"},
-                                  {0x12, "Calling OS Wakeup"},
-                                  {0x13, "Starting OS"},
-                                  {0x14, "Baseboard Init"},
-                                  {0x15, ""},
-                                  {0x16, "Floppy Init"},
-                                  {0x17, "Keyboard Test"},
-                                  {0x18, "Pointing Device Test"},
-                                  {0x19, "Primary Proc Init"},
-                                  {0xFF, "Unknown"}};
+event_data_t g_fwprogress02h[] = {
+    {0x00, "Unspecified"},
+    {0x01, "Memory Init"},
+    {0x02, "HD Init"},
+    {0x03, "Secondary Proc Init"},
+    {0x04, "User Authentication"},
+    {0x05, "User init system setup"},
+    {0x06, "USB configuration"},
+    {0x07, "PCI configuration"},
+    {0x08, "Option ROM Init"},
+    {0x09, "Video Init"},
+    {0x0A, "Cache Init"},
+    {0x0B, "SM Bus init"},
+    {0x0C, "Keyboard Init"},
+    {0x0D, "Embedded ctrl init"},
+    {0x0E, "Docking station attachment"},
+    {0x0F, "Enable docking station"},
+    {0x10, "Docking station ejection"},
+    {0x11, "Disabling docking station"},
+    {0x12, "Calling OS Wakeup"},
+    {0x13, "Starting OS"},
+    {0x14, "Baseboard Init"},
+    {0x15, ""},
+    {0x16, "Floppy Init"},
+    {0x17, "Keyboard Test"},
+    {0x18, "Pointing Device Test"},
+    {0x19, "Primary Proc Init"},
+    {0xFF, "Unknown"}};
 
 event_data_t g_fwprogress00h[] = {
     {0x00, "Unspecified."},
@@ -153,8 +154,8 @@ int set_sensor_dbus_state_fwprogress(const sensorRES_t* pRec,
 int set_sensor_dbus_state_osbootcount(const sensorRES_t* pRec, const lookup_t*,
                                       const char*)
 {
-    return set_sensor_dbus_state_y(pRec->sensor_number, "setValue",
-                                   pRec->assert_state7_0);
+    return set_sensor_dbus_state_y(
+        pRec->sensor_number, "setValue", pRec->assert_state7_0);
 }
 
 int set_sensor_dbus_state_system_event(const sensorRES_t* pRec,
@@ -243,7 +244,7 @@ lookup_t g_ipmidbuslookup[] = {
     {0x12, 0x04, set_sensor_dbus_state_system_event, "setValue", "", ""},
     {0xCA, 0x00, set_sensor_dbus_state_simple, "setValue", "Disabled", ""},
     {0xCA, 0x01, set_sensor_dbus_state_simple, "setValue", "Enabled", ""},
-    {0xFF, 0xFF, NULL, "", "", ""}};
+    {0xFF, 0xFF, nullptr, "", "", ""}};
 
 void reportSensorEventAssert(const sensorRES_t* pRec, int index)
 {

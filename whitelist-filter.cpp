@@ -84,8 +84,8 @@ void AllowlistFilter::cacheRestrictedMode(
         try
         {
             restrictionModeSetting = dev;
-            restrictionModeService = objects->service(restrictionModeSetting,
-                                                      restrictionModeIntf);
+            restrictionModeService =
+                objects->service(restrictionModeSetting, restrictionModeIntf);
         }
         catch (const std::out_of_range& e)
         {

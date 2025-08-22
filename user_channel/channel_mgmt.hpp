@@ -38,7 +38,7 @@ using DbusChObjProperties = std::vector<std::pair<std::string, DbusVariant>>;
 
 static constexpr const char* ipmiChannelMutex = "ipmi_channel_mutex";
 static constexpr const char* ipmiChMutexCleanupLockFile =
-    "/var/lib/ipmi/ipmi_channel_mutex_cleanup";
+    "/run/ipmi/ipmi_channel_mutex_cleanup";
 
 /** @struct ChannelAccessData
  *
@@ -368,8 +368,8 @@ class ChannelConfig
      *
      *  @return support session type
      */
-    EChannelSessSupported
-        convertToSessionSupportIndex(const std::string& value);
+    EChannelSessSupported convertToSessionSupportIndex(
+        const std::string& value);
 
     /** @brief function to convert medium type string to value type
      *
