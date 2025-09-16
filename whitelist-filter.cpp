@@ -230,9 +230,11 @@ ipmi::Cc AllowlistFilter::filterMessage(ipmi::message::Request::ptr request)
     if (request->ctx->channel == ipmi::channelSystemIface &&
         restrictedMode[hostIdx])
     {
-        if (!std::binary_search(
-                allowlist.cbegin(), allowlist.cend(),
-                std::make_pair(request->ctx->netFn, request->ctx->cmd)))
+        if (!std::any_of(allowlist.cbegin(), allowlist.cend(),
+                         [&](const netfncmd_tuple& entry) {
+            return std::get<0>(entry) == request->ctx->netFn &&
+                   std::get<1>(entry) == request->ctx->cmd;
+        }))
         {
             lg2::error("Net function not allowlisted, "
                        "NetFn: {NETFN}, Cmd: {CMD}",

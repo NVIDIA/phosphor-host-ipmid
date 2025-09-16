@@ -115,7 +115,7 @@ Host::FirmwareCondition Host::currentFirmwareCondition() const
     hostAckTimer.stop();
 
     lg2::debug("currentFirmwareCondition: hostCondition is ready!");
-    return hostCondition.get()->value();
+    return hostCondition.get()->value_or(Host::FirmwareCondition::Off);
 #else
     return FirmwareCondition::Running;
 #endif
