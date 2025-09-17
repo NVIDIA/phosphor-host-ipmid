@@ -2780,11 +2780,10 @@ static int getSensorDataRecord(
             break;
         }
     }
-    constructDiscreteEventSdr(
-        interfaces, sensor::bootProgressInterface,
-        static_cast<uint8_t>(SensorTypeCodes::systemFirmwareProgress),
-        sensorNum, recordID, systemFirmwareEntityId, readBytes,
-        systemSoftwareId, path, recordData);
+    constructDiscreteEventSdr(interfaces, sensor::bootProgressInterface,
+                              getSensorTypeFromPath(path), sensorNum, recordID,
+                              systemFirmwareEntityId, readBytes,
+                              systemSoftwareId, path, recordData);
     constructDiscreteEventSdr(interfaces, sensor::cpuInterface,
                               static_cast<uint8_t>(SensorTypeCodes::processor),
                               sensorNum, recordID, processorEntityId, readBytes,
