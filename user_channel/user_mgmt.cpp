@@ -35,7 +35,9 @@
 #include <xyz/openbmc_project/Common/error.hpp>
 #include <xyz/openbmc_project/User/Common/error.hpp>
 
+#include <algorithm>
 #include <cerrno>
+#include <cstring>
 #include <fstream>
 #include <regex>
 #include <variant>
@@ -175,9 +177,8 @@ void userUpdateHelper(UserAccess& usrAccess, const UserUpdateEvent& userEvent,
         size_t usrIndex = 1;
         for (; usrIndex <= ipmiMaxUsers; ++usrIndex)
         {
-            std::string curName(
-                reinterpret_cast<char*>(userData->user[usrIndex].userName), 0,
-                ipmiMaxUserName);
+            std::string curName =
+                safeUsernameString(userData->user[usrIndex].userName);
             if (userName == curName)
             {
                 break; // found the entry
@@ -221,14 +222,9 @@ void userUpdateHelper(UserAccess& usrAccess, const UserUpdateEvent& userEvent,
             }
             case UserUpdateEvent::userRenamed:
             {
-                std::fill(
-                    static_cast<uint8_t*>(userData->user[usrIndex].userName),
-                    static_cast<uint8_t*>(userData->user[usrIndex].userName) +
-                        sizeof(userData->user[usrIndex].userName),
-                    0);
-                std::strncpy(
-                    reinterpret_cast<char*>(userData->user[usrIndex].userName),
-                    newUserName.c_str(), ipmiMaxUserName);
+                safeUsernameCopyToBuffer(
+                    userData->user[usrIndex].userName,
+                    sizeof(userData->user[usrIndex].userName), newUserName);
                 ipmiRenameUserEntryPassword(userName, newUserName);
                 break;
             }
@@ -719,8 +715,8 @@ Cc UserAccess::setUserPassword(const uint8_t userId, const char* userPassword)
     }
 
     ipmi::SecureString passwd;
-    passwd.assign(reinterpret_cast<const char*>(userPassword), 0,
-                  maxIpmi20PasswordSize);
+    size_t len = strnlen(userPassword, maxIpmi20PasswordSize);
+    passwd.assign(reinterpret_cast<const char*>(userPassword), len);
     int retval = pamUpdatePasswd(userName.c_str(), passwd.c_str());
 
     switch (retval)
@@ -754,8 +750,9 @@ Cc UserAccess::setUserEnabledState(const uint8_t userId,
         userLock{*userMutex};
     UserInfo* userInfo = getUserInfo(userId);
     std::string userName;
-    userName.assign(reinterpret_cast<char*>(userInfo->userName), 0,
-                    ipmiMaxUserName);
+
+    safeUsernameAssign(userName, userInfo->userName);
+
     if (userName.empty())
     {
         lg2::debug("User name not set / invalid");
@@ -857,8 +854,7 @@ Cc UserAccess::setUserPrivilegeAccess(const uint8_t userId, const uint8_t chNum,
         userLock{*userMutex};
     UserInfo* userInfo = getUserInfo(userId);
     std::string userName;
-    userName.assign(reinterpret_cast<char*>(userInfo->userName), 0,
-                    ipmiMaxUserName);
+    safeUsernameAssign(userName, userInfo->userName);
     if (userName.empty())
     {
         lg2::debug("User name not set / invalid");
@@ -907,9 +903,8 @@ uint8_t UserAccess::getUserId(const std::string& userName)
     size_t usrIndex = 1;
     for (; usrIndex <= ipmiMaxUsers; ++usrIndex)
     {
-        std::string curName(
-            reinterpret_cast<char*>(usersTbl.user[usrIndex].userName), 0,
-            ipmiMaxUserName);
+        std::string curName =
+            safeUsernameString(usersTbl.user[usrIndex].userName);
         if (userName == curName)
         {
             break; // found the entry
@@ -931,8 +926,7 @@ Cc UserAccess::getUserName(const uint8_t userId, std::string& userName)
         return ccParmOutOfRange;
     }
     UserInfo* userInfo = getUserInfo(userId);
-    userName.assign(reinterpret_cast<char*>(userInfo->userName), 0,
-                    ipmiMaxUserName);
+    safeUsernameAssign(userName, userInfo->userName);
     return ccSuccess;
 }
 
@@ -1020,9 +1014,9 @@ Cc UserAccess::setUserName(const uint8_t userId, const std::string& userName)
             return ccUnspecifiedError;
         }
 
-        std::memset(userInfo->userName, 0, sizeof(userInfo->userName));
-        std::memcpy(userInfo->userName,
-                    static_cast<const void*>(userName.data()), userName.size());
+        safeUsernameCopyToBuffer(
+            userInfo->userName, sizeof(userInfo->userName), userName);
+
         userInfo->userInSystem = true;
         for (size_t chIndex = 0; chIndex < ipmiMaxChannels; chIndex++)
         {
@@ -1047,14 +1041,9 @@ Cc UserAccess::setUserName(const uint8_t userId, const std::string& userName)
                        renameUserMethod, "PATH", userMgrObjBasePath);
             return ccUnspecifiedError;
         }
-        std::fill(static_cast<uint8_t*>(userInfo->userName),
-                  static_cast<uint8_t*>(userInfo->userName) +
-                      sizeof(userInfo->userName),
-                  0);
 
-        std::memset(userInfo->userName, 0, sizeof(userInfo->userName));
-        std::memcpy(userInfo->userName,
-                    static_cast<const void*>(userName.data()), userName.size());
+        safeUsernameCopyToBuffer(
+            userInfo->userName, sizeof(userInfo->userName), userName);
 
         ipmiRenameUserEntryPassword(oldUser, userName);
         userInfo->userInSystem = true;
@@ -1210,13 +1199,10 @@ void UserAccess::readUserData()
         }
         std::string userName = userInfo[jsonUserName].get<std::string>();
 
-        // Zero-fill the userName array to ensure null termination
-        std::memset(usersTbl.user[usrIndex].userName, 0, ipmiMaxUserName);
-
-        // Copy up to ipmiMaxUserName - 1 characters from userName to prevent
-        // overflow
-        std::strncpy(reinterpret_cast<char*>(usersTbl.user[usrIndex].userName),
-                     userName.c_str(), ipmiMaxUserName - 1);
+        // Fixed-width username buffer in struct
+        safeUsernameCopyToBuffer(
+            usersTbl.user[usrIndex].userName,
+            sizeof(usersTbl.user[usrIndex].userName), userName);
 
         std::vector<std::string> privilege =
             userInfo[jsonPriv].get<std::vector<std::string>>();
@@ -1316,9 +1302,8 @@ void UserAccess::writeUserData()
     for (size_t usrIndex = 1; usrIndex <= ipmiMaxUsers; ++usrIndex)
     {
         Json jsonUserInfo;
-        jsonUserInfo[jsonUserName] = std::string(
-            reinterpret_cast<char*>(usersTbl.user[usrIndex].userName), 0,
-            ipmiMaxUserName);
+        jsonUserInfo[jsonUserName] =
+            safeUsernameString(usersTbl.user[usrIndex].userName);
         std::vector<std::string> privilege(ipmiMaxChannels);
         std::vector<bool> ipmiEnabled(ipmiMaxChannels);
         std::vector<bool> linkAuthEnabled(ipmiMaxChannels);
@@ -1395,9 +1380,8 @@ bool UserAccess::addUserEntry(const std::string& userName,
     // user index 0 is reserved, starts with 1
     for (size_t usrIndex = 1; usrIndex <= ipmiMaxUsers; ++usrIndex)
     {
-        std::string curName(
-            reinterpret_cast<char*>(userData->user[usrIndex].userName), 0,
-            ipmiMaxUserName);
+        std::string curName =
+            safeUsernameString(userData->user[usrIndex].userName);
         if (userName == curName)
         {
             lg2::debug("Username {USER_NAME} exists", "USER_NAME", userName);
@@ -1416,8 +1400,11 @@ bool UserAccess::addUserEntry(const std::string& userName,
         lg2::error("No empty slots found");
         return false;
     }
-    std::strncpy(reinterpret_cast<char*>(userData->user[freeIndex].userName),
-                 userName.c_str(), ipmiMaxUserName);
+
+    safeUsernameCopyToBuffer(
+        userData->user[freeIndex].userName,
+        sizeof(userData->user[freeIndex].userName), userName);
+
     uint8_t priv =
         static_cast<uint8_t>(UserAccess::convertToIPMIPrivilege(sysPriv)) &
         privMask;
@@ -1439,14 +1426,10 @@ void UserAccess::deleteUserIndex(const size_t& usrIdx)
 {
     UsersTbl* userData = getUsersTblPtr();
 
-    std::string userName(
-        reinterpret_cast<char*>(userData->user[usrIdx].userName), 0,
-        ipmiMaxUserName);
+    std::string userName = safeUsernameString(userData->user[usrIdx].userName);
     ipmiClearUserEntryPassword(userName);
-    std::fill(static_cast<uint8_t*>(userData->user[usrIdx].userName),
-              static_cast<uint8_t*>(userData->user[usrIdx].userName) +
-                  sizeof(userData->user[usrIdx].userName),
-              0);
+    std::memset(userData->user[usrIdx].userName, 0,
+                sizeof(userData->user[usrIdx].userName));
     for (size_t chIndex = 0; chIndex < ipmiMaxChannels; ++chIndex)
     {
         userData->user[usrIdx].userPrivAccess[chIndex].privilege = privNoAccess;
@@ -1645,9 +1628,8 @@ void UserAccess::cacheUserDataFile()
             std::vector<std::string> usrGrps;
             std::string usrPriv;
 
-            std::string userName(
-                reinterpret_cast<char*>(userData->user[usrIdx].userName), 0,
-                ipmiMaxUserName);
+            std::string userName =
+                safeUsernameString(userData->user[usrIdx].userName);
             sdbusplus::message::object_path tempUserPath(userObjBasePath);
             tempUserPath /= userName;
             std::string usersPath(tempUserPath);
