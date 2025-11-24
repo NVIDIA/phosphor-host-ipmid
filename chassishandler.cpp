@@ -2437,6 +2437,40 @@ void initEnabledValue()
     }
 }
 
+void initEnabledMatch()
+{
+    using namespace sdbusplus::bus::match::rules;
+    std::shared_ptr<sdbusplus::asio::connection> busp = getSdBus();
+
+    constexpr std::string_view path{"/xyz/openbmc_project/control/host0/boot"};
+    constexpr std::string_view inf{"xyz.openbmc_project.Object.Enable"};
+
+    matchPtr = std::make_unique<sdbusplus::bus::match_t>(
+        *busp, sdbusplus::bus::match::rules::propertiesChanged(path, inf),
+        [](sdbusplus::message::message& msg) {
+        std::map<std::string, std::variant<bool>> props;
+        std::string iface;
+        try
+        {
+            msg.read(iface, props);
+        }
+        catch (const std::exception& e)
+        {
+            phosphor::logging::log<phosphor::logging::level::ERR>(
+                " propertiesChanged Exception caught in Get "
+                "matchPtr");
+            return;
+        }
+
+        auto it = props.find("Enabled");
+        bool* enabledValue = std::get_if<bool>(&it->second);
+        if (enabledValue && *enabledValue)
+        {
+            bootInitiatorAckData |= 0x01;
+        }
+    });
+}
+
 /** @brief implements the Get Chassis system boot option
  *  @param ctx - context pointer
  *  @param bootOptionParameter   - boot option parameter selector
@@ -3255,6 +3289,7 @@ ipmi::RspType<> ipmiSetFrontPanelButtonEnables(
 void registerNetFnChassisFunctions()
 {
     createIdentifyTimer();
+    initEnabledMatch();
     initEnabledValue();
 
     // Get Chassis Capabilities
