@@ -11,8 +11,10 @@
 #include <xyz/openbmc_project/Common/error.hpp>
 #include <xyz/openbmc_project/Logging/SEL/error.hpp>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <map>
 constexpr auto DEFALUT_SENSOR_NUMBER = 0xff;
 constexpr auto INVALID_SENSOR_NUMBER = 0xffff;
 constexpr auto MAX_ALLOWED_SEL_ENTRIES = 4000;
@@ -69,7 +71,7 @@ SELLoggingIdMap selLoggingIdMap __attribute__((init_priority(101)));
 bool selCacheMapInitialized = false;
 // This is used to track the number of all SEL entries that exist in the logging
 // system but might not be added to the SEL cache map due to errors.
-static uint16_t selUncachedEntryCount = 0;
+static uint16_t selCachedEntryCount = 0;
 std::unique_ptr<sdbusplus::bus::match::match> selAddedMatch
     __attribute__((init_priority(101)));
 std::unique_ptr<sdbusplus::bus::match::match> selRemovedMatch
@@ -93,17 +95,14 @@ namespace sel
 namespace internal
 {
 
-GetSELEntryResponse createSELEntry(const std::string& objPath)
+static GetSELEntryResponse createSELEntryFromMaps(
+    const std::string& objPath, const entryDataMap& entryData,
+    std::chrono::milliseconds chronoTimeStamp, uint16_t dbusRecordId)
 {
     ipmi::sel::GetSELEntryResponse record{};
-
-    uint16_t recordId;
     uint32_t loggingId;
     uint16_t selRecordId;
-    entryDataMap entryData;
-    std::chrono::milliseconds chronoTimeStamp =
-        getEntryData(objPath, entryData, recordId);
-    record.event.eventRecord.recordID = recordId;
+    record.event.eventRecord.recordID = dbusRecordId;
     additionalDataMap m;
     auto iterData = entryData.find(propAdditionalData);
     if (iterData == entryData.end())
@@ -120,7 +119,6 @@ GetSELEntryResponse createSELEntry(const std::string& objPath)
     {
         return ipmi::sel::GetSELEntryResponse{};
     }
-    selUncachedEntryCount++;
     if (recordType != systemEventRecord)
     {
         log<level::ERR>("Record type is not system event record");
@@ -246,7 +244,28 @@ GetSELEntryResponse createSELEntry(const std::string& objPath)
     memcpy(&record.event.eventRecord.eventData1, sensorData.data(),
            std::min(sensorData.size(), static_cast<size_t>(selDataSize)));
 
+    selCachedEntryCount++;
     return record;
+}
+
+GetSELEntryResponse createSELEntry(const std::string& objPath)
+{
+    entryDataMap entryData;
+    uint16_t recordId;
+    std::chrono::milliseconds chronoTimeStamp =
+        getEntryData(objPath, entryData, recordId);
+    return createSELEntryFromMaps(
+        objPath, entryData, chronoTimeStamp, recordId);
+}
+
+GetSELEntryResponse createSELEntry(const std::string& objPath,
+                                   const entryDataMap& entryData)
+{
+    uint16_t recordId;
+    std::chrono::milliseconds chronoTimeStamp =
+        getEntryData(entryData, recordId);
+    return createSELEntryFromMaps(
+        objPath, entryData, chronoTimeStamp, recordId);
 }
 
 } // namespace internal
@@ -254,29 +273,32 @@ GetSELEntryResponse createSELEntry(const std::string& objPath)
 } // namespace ipmi
 
 std::optional<std::pair<uint16_t, SELEntry>> parseLoggingEntry(
-    const std::string& p)
+    const std::string& p,
+    const ipmi::sel::internal::entryDataMap* entryData = nullptr)
 {
     try
     {
         auto id = getLoggingId(p);
         ipmi::sel::GetSELEntryResponse record{};
-        record = ipmi::sel::internal::createSELEntry(p);
+        if (entryData)
+            record = ipmi::sel::internal::createSELEntry(p, *entryData);
+        else
+            record = ipmi::sel::internal::createSELEntry(p);
+
         if (record.event.eventRecord.recordID == 0)
         {
-            log<level::INFO>("Empty SEL record, can be due to none SEL type");
+            log<level::DEBUG>("Empty SEL record, can be due to none SEL type");
             return std::nullopt;
         }
         uint16_t selRecordID = record.event.eventRecord.recordID;
-        // Returning a pair of
-        // <SELEntry ID number, <phosphor-logging ID number, SEL record
-        // information entry>>
         return std::make_pair(selRecordID,
                               std::make_pair(id, std::move(record.event)));
     }
     catch (const std::exception& e)
     {
-        fprintf(stderr, "Failed to convert %s to SEL: %s\n", p.c_str(),
-                e.what());
+        log<level::INFO>("Failed to convert to SEL",
+                         entry("PATH=%s", p.c_str()),
+                         entry("ERROR=%s", e.what()));
     }
     return std::nullopt;
 }
@@ -409,24 +431,50 @@ void registerSelCallbackHandler()
 bool initSELCache()
 {
     registerSelCallbackHandler();
-    ipmi::sel::ObjectPaths paths;
-    selUncachedEntryCount = 0;
-    try
+    selCachedEntryCount = 0;
+
+    std::map<std::string, ipmi::sel::internal::entryDataMap> bulkData;
+    const bool bulkOk = ipmi::sel::internal::readLoggingEntryDataBulk(bulkData);
+
+    if (bulkOk)
     {
-        ipmi::sel::readLoggingObjectPaths(paths);
-    }
-    catch (const sdbusplus::exception::exception& e)
-    {
-        log<level::ERR>("Failed to get logging object paths");
-        return false;
-    }
-    for (const auto& p : paths)
-    {
-        auto entry = parseLoggingEntry(p);
-        if (entry)
+        log<level::INFO>("initSELCache: using GetManagedObjects bulk read",
+                         entry("COUNT=%zu", bulkData.size()));
+
+        for (const auto& [p, data] : bulkData)
         {
-            selCacheMap.insert_or_assign(
-                entry->first, std::move(entry->second));
+            auto entry = parseLoggingEntry(p, &data);
+            if (entry)
+            {
+                selCacheMap.insert_or_assign(
+                    entry->first, std::move(entry->second));
+            }
+        }
+    }
+    else
+    {
+        log<level::INFO>(
+            "initSELCache: bulk read failed, falling back to per-entry GetAll");
+        ipmi::sel::ObjectPaths paths;
+        try
+        {
+            ipmi::sel::readLoggingObjectPaths(paths);
+        }
+        catch (const sdbusplus::exception::exception& e)
+        {
+            log<level::ERR>("Failed to get logging object paths");
+            return false;
+        }
+        log<level::DEBUG>("initSELCache: loading logging object paths",
+                          entry("COUNT=%zu", paths.size()));
+        for (const auto& p : paths)
+        {
+            auto entry = parseLoggingEntry(p);
+            if (entry)
+            {
+                selCacheMap.insert_or_assign(
+                    entry->first, std::move(entry->second));
+            }
         }
     }
     // Compare the number of SEL entries  to the number of SEL files .
@@ -438,7 +486,7 @@ bool initSELCache()
                 std::filesystem::directory_iterator{
                     std::string(selPersistPath)},
                 std::filesystem::directory_iterator{});
-            if (selUncachedEntryCount >= selPersistFileNum)
+            if (selCachedEntryCount >= selPersistFileNum)
             {
                 selCacheMapInitialized = true;
             }
@@ -447,10 +495,17 @@ bool initSELCache()
                 log<level::ERR>(
                     "Not all SELs are restored. Please wait few minutes and try again");
             }
+            log<level::INFO>("initSELCache: Finished loading SEL cache",
+                             entry("SELMAPCOUNT=%zu", selCacheMap.size()),
+                             entry("CACHECOUNT=%zu", selCachedEntryCount),
+                             entry("FILECOUNT=%zu", selPersistFileNum));
         }
         return true;
     } // if selPersistPath is not defined work the same as the old version.
     selCacheMapInitialized = true;
+    log<level::INFO>("initSELCache: Finished loading SEL cache from D-Bus",
+                     entry("SELMAPCOUNT=%zu", selCacheMap.size()),
+                     entry("CACHECOUNT=%zu", selCachedEntryCount));
     return true;
 }
 

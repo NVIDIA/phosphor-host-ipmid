@@ -9,6 +9,8 @@
 #include <charconv>
 #include <chrono>
 #include <filesystem>
+#include <map>
+#include <string>
 #include <vector>
 
 using namespace phosphor::logging;
@@ -23,6 +25,32 @@ namespace sel
 
 namespace internal
 {
+
+static void mergeLoggingEntryProperty(const std::string& name,
+                                      const ipmi::Value& v, entryDataMap& out)
+{
+    if (name == "Id")
+    {
+        if (const uint32_t* u = std::get_if<uint32_t>(&v))
+        {
+            out[name] = *u;
+        }
+    }
+    else if (name == "Timestamp")
+    {
+        if (const uint64_t* u = std::get_if<uint64_t>(&v))
+        {
+            out[name] = *u;
+        }
+    }
+    else if (name == "AdditionalData")
+    {
+        if (const auto* m = std::get_if<std::map<std::string, std::string>>(&v))
+        {
+            out[name] = *m;
+        }
+    }
+}
 
 /** Parse the entry with format like key=val */
 std::pair<std::string, std::string> parseEntry(const std::string& entry)
@@ -104,6 +132,28 @@ uint16_t convertSelIdToU16(uint32_t id)
     return static_cast<uint16_t>(id);
 }
 
+std::chrono::milliseconds getEntryData(const entryDataMap& entryData,
+                                       uint16_t& recordId)
+{
+    static constexpr auto propId = "Id";
+    auto iterId = entryData.find(propId);
+    if (iterId == entryData.end())
+    {
+        log<level::ERR>("Error in reading Id of logging entry");
+        elog<InternalFailure>();
+    }
+    recordId = static_cast<uint16_t>(std::get<uint32_t>(iterId->second));
+
+    static constexpr auto propTimeStamp = "Timestamp";
+    auto iterTimeStamp = entryData.find(propTimeStamp);
+    if (iterTimeStamp == entryData.end())
+    {
+        log<level::ERR>("Error in reading Timestamp of logging entry");
+        elog<InternalFailure>();
+    }
+    return std::chrono::milliseconds(std::get<uint64_t>(iterTimeStamp->second));
+}
+
 /* Retrive entry data from dbus object such as entry ID,
  * Timestamp and recordID.
  */
@@ -125,28 +175,56 @@ std::chrono::milliseconds getEntryData(
         elog<InternalFailure>();
     }
 
-    //    entryDataMap entryData;
     reply.read(entryData);
-    // Read Id from the log entry.
-    static constexpr auto propId = "Id";
-    auto iterId = entryData.find(propId);
-    if (iterId == entryData.end())
+    return getEntryData(entryData, recordId);
+}
+
+bool readLoggingEntryDataBulk(std::map<std::string, entryDataMap>& outByPath)
+{
+    outByPath.clear();
+
+    try
     {
-        log<level::ERR>("Error in reading Id of logging entry");
-        elog<InternalFailure>();
+        sdbusplus::bus_t bus{ipmid_get_sd_bus_connection()};
+        auto service = ipmi::getService(bus, objMgrIntf, std::string(logObj));
+        auto tree = ipmi::getManagedObjects(bus, service, std::string(logObj));
+
+        const std::string entryPrefix = std::string(logBasePath) + "/";
+        for (const auto& [objPath, ifaces] : tree)
+        {
+            const std::string p = static_cast<std::string>(objPath);
+            // Filter out the non-Logging.Entry objects.
+            if (p.rfind(entryPrefix, 0) != 0)
+            {
+                continue;
+            }
+            auto it = ifaces.find(logEntryIntf);
+            // Skip objects that don't implement the Logging.Entry interface.
+            if (it == ifaces.end())
+            {
+                continue;
+            }
+            entryDataMap tmpMap;
+            // Merge the properties of the Logging.Entry interface into
+            // entryDataMap.
+            for (const auto& [propName, val] : it->second)
+            {
+                mergeLoggingEntryProperty(propName, val, tmpMap);
+            }
+            // Only include entries that have Id, Timestamp, and AdditionalData.
+            if (tmpMap.size() >= 3)
+            {
+                outByPath.emplace(p, std::move(tmpMap));
+            }
+        }
+        return true;
     }
-    recordId = static_cast<uint16_t>(std::get<uint32_t>(iterId->second));
-    // Read Timestamp from the log entry.
-    static constexpr auto propTimeStamp = "Timestamp";
-    auto iterTimeStamp = entryData.find(propTimeStamp);
-    if (iterTimeStamp == entryData.end())
+    catch (const std::exception& e)
     {
-        log<level::ERR>("Error in reading Timestamp of logging entry");
-        elog<InternalFailure>();
+        log<level::INFO>("readLoggingEntryDataBulk failed",
+                         entry("ERROR=%s", e.what()));
+        return false;
     }
-    std::chrono::milliseconds chronoTimeStamp(
-        std::get<uint64_t>(iterTimeStamp->second));
-    return chronoTimeStamp;
 }
 
 } // namespace internal
