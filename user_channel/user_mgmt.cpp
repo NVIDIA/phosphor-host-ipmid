@@ -45,66 +45,6 @@
 namespace ipmi
 {
 
-// TODO: Move D-Bus & Object Manager related stuff, to common files
-// D-Bus property related
-static constexpr const char* dBusPropertiesInterface =
-    "org.freedesktop.DBus.Properties";
-static constexpr const char* getAllPropertiesMethod = "GetAll";
-static constexpr const char* propertiesChangedSignal = "PropertiesChanged";
-static constexpr const char* setPropertiesMethod = "Set";
-
-// Object Manager related
-static constexpr const char* dBusObjManager =
-    "org.freedesktop.DBus.ObjectManager";
-static constexpr const char* getManagedObjectsMethod = "GetManagedObjects";
-// Object Manager signals
-static constexpr const char* intfAddedSignal = "InterfacesAdded";
-static constexpr const char* intfRemovedSignal = "InterfacesRemoved";
-
-static constexpr const char* ipmiUserMutex = "ipmi_usr_mutex";
-static constexpr const char* ipmiMutexCleanupLockFile =
-    "/run/ipmi/ipmi_usr_mutex_cleanup";
-static constexpr const char* ipmiUserSignalLockFile =
-    "/run/ipmi/ipmi_usr_signal_mutex";
-static constexpr const char* ipmiUserDataFile = "/var/lib/ipmi/ipmi_user.json";
-static constexpr const char* ipmiGrpName = "ipmi";
-static constexpr size_t privNoAccess = 0xF;
-static constexpr size_t privMask = 0xF;
-
-// User manager related
-static constexpr const char* userMgrService =
-    "xyz.openbmc_project.User.Manager";
-static constexpr const char* userMgrObjBasePath = "/xyz/openbmc_project/user";
-static constexpr const char* userObjBasePath = "/xyz/openbmc_project/user";
-static constexpr const char* userMgrInterface =
-    "xyz.openbmc_project.User.Manager";
-static constexpr const char* usersInterface =
-    "xyz.openbmc_project.User.Attributes";
-static constexpr const char* deleteUserInterface =
-    "xyz.openbmc_project.Object.Delete";
-
-static constexpr const char* createUserMethod = "CreateUser";
-static constexpr const char* deleteUserMethod = "Delete";
-static constexpr const char* renameUserMethod = "RenameUser";
-// User manager signal memebers
-static constexpr const char* userRenamedSignal = "UserRenamed";
-// Mgr interface properties
-static constexpr const char* allPrivProperty = "AllPrivileges";
-static constexpr const char* allGrpProperty = "AllGroups";
-// User interface properties
-static constexpr const char* userPrivProperty = "UserPrivilege";
-static constexpr const char* userGrpProperty = "UserGroups";
-static constexpr const char* userEnabledProperty = "UserEnabled";
-
-static std::array<std::string, (PRIVILEGE_OEM + 1)> ipmiPrivIndex = {
-    "priv-reserved", // PRIVILEGE_RESERVED - 0
-    "priv-callback", // PRIVILEGE_CALLBACK - 1
-    "priv-user",     // PRIVILEGE_USER - 2
-    "priv-operator", // PRIVILEGE_OPERATOR - 3
-    "priv-admin",    // PRIVILEGE_ADMIN - 4
-    "priv-custom"    // PRIVILEGE_OEM - 5
-};
-
 using namespace phosphor::logging;
 using Json = nlohmann::json;
 
@@ -154,7 +94,7 @@ UserAccess& getUserAccessObject()
 
 int getUserNameFromPath(const std::string& path, std::string& userName)
 {
-    sdbusplus::message::object_path objPath(path);
+    sdbusplus::object_path objPath(path);
     userName.assign(objPath.filename());
     return 0;
 }
@@ -357,7 +297,7 @@ void userUpdatedSignalHandler(UserAccess& usrAccess, sdbusplus::message_t& msg)
                     }
                     catch (const sdbusplus::exception_t& e)
                     {
-                        lg2::debug("Failed to excute {METHOD}, path: {PATH}",
+                        lg2::debug("Failed to execute {METHOD}, path: {PATH}",
                                    "METHOD", getAllPropertiesMethod, "PATH",
                                    msg.get_path());
                         return;
@@ -530,12 +470,12 @@ bool UserAccess::isValidUserName(const std::string& userName)
     }
     catch (const sdbusplus::exception_t& e)
     {
-        lg2::error("Failed to excute {METHOD}, path: {PATH}", "METHOD",
+        lg2::error("Failed to execute {METHOD}, path: {PATH}", "METHOD",
                    getManagedObjectsMethod, "PATH", userMgrObjBasePath);
         return false;
     }
 
-    sdbusplus::message::object_path tempUserPath(userObjBasePath);
+    sdbusplus::object_path tempUserPath(userObjBasePath);
     tempUserPath /= userName;
     std::string usersPath(tempUserPath);
 
@@ -760,7 +700,7 @@ Cc UserAccess::setUserEnabledState(const uint8_t userId,
     }
     if (userInfo->userEnabled != enabledState)
     {
-        sdbusplus::message::object_path tempUserPath(userObjBasePath);
+        sdbusplus::object_path tempUserPath(userObjBasePath);
         tempUserPath /= userName;
         std::string userPath(tempUserPath);
         setDbusProperty(bus, userMgrService, userPath, usersInterface,
@@ -866,7 +806,7 @@ Cc UserAccess::setUserPrivilegeAccess(const uint8_t userId, const uint8_t chNum,
     if (chNum == syncIndex &&
         privAccess.privilege != userInfo->userPrivAccess[syncIndex].privilege)
     {
-        sdbusplus::message::object_path tempUserPath(userObjBasePath);
+        sdbusplus::object_path tempUserPath(userObjBasePath);
         tempUserPath /= userName;
         std::string userPath(tempUserPath);
         setDbusProperty(bus, userMgrService, userPath, usersInterface,
@@ -973,7 +913,7 @@ Cc UserAccess::setUserName(const uint8_t userId, const std::string& userName)
     if (userName.empty() && !oldUser.empty())
     {
         // Delete existing user
-        sdbusplus::message::object_path tempUserPath(userObjBasePath);
+        sdbusplus::object_path tempUserPath(userObjBasePath);
         tempUserPath /= oldUser;
         std::string userPath(tempUserPath);
         try
@@ -985,7 +925,7 @@ Cc UserAccess::setUserName(const uint8_t userId, const std::string& userName)
         }
         catch (const sdbusplus::exception_t& e)
         {
-            lg2::debug("Failed to excute {METHOD}, path:{PATH}", "METHOD",
+            lg2::debug("Failed to execute {METHOD}, path:{PATH}", "METHOD",
                        deleteUserMethod, "PATH", userPath);
             return ccUnspecifiedError;
         }
@@ -1009,7 +949,7 @@ Cc UserAccess::setUserName(const uint8_t userId, const std::string& userName)
         }
         catch (const sdbusplus::exception_t& e)
         {
-            lg2::debug("Failed to excute {METHOD}, path: {PATH}", "METHOD",
+            lg2::debug("Failed to execute {METHOD}, path: {PATH}", "METHOD",
                        createUserMethod, "PATH", userMgrObjBasePath);
             return ccUnspecifiedError;
         }
@@ -1037,7 +977,7 @@ Cc UserAccess::setUserName(const uint8_t userId, const std::string& userName)
         }
         catch (const sdbusplus::exception_t& e)
         {
-            lg2::debug("Failed to excute {METHOD}, path: {PATH}", "METHOD",
+            lg2::debug("Failed to execute {METHOD}, path: {PATH}", "METHOD",
                        renameUserMethod, "PATH", userMgrObjBasePath);
             return ccUnspecifiedError;
         }
@@ -1352,7 +1292,7 @@ void UserAccess::writeUserData()
         throw std::ios_base::failure(
             "Error in creating temporary IPMI user data file");
     }
-    const auto& writeStr = jsonUsersTbl.dump();
+    const auto& writeStr = jsonUsersTbl.dump(4);
     if (write(fd, writeStr.c_str(), writeStr.size()) !=
         static_cast<ssize_t>(writeStr.size()))
     {
@@ -1473,7 +1413,7 @@ void UserAccess::getSystemPrivAndGroups()
     }
     catch (const sdbusplus::exception_t& e)
     {
-        lg2::debug("Failed to excute {METHOD}, path: {PATH}", "METHOD",
+        lg2::debug("Failed to execute {METHOD}, path: {PATH}", "METHOD",
                    getAllPropertiesMethod, "PATH", userMgrObjBasePath);
         return;
     }
@@ -1613,7 +1553,7 @@ void UserAccess::cacheUserDataFile()
     }
     catch (const sdbusplus::exception_t& e)
     {
-        lg2::debug("Failed to excute {METHOD}, path: {PATH}", "METHOD",
+        lg2::debug("Failed to execute {METHOD}, path: {PATH}", "METHOD",
                    getManagedObjectsMethod, "PATH", userMgrObjBasePath);
         return;
     }
@@ -1630,7 +1570,7 @@ void UserAccess::cacheUserDataFile()
 
             std::string userName =
                 safeUsernameString(userData->user[usrIdx].userName);
-            sdbusplus::message::object_path tempUserPath(userObjBasePath);
+            sdbusplus::object_path tempUserPath(userObjBasePath);
             tempUserPath /= userName;
             std::string usersPath(tempUserPath);
 
@@ -1639,7 +1579,7 @@ void UserAccess::cacheUserDataFile()
             {
                 bool usrEnabled = false;
 
-                // User exist. Lets check and update other fileds
+                // User exist. Lets check and update other fields
                 getUserObjProperties(usrObj->second, usrGrps, usrPriv,
                                      usrEnabled);
                 if (std::find(usrGrps.begin(), usrGrps.end(), ipmiGrpName) ==
@@ -1648,11 +1588,7 @@ void UserAccess::cacheUserDataFile()
                     updateRequired = true;
                     // Group "ipmi" is removed so lets remove user in IPMI
                     deleteUserIndex(usrIdx);
-                }
-                else
-                {
                     // Group "ipmi" is present so lets update other properties
-                    // in IPMI
                     uint8_t priv = UserAccess::convertToIPMIPrivilege(usrPriv) &
                                    privMask;
                     // Update all channels priv, only if it is not equivalent to

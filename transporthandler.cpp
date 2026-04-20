@@ -616,8 +616,8 @@ void createVLAN(sdbusplus::bus_t& bus, ChannelParams& params, uint16_t vlan)
         params.service.c_str(), PATH_ROOT.c_str(), INTF_VLAN_CREATE, "VLAN");
     req.append(params.ifname, static_cast<uint32_t>(vlan));
     auto reply = bus.call(req);
-    sdbusplus::message::object_path newPath;
-    reply.read(newPath);
+    auto newPath = reply.unpack<sdbusplus::object_path>();
+
     params.logicalPath = std::move(newPath);
 }
 
@@ -630,7 +630,7 @@ void createVLAN(sdbusplus::bus_t& bus, ChannelParams& params, uint16_t vlan)
 void reconfigureVLAN(sdbusplus::bus_t& bus, ChannelParams& params,
                      uint16_t vlan)
 {
-    // Unfortunatetly we don't have built-in functions to migrate our interface
+    // Unfortunately we don't have built-in functions to migrate our interface
     // customizations to new VLAN interfaces, or have some kind of decoupling.
     // We therefore must retain all of our old information, setup the new VLAN
     // configuration, then restore the old info.
@@ -639,7 +639,7 @@ void reconfigureVLAN(sdbusplus::bus_t& bus, ChannelParams& params,
     bool dhcp4 = getEthProp<bool>(bus, params, "DHCP4");
     bool dhcp6 = getEthProp<bool>(bus, params, "DHCP6");
     bool ra = getEthProp<bool>(bus, params, "IPv6AcceptRA");
-    ObjectLookupCache ips(bus, params, INTF_IP);
+    ObjectLookupCache ips(bus, params, NetworkIP::interface);
     auto ifaddr4 = findIfAddr<AF_INET>(bus, params, 0, originsV4, ips);
     std::vector<IfAddr<AF_INET6>> ifaddrs6;
     for (uint8_t i = 0; i < MAX_IPV6_STATIC_ADDRESSES; ++i)
@@ -698,7 +698,7 @@ static std::unordered_map<uint8_t, SetStatus> setStatus;
 static std::unordered_map<uint8_t, uint16_t> lastDisabledVlan;
 
 /** @brief Gets the set status for the channel if it exists
- *         Otherise populates and returns the default value.
+ *         Otherwise populates and returns the default value.
  *
  *  @param[in] channel - The channel id corresponding to an ethernet interface
  *  @return A reference to the SetStatus for the channel
@@ -1536,13 +1536,16 @@ RspType<> setSolConfParams(Context::ptr ctx, uint4_t channelBits,
         return responseInvalidFieldRequest();
     }
 
-    std::string solService{};
-    std::string ethName = ipmi::getChannelName(channel);
-    if (ethName.empty())
+    auto channelName = ipmi::getChannelName(channel);
+    if (channelName.empty())
     {
+        lg2::error("Channel name does not exist for channel {CHANNEL}",
+                   "CHANNEL", channel);
         return responseInvalidFieldRequest();
     }
-    std::string solPathWitheEthName = solPath + ethName;
+
+    std::string solService{};
+    std::string solPathWitheEthName = solPath + channelName;
 
     if (ipmi::getService(ctx, solInterface, solPathWitheEthName, solService))
     {
@@ -1718,13 +1721,16 @@ RspType<message::Payload> getSolConfParams(
         return responseInvalidFieldRequest();
     }
 
-    std::string solService{};
-    std::string ethName = ipmi::getChannelName(channel);
-    if (ethName.empty())
+    auto channelName = ipmi::getChannelName(channel);
+    if (channelName.empty())
     {
+        lg2::error("Channel name does not exist for channel {CHANNEL}",
+                   "CHANNEL", channel);
         return responseInvalidFieldRequest();
     }
-    std::string solPathWitheEthName = solPath + ethName;
+
+    std::string solService{};
+    std::string solPathWitheEthName = solPath + channelName;
 
     if (ipmi::getService(ctx, solInterface, solPathWitheEthName, solService))
     {

@@ -92,7 +92,7 @@ auto channelCall(uint8_t channel, Args&&... args)
     return std::invoke(func, bus, params, std::forward<Args>(args)...);
 }
 
-/** @brief Generic paramters for different address families */
+/** @brief Generic parameters for different address families */
 template <int family>
 struct AddrFamily
 {};
@@ -238,7 +238,7 @@ class ObjectLookupCache
 
 /** @brief Searches the ip object lookup cache for an address matching
  *         the input parameters. NOTE: The index lacks stability across address
- *         changes since the network daemon has no notion of stable indicies.
+ *         changes since the network daemon has no notion of stable indices.
  *
  *  @param[in] bus     - The bus object used for lookups
  *  @param[in] params  - The parameters for the channel
@@ -312,7 +312,7 @@ auto getIfAddr(
         sdbusplus::server::xyz::openbmc_project::network::IP::AddressOrigin>&
         origins)
 {
-    ObjectLookupCache ips(bus, params, INTF_IP);
+    ObjectLookupCache ips(bus, params, NetworkIP::interface);
     return findIfAddr<family>(bus, params, idx, origins, ips);
 }
 
@@ -338,9 +338,8 @@ template <int family>
 std::optional<typename AddrFamily<family>::addr> getGatewayProperty(
     sdbusplus::bus_t& bus, const ChannelParams& params)
 {
-    auto objPath = "/xyz/openbmc_project/network/" + params.ifname;
     auto gatewayStr = std::get<std::string>(
-        getDbusProperty(bus, params.service, objPath, INTF_ETHERNET,
+        getDbusProperty(bus, params.service, params.logicalPath, INTF_ETHERNET,
                         AddrFamily<family>::propertyGateway));
     if (gatewayStr.empty())
     {
@@ -436,8 +435,7 @@ void setGatewayProperty(sdbusplus::bus_t& bus, const ChannelParams& params,
         neighbor = findStaticNeighbor<family>(bus, params, *gateway, neighbors);
     }
 
-    auto objPath = "/xyz/openbmc_project/network/" + params.ifname;
-    setDbusProperty(bus, params.service, objPath, INTF_ETHERNET,
+    setDbusProperty(bus, params.service, params.logicalPath, INTF_ETHERNET,
                     AddrFamily<family>::propertyGateway,
                     stdplus::toStr(address));
 

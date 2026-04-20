@@ -109,7 +109,7 @@ std::optional<std::pair<uint16_t, SELEntry>> parseLoggingEntry(
 
 static void selAddedCallback(sdbusplus::message_t& m)
 {
-    sdbusplus::message::object_path objPath;
+    sdbusplus::object_path objPath;
     try
     {
         m.read(objPath);
@@ -129,7 +129,7 @@ static void selAddedCallback(sdbusplus::message_t& m)
 
 static void selRemovedCallback(sdbusplus::message_t& m)
 {
-    sdbusplus::message::object_path objPath;
+    sdbusplus::object_path objPath;
     try
     {
         m.read(objPath);
@@ -918,7 +918,7 @@ void registerNetFnStorageFunctions()
     selCacheMapInitialized = false;
     initSELCache();
     // Handlers with dbus-sdr handler implementation.
-    // Do not register the hander if it dynamic sensors stack is used.
+    // Do not register the handler if it dynamic sensors stack is used.
 
     // <Get SEL Info>
     ipmi::registerHandler(
@@ -972,12 +972,13 @@ void registerNetFnStorageFunctions()
                           ipmi::Privilege::User, ipmiSensorReserveSdr);
 
     // <Get SDR>
-    ipmi_register_callback(ipmi::netFnStorage, ipmi::storage::cmdGetSdr,
-                           nullptr, ipmi_sen_get_sdr, PRIVILEGE_USER);
+    ipmi::registerHandler(
+        ipmi::prioOpenBmcBase, ipmi::netFnStorage, ipmi::storage::cmdGetSdr,
+        ipmi::Privilege::User, ipmiSensorGetSdr);
 
 #endif
 
-    // Common Handers used by all SEL implementation.
+    // Common Handlers used by both implementation.
 
     // <Reserve SEL>
     ipmi::registerHandler(

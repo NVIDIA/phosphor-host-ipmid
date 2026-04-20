@@ -27,7 +27,7 @@ enum ipmi_sensor_types
     IPMI_SENSOR_TPM = 0xCC,
 };
 
-/** @brief Custom exception for reading sensors that are not funcitonal.
+/** @brief Custom exception for reading sensors that are not functional.
  */
 struct SensorFunctionalError : public std::exception
 {
@@ -57,6 +57,7 @@ struct PlatformEventRequest
     uint8_t data[3];
 };
 
+static constexpr const char* ipmiSELObject = "xyz.openbmc_project.Logging.IPMI";
 static constexpr const char* ipmiSELPath = "/xyz/openbmc_project/Logging/IPMI";
 static constexpr const char* ipmiSELAddInterface =
     "xyz.openbmc_project.Logging.IPMI";
@@ -74,9 +75,8 @@ int set_sensor_dbus_state_s(uint8_t, const char*, const char*);
 int set_sensor_dbus_state_y(uint8_t, const char*, const uint8_t);
 int find_openbmc_path(uint8_t, dbus_interface_t*);
 
-ipmi::Cc ipmi_sen_get_sdr(ipmi_netfn_t netfn, ipmi_cmd_t cmd,
-                          ipmi_request_t request, ipmi_response_t response,
-                          ipmi_data_len_t data_len, ipmi_context_t context);
+ipmi::RspType<uint16_t, std::vector<uint8_t>> ipmiSensorGetSdr(
+    uint16_t, uint16_t, uint8_t, uint8_t);
 
 ipmi::RspType<uint16_t> ipmiSensorReserveSdr();
 
@@ -87,92 +87,19 @@ static const uint16_t END_OF_RECORD = 0xFFFF;
 static const uint8_t LENGTH_MASK = 0x1F;
 
 /**
- * Get SDR Info
- */
-
-namespace get_sdr_info
-{
-namespace request
-{
-// Note: for some reason the ipmi_request_t appears to be the
-// raw value for this call.
-inline bool get_count(void* req)
-{
-    return (bool)((uint64_t)(req) & 1);
-}
-} // namespace request
-} // namespace get_sdr_info
-
-/**
  * Get SDR
  */
 namespace get_sdr
 {
 
-struct GetSdrReq
-{
-    uint8_t reservation_id_lsb;
-    uint8_t reservation_id_msb;
-    uint8_t record_id_lsb;
-    uint8_t record_id_msb;
-    uint8_t offset;
-    uint8_t bytes_to_read;
-} __attribute__((packed));
-
-namespace request
-{
-
-inline uint16_t get_reservation_id(GetSdrReq* req)
-{
-    return (req->reservation_id_lsb + (req->reservation_id_msb << 8));
-};
-
-inline uint16_t get_record_id(GetSdrReq* req)
-{
-    return (req->record_id_lsb + (req->record_id_msb << 8));
-};
-
-} // namespace request
-
-// Response
-struct GetSdrResp
-{
-    uint8_t next_record_id_lsb;
-    uint8_t next_record_id_msb;
-    uint8_t record_data[64];
-} __attribute__((packed));
-
-namespace response
-{
-
-inline void set_next_record_id(uint16_t next, GetSdrResp* resp)
-{
-    resp->next_record_id_lsb = next & 0xff;
-    resp->next_record_id_msb = (next >> 8) & 0xff;
-};
-
-} // namespace response
-
 // Record header
 struct SensorDataRecordHeader
 {
-    uint8_t record_id_lsb;
-    uint8_t record_id_msb;
-    uint8_t sdr_version;
-    uint8_t record_type;
-    uint8_t record_length; // Length not counting the header
+    uint16_t recordId;
+    uint8_t sdrVersion;
+    uint8_t recordType;
+    uint8_t recordLength; // Length not counting the header
 } __attribute__((packed));
-
-namespace header
-{
-
-inline void set_record_id(int id, SensorDataRecordHeader* hdr)
-{
-    hdr->record_id_lsb = (id & 0xFF);
-    hdr->record_id_msb = (id >> 8) & 0xFF;
-};
-
-} // namespace header
 
 enum SensorDataRecordType
 {
@@ -187,9 +114,9 @@ enum SensorDataRecordType
 // Record key
 struct SensorDataRecordKey
 {
-    uint8_t owner_id;
-    uint8_t owner_lun;
-    uint8_t sensor_number;
+    uint8_t ownerId;
+    uint8_t ownerLun;
+    uint8_t sensorNumber;
 } __attribute__((packed));
 
 /** @struct SensorDataFruRecordKey
@@ -223,48 +150,51 @@ namespace key
 static constexpr uint8_t listOrRangeBit = 7;
 static constexpr uint8_t linkedBit = 6;
 
-inline void set_owner_id_ipmb(SensorDataRecordKey* key)
+inline void setOwnerIdIpmb(SensorDataRecordKey& key)
 {
-    key->owner_id &= ~0x01;
+    key.ownerId &= ~0x01;
 };
 
-inline void set_owner_id_system_sw(SensorDataRecordKey* key)
+inline void setOwnerIdSystemSw(SensorDataRecordKey& key)
 {
-    key->owner_id |= 0x01;
+    key.ownerId |= 0x01;
 };
 
-inline void set_owner_id_bmc(SensorDataRecordKey* key)
+inline void setOwnerIdBmc(SensorDataRecordKey& key)
 {
-    key->owner_id |= 0x20;
+    key.ownerId |= 0x20;
 };
 
-inline void set_owner_id_address(uint8_t addr, SensorDataRecordKey* key)
+inline void setOwnerIdAddress(uint8_t addr, SensorDataRecordKey& key)
 {
-    key->owner_id &= 0x01;
-    key->owner_id |= addr << 1;
+    key.ownerId &= 0x01;
+    key.ownerId |= addr << 1;
 };
 
-inline void set_owner_lun(uint8_t lun, SensorDataRecordKey* key)
+inline void setOwnerLun(uint8_t lun, SensorDataRecordKey& key)
 {
-    key->owner_lun &= ~0x03;
-    key->owner_lun |= (lun & 0x03);
+    key.ownerLun &= ~0x03;
+    key.ownerLun |= (lun & 0x03);
 };
 
-inline void set_owner_lun_channel(uint8_t channel, SensorDataRecordKey* key)
+inline void setOwnerLunChannel(uint8_t channel, SensorDataRecordKey& key)
 {
-    key->owner_lun &= 0x0f;
-    key->owner_lun |= ((channel & 0xf) << 4);
+    key.ownerLun &= 0x0f;
+    key.ownerLun |= ((channel & 0xf) << 4);
 };
 
-inline void set_flags(bool isList, bool isLinked,
-                      SensorDataEntityRecordKey* key)
+inline void setFlags(bool isList, bool isLinked, SensorDataEntityRecordKey& key)
 {
-    key->flags = 0x00;
+    key.flags = 0x00;
     if (!isList)
-        key->flags |= 1 << listOrRangeBit;
+    {
+        key.flags |= 1 << listOrRangeBit;
+    }
 
     if (isLinked)
-        key->flags |= 1 << linkedBit;
+    {
+        key.flags |= 1 << linkedBit;
+    }
 };
 
 } // namespace key
@@ -291,43 +221,43 @@ static const int FRU_RECORD_DEVICE_ID_MAX_LENGTH = 16;
 
 struct SensorDataFullRecordBody
 {
-    uint8_t entity_id;
-    uint8_t entity_instance;
-    uint8_t sensor_initialization;
-    uint8_t sensor_capabilities; // no macro support
-    uint8_t sensor_type;
-    uint8_t event_reading_type;
-    uint8_t supported_assertions[2];          // no macro support
-    uint8_t supported_deassertions[2];        // no macro support
-    uint8_t discrete_reading_setting_mask[2]; // no macro support
-    uint8_t sensor_units_1;
-    uint8_t sensor_units_2_base;
-    uint8_t sensor_units_3_modifier;
+    uint8_t entityId;
+    uint8_t entityInstance;
+    uint8_t sensorInitialization;
+    uint8_t sensorCapabilities; // no macro support
+    uint8_t sensorType;
+    uint8_t eventReadingType;
+    uint8_t supportedAssertions[2];        // no macro support
+    uint8_t supportedDeassertions[2];      // no macro support
+    uint8_t discreteReadingSettingMask[2]; // no macro support
+    uint8_t sensorUnits1;
+    uint8_t sensorUnits2Base;
+    uint8_t sensorUnits3Modifier;
     uint8_t linearization;
-    uint8_t m_lsb;
-    uint8_t m_msb_and_tolerance;
-    uint8_t b_lsb;
-    uint8_t b_msb_and_accuracy_lsb;
-    uint8_t accuracy_and_sensor_direction;
-    uint8_t r_b_exponents;
-    uint8_t analog_characteristic_flags; // no macro support
-    uint8_t nominal_reading;
-    uint8_t normal_max;
-    uint8_t normal_min;
-    uint8_t sensor_max;
-    uint8_t sensor_min;
-    uint8_t upper_nonrecoverable_threshold;
-    uint8_t upper_critical_threshold;
-    uint8_t upper_noncritical_threshold;
-    uint8_t lower_nonrecoverable_threshold;
-    uint8_t lower_critical_threshold;
-    uint8_t lower_noncritical_threshold;
-    uint8_t positive_threshold_hysteresis;
-    uint8_t negative_threshold_hysteresis;
+    uint8_t mLsb;
+    uint8_t mMsbAndTolerance;
+    uint8_t bLsb;
+    uint8_t bMsbAndAccuracyLsb;
+    uint8_t accuracyAndSensorDirection;
+    uint8_t rbExponents;
+    uint8_t analogCharacteristicFlags; // no macro support
+    uint8_t nominalReading;
+    uint8_t normalMax;
+    uint8_t normalMin;
+    uint8_t sensorMax;
+    uint8_t sensorMin;
+    uint8_t upperNonrecoverableThreshold;
+    uint8_t upperCriticalThreshold;
+    uint8_t upperNoncriticalThreshold;
+    uint8_t lowerNonrecoverableThreshold;
+    uint8_t lowerCriticalThreshold;
+    uint8_t lowerNoncriticalThreshold;
+    uint8_t positiveThresholdHysteresis;
+    uint8_t negativeThresholdHysteresis;
     uint16_t reserved;
-    uint8_t oem_reserved;
-    uint8_t id_string_info;
-    char id_string[FULL_RECORD_ID_STR_MAX_LENGTH];
+    uint8_t oemReserved;
+    uint8_t idStringInfo;
+    char idString[FULL_RECORD_ID_STR_MAX_LENGTH];
 } __attribute__((packed));
 
 /** @struct SensorDataCompactRecord
@@ -336,25 +266,25 @@ struct SensorDataFullRecordBody
  */
 struct SensorDataCompactRecordBody
 {
-    uint8_t entity_id;
-    uint8_t entity_instance;
-    uint8_t sensor_initialization;
-    uint8_t sensor_capabilities; // no macro support
-    uint8_t sensor_type;
-    uint8_t event_reading_type;
-    uint8_t supported_assertions[2];          // no macro support
-    uint8_t supported_deassertions[2];        // no macro support
-    uint8_t discrete_reading_setting_mask[2]; // no macro support
-    uint8_t sensor_units_1;
-    uint8_t sensor_units_2_base;
-    uint8_t sensor_units_3_modifier;
+    uint8_t entityId;
+    uint8_t entityInstance;
+    uint8_t sensorInitialization;
+    uint8_t sensorCapabilities; // no macro support
+    uint8_t sensorType;
+    uint8_t eventReadingType;
+    uint8_t supportedAssertions[2];        // no macro support
+    uint8_t supportedDeassertions[2];      // no macro support
+    uint8_t discreteReadingSettingMask[2]; // no macro support
+    uint8_t sensorUnits1;
+    uint8_t sensorUnits2Base;
+    uint8_t sensorUnits3Modifier;
     uint8_t record_sharing[2];
-    uint8_t positive_threshold_hysteresis;
-    uint8_t negative_threshold_hysteresis;
+    uint8_t positiveThresholdHysteresis;
+    uint8_t negativeThresholdHysteresis;
     uint8_t reserved[3];
-    uint8_t oem_reserved;
-    uint8_t id_string_info;
-    char id_string[FULL_RECORD_ID_STR_MAX_LENGTH];
+    uint8_t oemReserved;
+    uint8_t idStringInfo;
+    char idString[FULL_RECORD_ID_STR_MAX_LENGTH];
 } __attribute__((packed));
 
 /** @struct SensorDataEventRecord
@@ -363,16 +293,16 @@ struct SensorDataCompactRecordBody
  */
 struct SensorDataEventRecordBody
 {
-    uint8_t entity_id;
-    uint8_t entity_instance;
-    uint8_t sensor_type;
-    uint8_t event_reading_type;
-    uint8_t sensor_record_sharing_1;
-    uint8_t sensor_record_sharing_2;
+    uint8_t entityId;
+    uint8_t entityInstance;
+    uint8_t sensorType;
+    uint8_t eventReadingType;
+    uint8_t sensorRecordSharing1;
+    uint8_t sensorRecordSharing2;
     uint8_t reserved;
-    uint8_t oem_reserved;
-    uint8_t id_string_info;
-    char id_string[FULL_RECORD_ID_STR_MAX_LENGTH];
+    uint8_t oemReserved;
+    uint8_t idStringInfo;
+    char idString[FULL_RECORD_ID_STR_MAX_LENGTH];
 } __attribute__((packed));
 
 /** @struct SensorDataFruRecordBody
@@ -408,223 +338,243 @@ struct SensorDataEntityRecordBody
 namespace body
 {
 
-inline void set_entity_instance_number(uint8_t n,
-                                       SensorDataFullRecordBody* body)
+inline void setEntityInstanceNumber(uint8_t n, SensorDataFullRecordBody& body)
 {
-    body->entity_instance &= 1 << 7;
-    body->entity_instance |= (n & ~(1 << 7));
-};
-inline void set_entity_physical_entity(SensorDataFullRecordBody* body)
-{
-    body->entity_instance &= ~(1 << 7);
-};
-inline void set_entity_logical_container(SensorDataFullRecordBody* body)
-{
-    body->entity_instance |= 1 << 7;
+    body.entityInstance &= 1 << 7;
+    body.entityInstance |= (n & ~(1 << 7));
 };
 
-inline void sensor_scanning_state(bool enabled, SensorDataFullRecordBody* body)
+inline void setEntityPhysicalEntity(SensorDataFullRecordBody& body)
+{
+    body.entityInstance &= ~(1 << 7);
+};
+
+inline void setEntityLogicalContainer(SensorDataFullRecordBody& body)
+{
+    body.entityInstance |= 1 << 7;
+};
+
+inline void sensorScanningState(bool enabled, SensorDataFullRecordBody& body)
 {
     if (enabled)
     {
-        body->sensor_initialization |= 1 << 0;
+        body.sensorInitialization |= 1 << 0;
     }
     else
     {
-        body->sensor_initialization &= ~(1 << 0);
+        body.sensorInitialization &= ~(1 << 0);
     };
 };
-inline void event_generation_state(bool enabled, SensorDataFullRecordBody* body)
+
+inline void eventGenerationState(bool enabled, SensorDataFullRecordBody& body)
 {
     if (enabled)
     {
-        body->sensor_initialization |= 1 << 1;
+        body.sensorInitialization |= 1 << 1;
     }
     else
     {
-        body->sensor_initialization &= ~(1 << 1);
-    }
-};
-inline void init_types_state(bool enabled, SensorDataFullRecordBody* body)
-{
-    if (enabled)
-    {
-        body->sensor_initialization |= 1 << 2;
-    }
-    else
-    {
-        body->sensor_initialization &= ~(1 << 2);
-    }
-};
-inline void init_hyst_state(bool enabled, SensorDataFullRecordBody* body)
-{
-    if (enabled)
-    {
-        body->sensor_initialization |= 1 << 3;
-    }
-    else
-    {
-        body->sensor_initialization &= ~(1 << 3);
-    }
-};
-inline void init_thresh_state(bool enabled, SensorDataFullRecordBody* body)
-{
-    if (enabled)
-    {
-        body->sensor_initialization |= 1 << 4;
-    }
-    else
-    {
-        body->sensor_initialization &= ~(1 << 4);
-    }
-};
-inline void init_events_state(bool enabled, SensorDataFullRecordBody* body)
-{
-    if (enabled)
-    {
-        body->sensor_initialization |= 1 << 5;
-    }
-    else
-    {
-        body->sensor_initialization &= ~(1 << 5);
-    }
-};
-inline void init_scanning_state(bool enabled, SensorDataFullRecordBody* body)
-{
-    if (enabled)
-    {
-        body->sensor_initialization |= 1 << 6;
-    }
-    else
-    {
-        body->sensor_initialization &= ~(1 << 6);
-    }
-};
-inline void init_settable_state(bool enabled, SensorDataFullRecordBody* body)
-{
-    if (enabled)
-    {
-        body->sensor_initialization |= 1 << 7;
-    }
-    else
-    {
-        body->sensor_initialization &= ~(1 << 7);
+        body.sensorInitialization &= ~(1 << 1);
     }
 };
 
-inline void set_percentage(SensorDataFullRecordBody* body)
+inline void initTypesState(bool enabled, SensorDataFullRecordBody& body)
 {
-    body->sensor_units_1 |= 1 << 0;
-};
-inline void unset_percentage(SensorDataFullRecordBody* body)
-{
-    body->sensor_units_1 &= ~(1 << 0);
-};
-inline void set_modifier_operation(uint8_t op, SensorDataFullRecordBody* body)
-{
-    body->sensor_units_1 &= ~(3 << 1);
-    body->sensor_units_1 |= (op & 0x3) << 1;
-};
-inline void set_rate_unit(uint8_t unit, SensorDataFullRecordBody* body)
-{
-    body->sensor_units_1 &= ~(7 << 3);
-    body->sensor_units_1 |= (unit & 0x7) << 3;
-};
-inline void set_analog_data_format(uint8_t format,
-                                   SensorDataFullRecordBody* body)
-{
-    body->sensor_units_1 &= ~(3 << 6);
-    body->sensor_units_1 |= (format & 0x3) << 6;
+    if (enabled)
+    {
+        body.sensorInitialization |= 1 << 2;
+    }
+    else
+    {
+        body.sensorInitialization &= ~(1 << 2);
+    }
 };
 
-inline void set_m(uint16_t m, SensorDataFullRecordBody* body)
+inline void initHystState(bool enabled, SensorDataFullRecordBody& body)
 {
-    body->m_lsb = m & 0xff;
-    body->m_msb_and_tolerance &= ~(3 << 6);
-    body->m_msb_and_tolerance |= ((m & (3 << 8)) >> 2);
-};
-inline void set_tolerance(uint8_t tol, SensorDataFullRecordBody* body)
-{
-    body->m_msb_and_tolerance &= ~0x3f;
-    body->m_msb_and_tolerance |= tol & 0x3f;
+    if (enabled)
+    {
+        body.sensorInitialization |= 1 << 3;
+    }
+    else
+    {
+        body.sensorInitialization &= ~(1 << 3);
+    }
 };
 
-inline void set_b(uint16_t b, SensorDataFullRecordBody* body)
+inline void initThreshState(bool enabled, SensorDataFullRecordBody& body)
 {
-    body->b_lsb = b & 0xff;
-    body->b_msb_and_accuracy_lsb &= ~(3 << 6);
-    body->b_msb_and_accuracy_lsb |= ((b & (3 << 8)) >> 2);
+    if (enabled)
+    {
+        body.sensorInitialization |= 1 << 4;
+    }
+    else
+    {
+        body.sensorInitialization &= ~(1 << 4);
+    }
 };
-inline void set_accuracy(uint16_t acc, SensorDataFullRecordBody* body)
+
+inline void initEventsState(bool enabled, SensorDataFullRecordBody& body)
+{
+    if (enabled)
+    {
+        body.sensorInitialization |= 1 << 5;
+    }
+    else
+    {
+        body.sensorInitialization &= ~(1 << 5);
+    }
+};
+
+inline void initScanningState(bool enabled, SensorDataFullRecordBody& body)
+{
+    if (enabled)
+    {
+        body.sensorInitialization |= 1 << 6;
+    }
+    else
+    {
+        body.sensorInitialization &= ~(1 << 6);
+    }
+};
+
+inline void initSettableState(bool enabled, SensorDataFullRecordBody& body)
+{
+    if (enabled)
+    {
+        body.sensorInitialization |= 1 << 7;
+    }
+    else
+    {
+        body.sensorInitialization &= ~(1 << 7);
+    }
+};
+
+inline void setPercentage(SensorDataFullRecordBody& body)
+{
+    body.sensorUnits1 |= 1 << 0;
+};
+
+inline void unsetPercentage(SensorDataFullRecordBody& body)
+{
+    body.sensorUnits1 &= ~(1 << 0);
+};
+
+inline void setModifierOperation(uint8_t op, SensorDataFullRecordBody& body)
+{
+    body.sensorUnits1 &= ~(3 << 1);
+    body.sensorUnits1 |= (op & 0x3) << 1;
+};
+
+inline void setRateUnit(uint8_t unit, SensorDataFullRecordBody& body)
+{
+    body.sensorUnits1 &= ~(7 << 3);
+    body.sensorUnits1 |= (unit & 0x7) << 3;
+};
+
+inline void setAnalogDataFormat(uint8_t format, SensorDataFullRecordBody& body)
+{
+    body.sensorUnits1 &= ~(3 << 6);
+    body.sensorUnits1 |= (format & 0x3) << 6;
+};
+
+inline void setM(uint16_t m, SensorDataFullRecordBody& body)
+{
+    body.mLsb = m & 0xff;
+    body.mMsbAndTolerance &= ~(3 << 6);
+    body.mMsbAndTolerance |= ((m & (3 << 8)) >> 2);
+};
+
+inline void setTolerance(uint8_t tol, SensorDataFullRecordBody& body)
+{
+    body.mMsbAndTolerance &= ~0x3f;
+    body.mMsbAndTolerance |= tol & 0x3f;
+};
+
+inline void setB(uint16_t b, SensorDataFullRecordBody& body)
+{
+    body.bLsb = b & 0xff;
+    body.bMsbAndAccuracyLsb &= ~(3 << 6);
+    body.bMsbAndAccuracyLsb |= ((b & (3 << 8)) >> 2);
+};
+
+inline void setAccuracy(uint16_t acc, SensorDataFullRecordBody& body)
 {
     // bottom 6 bits
-    body->b_msb_and_accuracy_lsb &= ~0x3f;
-    body->b_msb_and_accuracy_lsb |= acc & 0x3f;
+    body.bMsbAndAccuracyLsb &= ~0x3f;
+    body.bMsbAndAccuracyLsb |= acc & 0x3f;
     // top 4 bits
-    body->accuracy_and_sensor_direction &= 0x0f;
-    body->accuracy_and_sensor_direction |= ((acc >> 6) & 0xf) << 4;
-};
-inline void set_accuracy_exp(uint8_t exp, SensorDataFullRecordBody* body)
-{
-    body->accuracy_and_sensor_direction &= ~(3 << 2);
-    body->accuracy_and_sensor_direction |= (exp & 3) << 2;
-};
-inline void set_sensor_dir(uint8_t dir, SensorDataFullRecordBody* body)
-{
-    body->accuracy_and_sensor_direction &= ~(3 << 0);
-    body->accuracy_and_sensor_direction |= (dir & 3);
+    body.accuracyAndSensorDirection &= 0x0f;
+    body.accuracyAndSensorDirection |= ((acc >> 6) & 0xf) << 4;
 };
 
-inline void set_b_exp(uint8_t exp, SensorDataFullRecordBody* body)
+inline void setAccuracyExp(uint8_t exp, SensorDataFullRecordBody& body)
 {
-    body->r_b_exponents &= 0xf0;
-    body->r_b_exponents |= exp & 0x0f;
-};
-inline void set_r_exp(uint8_t exp, SensorDataFullRecordBody* body)
-{
-    body->r_b_exponents &= 0x0f;
-    body->r_b_exponents |= (exp & 0x0f) << 4;
+    body.accuracyAndSensorDirection &= ~(3 << 2);
+    body.accuracyAndSensorDirection |= (exp & 3) << 2;
 };
 
-inline void set_id_strlen(uint8_t len, SensorDataFullRecordBody* body)
+inline void setSensorDir(uint8_t dir, SensorDataFullRecordBody& body)
 {
-    body->id_string_info &= ~(0x1f);
-    body->id_string_info |= len & 0x1f;
-};
-inline void set_id_strlen(uint8_t len, SensorDataEventRecordBody* body)
-{
-    body->id_string_info &= ~(0x1f);
-    body->id_string_info |= len & 0x1f;
-};
-inline uint8_t get_id_strlen(SensorDataFullRecordBody* body)
-{
-    return body->id_string_info & 0x1f;
-};
-inline void set_id_type(uint8_t type, SensorDataFullRecordBody* body)
-{
-    body->id_string_info &= ~(3 << 6);
-    body->id_string_info |= (type & 0x3) << 6;
-};
-inline void set_id_type(uint8_t type, SensorDataEventRecordBody* body)
-{
-    body->id_string_info &= ~(3 << 6);
-    body->id_string_info |= (type & 0x3) << 6;
+    body.accuracyAndSensorDirection &= ~(3 << 0);
+    body.accuracyAndSensorDirection |= (dir & 3);
 };
 
-inline void set_device_id_strlen(uint8_t len, SensorDataFruRecordBody* body)
+inline void setBexp(uint8_t exp, SensorDataFullRecordBody& body)
 {
-    body->deviceIDLen &= ~(LENGTH_MASK);
-    body->deviceIDLen |= len & LENGTH_MASK;
+    body.rbExponents &= 0xf0;
+    body.rbExponents |= exp & 0x0f;
 };
 
-inline uint8_t get_device_id_strlen(SensorDataFruRecordBody* body)
+inline void setRexp(uint8_t exp, SensorDataFullRecordBody& body)
 {
-    return body->deviceIDLen & LENGTH_MASK;
+    body.rbExponents &= 0x0f;
+    body.rbExponents |= (exp & 0x0f) << 4;
 };
 
-inline void set_readable_mask(uint8_t mask, SensorDataFullRecordBody* body)
+inline void setIdStrLen(uint8_t len, SensorDataFullRecordBody& body)
 {
-    body->discrete_reading_setting_mask[1] = mask & 0x3F;
+    body.idStringInfo &= ~(0x1f);
+    body.idStringInfo |= len & 0x1f;
+};
+
+inline void setIdStrLen(uint8_t len, SensorDataEventRecordBody& body)
+{
+    body.idStringInfo &= ~(0x1f);
+    body.idStringInfo |= len & 0x1f;
+};
+
+inline uint8_t getIdStrLen(const SensorDataFullRecordBody& body)
+{
+    return body.idStringInfo & 0x1f;
+};
+
+inline void setIdType(uint8_t type, SensorDataFullRecordBody& body)
+{
+    body.idStringInfo &= ~(3 << 6);
+    body.idStringInfo |= (type & 0x3) << 6;
+};
+
+inline void setIdType(uint8_t type, SensorDataEventRecordBody& body)
+{
+    body.idStringInfo &= ~(3 << 6);
+    body.idStringInfo |= (type & 0x3) << 6;
+};
+
+inline void setDeviceIdStrLen(uint8_t len, SensorDataFruRecordBody& body)
+{
+    body.deviceIDLen &= ~(LENGTH_MASK);
+    body.deviceIDLen |= len & LENGTH_MASK;
+};
+
+inline uint8_t getDeviceIdStrLen(const SensorDataFruRecordBody& body)
+{
+    return body.deviceIDLen & LENGTH_MASK;
+};
+
+inline void setReadableMask(uint8_t mask, SensorDataFullRecordBody& body)
+{
+    body.discreteReadingSettingMask[1] = mask & 0x3F;
 }
 
 } // namespace body
@@ -712,15 +662,15 @@ namespace sensor
  * @param[in] offset - offset number.
  * @param[in/out] resp - get sensor reading response.
  */
-inline void setOffset(uint8_t offset, ipmi::sensor::GetSensorResponse* resp)
+inline void setOffset(uint8_t offset, ipmi::sensor::GetSensorResponse& resp)
 {
     if (offset > 7)
     {
-        resp->discreteReadingSensorStates |= 1 << (offset - 8);
+        resp.discreteReadingSensorStates |= 1 << (offset - 8);
     }
     else
     {
-        resp->thresholdLevelsStates |= 1 << offset;
+        resp.thresholdLevelsStates |= 1 << offset;
     }
 }
 
@@ -730,9 +680,9 @@ inline void setOffset(uint8_t offset, ipmi::sensor::GetSensorResponse* resp)
  * @param[in] offset - offset number.
  * @param[in/out] resp - get sensor reading response.
  */
-inline void setReading(uint8_t value, ipmi::sensor::GetSensorResponse* resp)
+inline void setReading(uint8_t value, ipmi::sensor::GetSensorResponse& resp)
 {
-    resp->reading = value;
+    resp.reading = value;
 }
 
 /**
@@ -743,10 +693,10 @@ inline void setReading(uint8_t value, ipmi::sensor::GetSensorResponse* resp)
  * @param[in/out] resp - get sensor reading response.
  */
 inline void setAssertionBytes(uint16_t value,
-                              ipmi::sensor::GetSensorResponse* resp)
+                              ipmi::sensor::GetSensorResponse& resp)
 {
-    resp->thresholdLevelsStates = static_cast<uint8_t>(value & 0x00FF);
-    resp->discreteReadingSensorStates = static_cast<uint8_t>(value >> 8);
+    resp.thresholdLevelsStates = static_cast<uint8_t>(value & 0x00FF);
+    resp.discreteReadingSensorStates = static_cast<uint8_t>(value >> 8);
 }
 
 /**
@@ -754,11 +704,11 @@ inline void setAssertionBytes(uint16_t value,
  *
  * @param[in/out] resp - get sensor reading response.
  */
-inline void enableScanning(ipmi::sensor::GetSensorResponse* resp)
+inline void enableScanning(ipmi::sensor::GetSensorResponse& resp)
 {
-    resp->readingOrStateUnavailable = false;
-    resp->scanningEnabled = true;
-    resp->allEventMessagesEnabled = false;
+    resp.readingOrStateUnavailable = false;
+    resp.scanningEnabled = true;
+    resp.allEventMessagesEnabled = false;
 }
 
 } // namespace sensor

@@ -29,16 +29,14 @@ bool doesDeviceExist(const uint8_t chNum)
     // TODO: This is not the reliable way to find the device
     // associated with ethernet interface as the channel number to
     // eth association is not done. Need to revisit later
-    struct stat fileStat = {0};
-
-    std::string channelName = getChannelName(chNum);
+    struct stat fileStat = {};
+    auto channelName = getChannelName(chNum);
     if (channelName.empty())
     {
-        phosphor::logging::log<phosphor::logging::level::DEBUG>(
-            "Ethernet device not found");
+        lg2::error("Channel name does not exist for channel {CHANNEL}",
+                   "CHANNEL", chNum);
         return false;
     }
-
     std::string devName("/sys/class/net/" + channelName);
 
     if (stat(devName.data(), &fileStat) != 0)

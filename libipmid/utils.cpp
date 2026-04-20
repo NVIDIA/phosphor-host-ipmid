@@ -13,15 +13,19 @@
 #include <phosphor-logging/lg2.hpp>
 #include <sdbusplus/message/types.hpp>
 #include <xyz/openbmc_project/Common/error.hpp>
+#include <xyz/openbmc_project/ObjectMapper/common.hpp>
 
 #include <algorithm>
 #include <chrono>
+#include <sstream>
 
 namespace ipmi
 {
 
 using namespace phosphor::logging;
 using namespace sdbusplus::error::xyz::openbmc_project::common;
+
+using ObjectMapper = sdbusplus::common::xyz::openbmc_project::ObjectMapper;
 
 namespace network
 {
@@ -200,17 +204,17 @@ std::string getService(sdbusplus::bus_t& bus, const std::string& intf,
                        const std::string& path)
 {
     auto mapperCall = bus.new_method_call(
-        "xyz.openbmc_project.ObjectMapper",
-        "/xyz/openbmc_project/object_mapper",
-        "xyz.openbmc_project.ObjectMapper", "GetObject");
+        ObjectMapper::default_service, ObjectMapper::instance_path,
+        ObjectMapper::interface, ObjectMapper::method_names::get_object);
 
     mapperCall.append(path);
     mapperCall.append(std::vector<std::string>({intf}));
 
     auto mapperResponseMsg = bus.call(mapperCall);
 
-    std::map<std::string, std::vector<std::string>> mapperResponse;
-    mapperResponseMsg.read(mapperResponse);
+    auto mapperResponse =
+        mapperResponseMsg
+            .unpack<std::map<std::string, std::vector<std::string>>>();
 
     if (mapperResponse.begin() == mapperResponse.end())
     {
@@ -224,13 +228,13 @@ ObjectTree getSubTree(sdbusplus::bus_t& bus, const InterfaceList& interfaces,
                       const std::string& subtreePath, int32_t depth)
 {
     auto mapperCall = bus.new_method_call(
-        MAPPER_BUS_NAME, MAPPER_OBJ, MAPPER_INTF, "GetSubTree");
+        ObjectMapper::default_service, ObjectMapper::instance_path,
+        ObjectMapper::interface, ObjectMapper::method_names::get_sub_tree);
 
     mapperCall.append(subtreePath, depth, interfaces);
 
     auto mapperReply = bus.call(mapperCall);
-    ObjectTree objectTree;
-    mapperReply.read(objectTree);
+    auto objectTree = mapperReply.unpack<ObjectTree>();
 
     return objectTree;
 }
@@ -282,9 +286,9 @@ boost::system::error_code getService(Context::ptr ctx, const std::string& intf,
     boost::system::error_code ec;
     std::map<std::string, std::vector<std::string>> mapperResponse =
         ctx->bus->yield_method_call<decltype(mapperResponse)>(
-            ctx->yield, ec, "xyz.openbmc_project.ObjectMapper",
-            "/xyz/openbmc_project/object_mapper",
-            "xyz.openbmc_project.ObjectMapper", "GetObject", path,
+            ctx->yield, ec, ObjectMapper::default_service,
+            ObjectMapper::instance_path, ObjectMapper::interface,
+            ObjectMapper::method_names::get_object, path,
             std::vector<std::string>({intf}));
 
     if (!ec)
@@ -300,8 +304,10 @@ boost::system::error_code getSubTree(
 {
     boost::system::error_code ec;
     objectTree = ctx->bus->yield_method_call<ObjectTree>(
-        ctx->yield, ec, MAPPER_BUS_NAME, MAPPER_OBJ, MAPPER_INTF, "GetSubTree",
-        subtreePath, depth, interfaces);
+        ctx->yield, ec, ObjectMapper::default_service,
+        ObjectMapper::instance_path, ObjectMapper::interface,
+        ObjectMapper::method_names::get_sub_tree, subtreePath, depth,
+        interfaces);
 
     return ec;
 }
@@ -546,6 +552,22 @@ ipmi::Cc i2cReadDataBlock(const std::string i2cBus, const uint8_t slaveAddr,
         readBuf[i] = unsigned(data_s.block[i]);
     }
     return ipmi::ccSuccess;
+}
+
+std::vector<std::string> split(const std::string& srcStr, char delim)
+{
+    std::vector<std::string> out;
+    std::stringstream ss(srcStr);
+    std::string item;
+
+    while (std::getline(ss, item, delim))
+    {
+        if (!item.empty())
+        {
+            out.emplace_back(item);
+        }
+    }
+    return out;
 }
 
 } // namespace ipmi

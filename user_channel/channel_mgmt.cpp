@@ -151,7 +151,8 @@ std::string ChannelConfig::getChannelName(const uint8_t chNum)
 {
     if (!isValidChannel(chNum))
     {
-        lg2::error("Invalid channel number: {CHANNEL_ID}", "CHANNEL_ID", chNum);
+        lg2::error("Get channel name - Invalid channel number: {CHANNEL_ID}",
+                   "CHANNEL_ID", chNum);
         return "";
     }
 
@@ -657,7 +658,7 @@ Cc ChannelConfig::setChannelAccessPersistData(const uint8_t chNum,
     // Write persistent data to file
     if (writeChannelPersistData() != 0)
     {
-        lg2::debug("Failed to update the presist data file");
+        lg2::debug("Failed to update the persist data file");
         return ccUnspecifiedError;
     }
     return ccSuccess;
@@ -833,7 +834,7 @@ int ChannelConfig::writeJsonFile(const std::string& configFile,
                    tmpFile);
         return -EIO;
     }
-    const auto& writeData = jsonData.dump();
+    const auto& writeData = jsonData.dump(4);
     if (write(fd, writeData.c_str(), writeData.size()) !=
         static_cast<ssize_t>(writeData.size()))
     {
@@ -1021,9 +1022,9 @@ int ChannelConfig::readChannelVolatileData()
         // Fill in global structure
         for (auto it = data.begin(); it != data.end(); ++it)
         {
+            uint8_t chNum;
             std::string chKey = it.key();
-            uint8_t chNum = std::stoi(chKey, nullptr, 10);
-            if (chNum >= maxIpmiChannels)
+            if (!tryParse(chKey, chNum) || chNum >= maxIpmiChannels)
             {
                 lg2::debug("Invalid channel access entry in config file");
                 throw std::out_of_range("Out of range - channel number");
@@ -1086,9 +1087,9 @@ int ChannelConfig::readChannelPersistData()
         // Fill in global structure
         for (auto it = data.begin(); it != data.end(); ++it)
         {
+            uint8_t chNum;
             std::string chKey = it.key();
-            uint8_t chNum = std::stoi(chKey, nullptr, 10);
-            if (chNum >= maxIpmiChannels)
+            if (!tryParse(chKey, chNum) || chNum >= maxIpmiChannels)
             {
                 lg2::debug("Invalid channel access entry in config file");
                 throw std::out_of_range("Out of range - channel number");

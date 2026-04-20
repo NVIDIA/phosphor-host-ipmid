@@ -2,8 +2,11 @@
 
 #include <ipmid/api-types.hpp>
 #include <stdplus/zstring_view.hpp>
+#include <xyz/openbmc_project/Network/IP/common.hpp>
 
 #include <cstdint>
+
+using NetworkIP = sdbusplus::common::xyz::openbmc_project::network::IP;
 
 namespace ipmi
 {
@@ -15,7 +18,6 @@ using stdplus::operator""_zsv;
 // D-Bus Network Daemon definitions
 constexpr auto PATH_ROOT = "/xyz/openbmc_project/network"_zsv;
 constexpr auto INTF_ETHERNET = "xyz.openbmc_project.Network.EthernetInterface";
-constexpr auto INTF_IP = "xyz.openbmc_project.Network.IP";
 constexpr auto INTF_IP_CREATE = "xyz.openbmc_project.Network.IP.Create";
 constexpr auto INTF_MAC = "xyz.openbmc_project.Network.MACAddress";
 constexpr auto INTF_NEIGHBOR = "xyz.openbmc_project.Network.Neighbor";
@@ -70,7 +72,7 @@ enum class SetStatus : uint8_t
     Commit = 2,
 };
 
-/** @brief IPMI Family Suport Bits */
+/** @brief IPMI Family Support Bits */
 namespace IPFamilySupportFlag
 {
 constexpr uint8_t IPv6Only = 0;
@@ -86,7 +88,7 @@ enum class IPFamilyEnables : uint8_t
     DualStack = 2,
 };
 
-/** @brief IPMI IPv6 Dyanmic Status Bits */
+/** @brief IPMI IPv6 Dynamic Status Bits */
 namespace IPv6StatusFlag
 {
 constexpr uint8_t DHCP = 0;

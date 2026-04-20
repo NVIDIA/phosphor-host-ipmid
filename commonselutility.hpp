@@ -210,9 +210,6 @@ inline bool isRecordOEM(uint8_t recordType)
 using additionalDataMap = std::map<std::string, std::string>;
 using entryDataMap = std::map<PropertyName, PropertyType>;
 
-// get current time stamp from dbus logging object
-std::chrono::seconds getEntryTimeStamp(const std::string& objPath);
-
 /* parse additional data of the sensor such as sensorData, EventDir
  * recorType , which is available in key:value pair
  */

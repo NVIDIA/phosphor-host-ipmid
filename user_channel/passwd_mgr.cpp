@@ -52,7 +52,7 @@ constexpr mode_t modeMask =
 struct MetaPassStruct
 {
     char signature[10];
-    unsigned char reseved[2];
+    unsigned char reserved[2];
     size_t hashSize;
     size_t ivSize;
     size_t dataSize;
@@ -380,7 +380,7 @@ int PasswdMgr::updatePasswdSpecialFile(const std::string& userName,
     SecureString dataBuf;
 
     // Read the encrypted file and get the file data
-    // Check user existance and return if not exist.
+    // Check user existence and return if not exist.
     if (readPasswdFileData(dataBuf) != 0)
     {
         lg2::debug("Error in reading the encrypted pass file");
@@ -494,6 +494,11 @@ int PasswdMgr::updatePasswdSpecialFile(const std::string& userName,
 
     const EVP_MD* digest = EVP_sha256();
     size_t hashLen = EVP_MD_block_size(digest);
+    if (hashLen == 0)
+    {
+        lg2::debug("Error getting hash block size");
+        return -EIO;
+    }
     std::vector<uint8_t> hash(hashLen);
     size_t ivLen = EVP_CIPHER_iv_length(cipher);
     std::vector<uint8_t> iv(ivLen);
@@ -506,7 +511,7 @@ int PasswdMgr::updatePasswdSpecialFile(const std::string& userName,
     // encryption.
     if (RAND_bytes(hash.data(), hashLen) != 1)
     {
-        lg2::debug("Hash genertion failed, bailing out");
+        lg2::debug("Hash generation failed, bailing out");
         return -EIO;
     }
     if (nullptr ==
@@ -520,7 +525,7 @@ int PasswdMgr::updatePasswdSpecialFile(const std::string& userName,
     // Generate IV values
     if (RAND_bytes(iv.data(), ivLen) != 1)
     {
-        lg2::debug("UV genertion failed, bailing out");
+        lg2::debug("UV generation failed, bailing out");
         return -EIO;
     }
 

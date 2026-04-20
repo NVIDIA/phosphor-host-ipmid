@@ -1,3 +1,8 @@
+/*
+ * SPDX-FileCopyrightText: Copyright OpenBMC Authors
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 #include "config.h"
 
 #include "oemcommands.hpp"
@@ -86,7 +91,7 @@ ipmi::RspType<> ipmiSetBiosPassword(
     try
     {
         std::ofstream ofs(biosPasswordFilePath, std::ios::out);
-        const auto& writeData = json.dump();
+        const auto& writeData = json.dump(4);
         ofs << writeData;
         ofs.close();
     }

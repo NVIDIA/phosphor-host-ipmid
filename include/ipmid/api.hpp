@@ -41,9 +41,9 @@ void setSdBus(std::shared_ptr<sdbusplus::asio::connection>& newBus);
 void setIoContext(std::shared_ptr<boost::asio::io_context>& newIo);
 
 /**
- * @brief post some work to the async exection queue
+ * @brief post some work to the async execution queue
  *
- * The IPMI daemon runs an async exection queue; this allows any function to
+ * The IPMI daemon runs an async execution queue; this allows any function to
  * pass in work to be executed in that context
  *
  * @tparam WorkFn - a function of type void(void)

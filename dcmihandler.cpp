@@ -12,6 +12,7 @@
 #include <sdbusplus/bus.hpp>
 #include <xyz/openbmc_project/Common/error.hpp>
 #include <xyz/openbmc_project/Network/EthernetInterface/server.hpp>
+#include <xyz/openbmc_project/Sensor/Value/common.hpp>
 
 #include <bitset>
 #include <cmath>
@@ -24,13 +25,17 @@ using sdbusplus::server::xyz::openbmc_project::network::EthernetInterface;
 using InternalFailure =
     sdbusplus::error::xyz::openbmc_project::common::InternalFailure;
 
+using SensorValue = sdbusplus::common::xyz::openbmc_project::sensor::Value;
+
 void registerNetFnDcmiFunctions() __attribute__((constructor));
 
-constexpr auto pcapPath = "/xyz/openbmc_project/control/host0/power_cap";
 constexpr auto pcapInterface = "xyz.openbmc_project.Control.Power.Cap";
 
 constexpr auto powerCapProp = "PowerCap";
 constexpr auto powerCapEnableProp = "PowerCapEnable";
+constexpr auto powerCapExceptActProp = "ExceptionAction";
+constexpr auto powerCapSamplPeriodProp = "SamplingPeriod";
+constexpr auto powerCapCorrectTimeProp = "CorrectionTime";
 
 using namespace phosphor::logging;
 
@@ -44,8 +49,6 @@ constexpr size_t maxCtrlIdStrLen = 63;
 constexpr uint8_t parameterRevision = 2;
 constexpr uint8_t specMajorVersion = 1;
 constexpr uint8_t specMinorVersion = 5;
-constexpr auto sensorValueIntf = "xyz.openbmc_project.Sensor.Value";
-constexpr auto sensorValueProp = "Value";
 constexpr uint8_t configParameterRevision = 1;
 constexpr auto option12Mask = 0x01;
 constexpr auto activateDhcpReply = 0x00;
@@ -65,6 +68,49 @@ enum class DCMIConfigParameters : uint8_t
     DHCPTiming2,
     DHCPTiming3,
 };
+
+/*
+ * The list of Exception action options. Please refer to table 6-17 of DCMI
+ * specification version 1.5 for more information.
+ * https://www.intel.com/content/dam/www/public/us/en/documents/technical-specifications/dcmi-v1-5-rev-spec.pdf
+ */
+enum class ExceptActOptions : uint8_t
+{
+    NoAction = 0x00,
+    HardPowerOff,
+    Oem02,
+    Oem03,
+    Oem04,
+    Oem05,
+    Oem06,
+    Oem07,
+    Oem08,
+    Oem09,
+    Oem0A,
+    Oem0B,
+    Oem0C,
+    Oem0D,
+    Oem0E,
+    Oem0F,
+    Oem10,
+    LogEventOnly,
+};
+
+/*
+ * The PDIs only supports NoAction/HardPowerOff/LogEventOnly/Oem options for
+ * exception action.
+ */
+namespace DbusExceptAct
+{
+constexpr auto noAction =
+    "xyz.openbmc_project.Control.Power.Cap.ExceptionActions.NoAction";
+constexpr auto hardPowerOff =
+    "xyz.openbmc_project.Control.Power.Cap.ExceptionActions.HardPowerOff";
+constexpr auto logEventOnly =
+    "xyz.openbmc_project.Control.Power.Cap.ExceptionActions.LogEventOnly";
+constexpr auto oem =
+    "xyz.openbmc_project.Control.Power.Cap.ExceptionActions.Oem";
+} // namespace DbusExceptAct
 
 // Refer Table 6-14, DCMI Entity ID Extension, DCMI v1.5 spec
 static const std::map<uint8_t, std::string> entityIdToName{
@@ -104,81 +150,198 @@ bool isDCMIPowerMgmtSupported()
     return supported;
 }
 
-std::optional<uint32_t> getPcap(ipmi::Context::ptr& ctx)
+std::optional<ipmi::DbusObjectInfo> getPCapObject(ipmi::Context::ptr& ctx)
 {
-    std::string service{};
+    static std::optional<ipmi::DbusObjectInfo> pcapObject = std::nullopt;
+
+    if (pcapObject != std::nullopt)
+    {
+        return pcapObject;
+    }
+
+    ipmi::DbusObjectInfo objectPath{};
     boost::system::error_code ec =
-        ipmi::getService(ctx, pcapInterface, pcapPath, service);
+        ipmi::getDbusObject(ctx, pcapInterface, objectPath);
+
     if (ec.value())
     {
         return std::nullopt;
     }
+
+    pcapObject = objectPath;
+
+    return pcapObject;
+}
+
+std::optional<uint32_t> getPcap(ipmi::Context::ptr& ctx)
+{
+    std::optional<ipmi::DbusObjectInfo> pcapObject = getPCapObject(ctx);
+
+    if (pcapObject == std::nullopt)
+    {
+        return std::nullopt;
+    }
+
     uint32_t pcap{};
-    ec = ipmi::getDbusProperty(
-        ctx, service, pcapPath, pcapInterface, powerCapProp, pcap);
+    boost::system::error_code ec = ipmi::getDbusProperty(
+        ctx, pcapObject.value().second.c_str(),
+        pcapObject.value().first.c_str(), pcapInterface, powerCapProp, pcap);
+
     if (ec.value())
     {
         lg2::error("Error in getPcap prop: {ERROR}", "ERROR", ec.message());
         elog<InternalFailure>();
         return std::nullopt;
     }
+
     return pcap;
 }
 
 std::optional<bool> getPcapEnabled(ipmi::Context::ptr& ctx)
 {
-    std::string service{};
-    boost::system::error_code ec =
-        ipmi::getService(ctx, pcapInterface, pcapPath, service);
-    if (ec.value())
+    std::optional<ipmi::DbusObjectInfo> pcapObject = getPCapObject(ctx);
+
+    if (pcapObject == std::nullopt)
     {
         return std::nullopt;
     }
+
     bool pcapEnabled{};
-    ec = ipmi::getDbusProperty(
-        ctx, service, pcapPath, pcapInterface, powerCapEnableProp, pcapEnabled);
+    boost::system::error_code ec = ipmi::getDbusProperty(
+        ctx, pcapObject.value().second.c_str(),
+        pcapObject.value().first.c_str(), pcapInterface, powerCapEnableProp,
+        pcapEnabled);
+
     if (ec.value())
     {
-        lg2::error("Error in getPcap prop");
+        lg2::error("Error in getPcapEnabled prop: {ERROR}", "ERROR",
+                   ec.message());
         elog<InternalFailure>();
         return std::nullopt;
     }
+
     return pcapEnabled;
+}
+
+std::optional<std::string> getPcapExceptAction(ipmi::Context::ptr& ctx)
+{
+    std::optional<ipmi::DbusObjectInfo> pcapObject = getPCapObject(ctx);
+
+    if (pcapObject == std::nullopt)
+    {
+        return std::nullopt;
+    }
+
+    std::string exceptActStr{};
+
+    boost::system::error_code ec = ipmi::getDbusProperty(
+        ctx, pcapObject.value().second.c_str(),
+        pcapObject.value().first.c_str(), pcapInterface, powerCapExceptActProp,
+        exceptActStr);
+
+    if (ec.value())
+    {
+        lg2::error("Error in getPcapExceptAction prop: {ERROR}", "ERROR",
+                   ec.message());
+        elog<InternalFailure>();
+        return std::nullopt;
+    }
+
+    return exceptActStr;
+}
+
+std::optional<uint32_t> getPcapCorrectTime(ipmi::Context::ptr& ctx)
+{
+    std::optional<ipmi::DbusObjectInfo> pcapObject = getPCapObject(ctx);
+
+    if (pcapObject == std::nullopt)
+    {
+        return std::nullopt;
+    }
+
+    uint64_t pcapCorrectTimeUs{};
+    boost::system::error_code ec = ipmi::getDbusProperty(
+        ctx, pcapObject.value().second.c_str(),
+        pcapObject.value().first.c_str(), pcapInterface,
+        powerCapCorrectTimeProp, pcapCorrectTimeUs);
+    if (ec.value())
+    {
+        lg2::error("Error in getPcapCorrectTime prop: {ERROR}", "ERROR",
+                   ec.message());
+        elog<InternalFailure>();
+        return std::nullopt;
+    }
+
+    return (uint32_t)(std::chrono::duration_cast<std::chrono::milliseconds>(
+                          std::chrono::microseconds(pcapCorrectTimeUs)))
+        .count();
+}
+
+std::optional<uint16_t> getPcapSamplPeriod(ipmi::Context::ptr& ctx)
+{
+    std::optional<ipmi::DbusObjectInfo> pcapObject = getPCapObject(ctx);
+
+    if (pcapObject == std::nullopt)
+    {
+        return std::nullopt;
+    }
+
+    uint64_t pcapSamplPeriodUs{};
+    boost::system::error_code ec = ipmi::getDbusProperty(
+        ctx, pcapObject.value().second.c_str(),
+        pcapObject.value().first.c_str(), pcapInterface,
+        powerCapSamplPeriodProp, pcapSamplPeriodUs);
+    if (ec.value())
+    {
+        lg2::error("Error in getPcapSamplPeriod prop: {ERROR}", "ERROR",
+                   ec.message());
+        elog<InternalFailure>();
+        return std::nullopt;
+    }
+
+    return (uint16_t)(std::chrono::duration_cast<std::chrono::seconds>(
+                          std::chrono::microseconds(pcapSamplPeriodUs)))
+        .count();
 }
 
 bool setPcap(ipmi::Context::ptr& ctx, const uint32_t powerCap)
 {
-    std::string service{};
-    boost::system::error_code ec =
-        ipmi::getService(ctx, pcapInterface, pcapPath, service);
-    if (ec.value())
+    std::optional<ipmi::DbusObjectInfo> pcapObject = getPCapObject(ctx);
+
+    if (pcapObject == std::nullopt)
     {
         return false;
     }
 
-    ec = ipmi::setDbusProperty(
-        ctx, service, pcapPath, pcapInterface, powerCapProp, powerCap);
+    boost::system::error_code ec = ipmi::setDbusProperty(
+        ctx, pcapObject.value().second.c_str(),
+        pcapObject.value().first.c_str(), pcapInterface, powerCapProp,
+        powerCap);
+
     if (ec.value())
     {
         lg2::error("Error in setPcap property: {ERROR}", "ERROR", ec.message());
         elog<InternalFailure>();
         return false;
     }
+
     return true;
 }
 
 bool setPcapEnable(ipmi::Context::ptr& ctx, bool enabled)
 {
-    std::string service{};
-    boost::system::error_code ec =
-        ipmi::getService(ctx, pcapInterface, pcapPath, service);
-    if (ec.value())
+    std::optional<ipmi::DbusObjectInfo> pcapObject = getPCapObject(ctx);
+
+    if (pcapObject == std::nullopt)
     {
         return false;
     }
 
-    ec = ipmi::setDbusProperty(
-        ctx, service, pcapPath, pcapInterface, powerCapEnableProp, enabled);
+    boost::system::error_code ec = ipmi::setDbusProperty(
+        ctx, pcapObject.value().second.c_str(),
+        pcapObject.value().first.c_str(), pcapInterface, powerCapEnableProp,
+        enabled);
+
     if (ec.value())
     {
         lg2::error("Error in setPcapEnabled property: {ERROR}", "ERROR",
@@ -186,6 +349,95 @@ bool setPcapEnable(ipmi::Context::ptr& ctx, bool enabled)
         elog<InternalFailure>();
         return false;
     }
+    return true;
+}
+
+bool setPcapExceptAction(ipmi::Context::ptr& ctx,
+                         const std::string& pcapExceptAct)
+{
+    std::optional<ipmi::DbusObjectInfo> pcapObject = getPCapObject(ctx);
+
+    if (pcapObject == std::nullopt)
+    {
+        return false;
+    }
+
+    boost::system::error_code ec = ipmi::setDbusProperty(
+        ctx, pcapObject.value().second.c_str(),
+        pcapObject.value().first.c_str(), pcapInterface, powerCapExceptActProp,
+        pcapExceptAct);
+    if (ec.value())
+    {
+        lg2::error("Error in setPcapExceptAction property: {ERROR}", "ERROR",
+                   ec.message());
+        elog<InternalFailure>();
+        return false;
+    }
+
+    return true;
+}
+
+bool setPcapCorrectTime(ipmi::Context::ptr& ctx, uint32_t pcapCorrectTime)
+{
+    std::optional<ipmi::DbusObjectInfo> pcapObject = getPCapObject(ctx);
+
+    if (pcapObject == std::nullopt)
+    {
+        return false;
+    }
+
+    /*
+     * Dbus is storing Correction time in microseconds unit.
+     * Therefore, we have to convert it from millisecond to microseconds.
+     */
+    uint64_t pcapCorrectTimeUs =
+        (uint64_t)(std::chrono::duration_cast<std::chrono::microseconds>(
+                       std::chrono::milliseconds(pcapCorrectTime)))
+            .count();
+    boost::system::error_code ec = ipmi::setDbusProperty(
+        ctx, pcapObject.value().second.c_str(),
+        pcapObject.value().first.c_str(), pcapInterface,
+        powerCapCorrectTimeProp, pcapCorrectTimeUs);
+    if (ec.value())
+    {
+        lg2::error("Error in setPcapCorrectTime property: {ERROR}", "ERROR",
+                   ec.message());
+        elog<InternalFailure>();
+        return false;
+    }
+
+    return true;
+}
+
+bool setPcapSamplPeriod(ipmi::Context::ptr& ctx, uint16_t pcapSamplPeriod)
+{
+    std::optional<ipmi::DbusObjectInfo> pcapObject = getPCapObject(ctx);
+
+    if (pcapObject == std::nullopt)
+    {
+        return false;
+    }
+
+    /*
+     * Dbus is storing Sampling periodic in microseconds unit.
+     * Therefore, we have to convert it from seconds to microseconds unit.
+     */
+    uint64_t pcapSamplPeriodUs =
+        (uint64_t)(std::chrono::duration_cast<std::chrono::microseconds>(
+                       std::chrono::seconds(pcapSamplPeriod)))
+            .count();
+    boost::system::error_code ec = ipmi::setDbusProperty(
+        ctx, pcapObject.value().second.c_str(),
+        pcapObject.value().first.c_str(), pcapInterface,
+        powerCapSamplPeriodProp, pcapSamplPeriodUs);
+    if (ec.value())
+    {
+        lg2::error("Error in setPcapSamplPeriod property: {ERROR}", "ERROR",
+                   ec.message());
+        elog<InternalFailure>();
+        return false;
+    }
+
     return true;
 }
 
@@ -268,6 +520,8 @@ std::optional<EthernetInterface::DHCPConf> getDHCPEnabled(
     auto ethdevice = ipmi::getChannelName(ethernetDefaultChannelNum);
     if (ethdevice.empty())
     {
+        lg2::error("Channel name does not exist for channel {CHANNEL}",
+                   "CHANNEL", ethernetDefaultChannelNum);
         return std::nullopt;
     }
     ipmi::DbusObjectInfo ethernetObj{};
@@ -349,7 +603,6 @@ bool setDHCPOption(ipmi::Context::ptr& ctx, std::string prop, bool value)
 
 } // namespace dcmi
 
-constexpr uint8_t exceptionPowerOff = 0x01;
 ipmi::RspType<uint16_t, // reserved
               uint8_t,  // exception actions
               uint16_t, // power limit requested in watts
@@ -370,34 +623,54 @@ ipmi::RspType<uint16_t, // reserved
 
     std::optional<uint16_t> pcapValue = dcmi::getPcap(ctx);
     std::optional<bool> pcapEnable = dcmi::getPcapEnabled(ctx);
-    if (!pcapValue || !pcapEnable)
+    std::optional<uint32_t> pcapCorrectTime = dcmi::getPcapCorrectTime(ctx);
+    std::optional<uint16_t> pcapSamplPeriod = dcmi::getPcapSamplPeriod(ctx);
+    std::optional<std::string> pcapExceptAct = dcmi::getPcapExceptAction(ctx);
+
+    if (!pcapValue || !pcapEnable || !pcapCorrectTime || !pcapSamplPeriod ||
+        !pcapExceptAct)
     {
         return ipmi::responseUnspecifiedError();
     }
 
     constexpr uint16_t reserved1{};
     constexpr uint16_t reserved2{};
-    /*
-     * Exception action if power limit is exceeded and cannot be controlled
-     * with the correction time limit is hardcoded to Hard Power Off system
-     * and log event to SEL.
-     */
-    constexpr uint8_t exception = exceptionPowerOff;
-    /*
-     * Correction time limit and Statistics sampling period is currently not
-     * populated.
-     */
-    constexpr uint32_t correctionTime{};
-    constexpr uint16_t statsPeriod{};
-    if (*pcapEnable == false)
+    uint8_t exception;
+
+    std::string exceptAct = pcapExceptAct.value();
+
+    if (exceptAct == dcmi::DbusExceptAct::noAction)
+    {
+        exception = static_cast<uint8_t>(dcmi::ExceptActOptions::NoAction);
+    }
+    else if (exceptAct == dcmi::DbusExceptAct::hardPowerOff)
+    {
+        exception = static_cast<uint8_t>(dcmi::ExceptActOptions::HardPowerOff);
+    }
+    else if (exceptAct == dcmi::DbusExceptAct::logEventOnly)
+    {
+        exception = static_cast<uint8_t>(dcmi::ExceptActOptions::LogEventOnly);
+    }
+    else if (exceptAct == dcmi::DbusExceptAct::oem)
+    {
+        exception = static_cast<uint8_t>(dcmi::ExceptActOptions::Oem02);
+    }
+    else
+    {
+        return ipmi::responseUnspecifiedError();
+    }
+
+    if (!pcapEnable.value())
     {
         constexpr ipmi::Cc responseNoPowerLimitSet = 0x80;
         return ipmi::response(
-            responseNoPowerLimitSet, reserved1, exception, *pcapValue,
-            correctionTime, reserved2, statsPeriod);
+            responseNoPowerLimitSet, reserved1, exception, pcapValue.value(),
+            pcapCorrectTime.value(), reserved2, pcapSamplPeriod.value());
     }
-    return ipmi::responseSuccess(reserved1, exception, *pcapValue,
-                                 correctionTime, reserved2, statsPeriod);
+
+    return ipmi::responseSuccess(
+        reserved1, exception, pcapValue.value(), pcapCorrectTime.value(),
+        reserved2, pcapSamplPeriod.value());
 }
 
 ipmi::RspType<> setPowerLimit(ipmi::Context::ptr& ctx, uint16_t reserved1,
@@ -411,10 +684,7 @@ ipmi::RspType<> setPowerLimit(ipmi::Context::ptr& ctx, uint16_t reserved1,
         return ipmi::responseInvalidCommand();
     }
 
-    // Only process the power limit requested in watts. Return errors
-    // for other fields that are set
-    if (reserved1 || reserved2 || reserved3 || correctionTime || statsPeriod ||
-        exceptionAction != exceptionPowerOff)
+    if (reserved1 || reserved2 || reserved3)
     {
         return ipmi::responseInvalidFieldRequest();
     }
@@ -424,7 +694,60 @@ ipmi::RspType<> setPowerLimit(ipmi::Context::ptr& ctx, uint16_t reserved1,
         return ipmi::responseUnspecifiedError();
     }
 
-    lg2::info("Set Power Cap: {POWERCAP}", "POWERCAP", powerLimit);
+    /*
+     * As defined in table 6-18 of DCMI specification version 1.5.
+     * The Exception action value is mapped as below
+     *  00h - No Action
+     *  01h - Hard Power Off system and log events to SEL
+     *  02h - 10h OEM defined actions
+     *  11h - Log event to SEL only
+     *  12h-FFh Reserved
+     */
+    if (exceptionAction >= 0x12)
+    {
+        return ipmi::responseUnspecifiedError();
+    }
+
+    std::string exceptActStr;
+
+    switch (static_cast<dcmi::ExceptActOptions>(exceptionAction))
+    {
+        case dcmi::ExceptActOptions::NoAction:
+        {
+            exceptActStr = dcmi::DbusExceptAct::noAction;
+            break;
+        }
+        case dcmi::ExceptActOptions::HardPowerOff:
+        {
+            exceptActStr = dcmi::DbusExceptAct::hardPowerOff;
+            break;
+        }
+        case dcmi::ExceptActOptions::LogEventOnly:
+        {
+            exceptActStr = dcmi::DbusExceptAct::logEventOnly;
+            break;
+        }
+        default:
+        {
+            exceptActStr = dcmi::DbusExceptAct::oem;
+            break;
+        }
+    }
+
+    if (!dcmi::setPcapExceptAction(ctx, exceptActStr))
+    {
+        return ipmi::responseUnspecifiedError();
+    }
+
+    if (!dcmi::setPcapCorrectTime(ctx, correctionTime))
+    {
+        return ipmi::responseUnspecifiedError();
+    }
+
+    if (!dcmi::setPcapSamplPeriod(ctx, statsPeriod))
+    {
+        return ipmi::responseUnspecifiedError();
+    }
 
     return ipmi::responseSuccess();
 }
@@ -755,13 +1078,14 @@ std::tuple<bool, bool, uint8_t> readTemp(ipmi::Context::ptr& ctx,
 
     ipmi::PropertyMap result{};
     boost::system::error_code ec = ipmi::getAllDbusProperties(
-        ctx, dbusService, dbusPath, "xyz.openbmc_project.Sensor.Value", result);
+        ctx, dbusService, dbusPath, SensorValue::interface, result);
     if (ec.value())
     {
         return std::make_tuple(false, false, 0);
     }
     auto temperature =
-        std::visit(ipmi::VariantToDoubleVisitor(), result.at("Value"));
+        std::visit(ipmi::VariantToDoubleVisitor(),
+                   result.at(SensorValue::property_names::value));
     double absTemp = std::abs(temperature);
 
     auto findFactor = result.find("Scale");
@@ -810,8 +1134,8 @@ std::tuple<std::vector<std::tuple<uint7_t, bool, uint8_t>>, uint8_t> read(
 
         std::string path = j.value("dbus", "");
         std::string service{};
-        boost::system::error_code ec = ipmi::getService(
-            ctx, "xyz.openbmc_project.Sensor.Value", path, service);
+        boost::system::error_code ec =
+            ipmi::getService(ctx, SensorValue::interface, path, service);
         if (ec.value())
         {
             // not found on dbus
@@ -1019,26 +1343,26 @@ static std::optional<uint16_t> readPower(ipmi::Context::ptr& ctx)
     // Return default value if failed to read from D-Bus object
     std::string service{};
     boost::system::error_code ec =
-        ipmi::getService(ctx, dcmi::sensorValueIntf, objectPath, service);
+        ipmi::getService(ctx, SensorValue::interface, objectPath, service);
     if (ec.value())
     {
         lg2::error("Failed to fetch service for D-Bus object, "
                    "object path: {OBJECT_PATH}, interface: {INTERFACE}",
                    "OBJECT_PATH", objectPath, "INTERFACE",
-                   dcmi::sensorValueIntf);
+                   SensorValue::interface);
         return std::nullopt;
     }
 
     // Read the sensor value and scale properties
     double value{};
-    ec = ipmi::getDbusProperty(ctx, service, objectPath, dcmi::sensorValueIntf,
-                               dcmi::sensorValueProp, value);
+    ec = ipmi::getDbusProperty(ctx, service, objectPath, SensorValue::interface,
+                               SensorValue::property_names::value, value);
     if (ec.value())
     {
         lg2::error("Failed to read power value from D-Bus object, "
                    "object path: {OBJECT_PATH}, interface: {INTERFACE}",
                    "OBJECT_PATH", objectPath, "INTERFACE",
-                   dcmi::sensorValueIntf);
+                   SensorValue::interface);
         return std::nullopt;
     }
     auto power = static_cast<uint16_t>(value);

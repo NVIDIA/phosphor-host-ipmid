@@ -9,15 +9,13 @@
 
 #include <chrono>
 #include <optional>
+#include <string>
+#include <vector>
 
 namespace ipmi
 {
 
 using namespace std::literals::chrono_literals;
-
-constexpr auto MAPPER_BUS_NAME = "xyz.openbmc_project.ObjectMapper";
-constexpr auto MAPPER_OBJ = "/xyz/openbmc_project/object_mapper";
-constexpr auto MAPPER_INTF = "xyz.openbmc_project.ObjectMapper";
 
 constexpr auto ROOT = "/";
 constexpr auto HOST_MATCH = "host0";
@@ -362,10 +360,10 @@ boost::system::error_code callDbusMethod(
  *         type of the value does not match the expected type
  *
  *  @tparam T - type of expected value to return
- *  @param[in] props - D-Bus propery map (Map of variants)
+ *  @param[in] props - D-Bus property map (Map of variants)
  *  @param[in] name - key name of property to fetch
  *  @param[in] defaultValue - default value to return on error
- *  @return - value from propery map at name, or defaultValue
+ *  @return - value from property map at name, or defaultValue
  */
 template <typename T>
 T mappedVariant(const ipmi::PropertyMap& props, const std::string& name,
@@ -467,4 +465,40 @@ ipmi::Cc i2cReadDataBlock(const std::string i2cBus, const uint8_t slaveAddr,
                           std::vector<uint8_t>& readBuf,
                           const uint8_t i2cReadRegister);
 
+/** @brief Split a string into a vector of strings
+ *  @param[in] srcStr - The string to split
+ *  @param[in] delim - The delimiter to split the string on
+ *  @return A vector of strings
+ */
+std::vector<std::string> split(const std::string& srcStr, char delim);
+
+/** @brief Parse an integral value from a string without throwing exceptions.
+ *  @param[in] s - Input string_view to parse.
+ *  @param[in,out] out - Output parameter that receives the parsed value on
+ *                       success.
+ *  @param[in] base - Number base (10 or 16). If 16, 0x/0X prefix is optional.
+ *  @return True if parsing succeeds and the entire string is consumed;
+ *          otherwise false.
+ */
+template <typename T>
+inline bool tryParse(std::string_view s, T& out, int base = 10)
+{
+    static_assert(std::is_integral_v<T>,
+                  "tryParse only supports integral types");
+
+    if (s.empty())
+    {
+        return false;
+    }
+
+    if (base == 16 && s.size() >= 2 && s[0] == '0' &&
+        (s[1] == 'x' || s[1] == 'X'))
+    {
+        s.remove_prefix(2);
+    }
+
+    auto result = std::from_chars(s.data(), s.data() + s.size(), out, base);
+
+    return result.ec == std::errc{} && result.ptr == s.data() + s.size();
+}
 } // namespace ipmi

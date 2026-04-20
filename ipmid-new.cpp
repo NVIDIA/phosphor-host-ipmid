@@ -19,7 +19,6 @@
 
 #include <dlfcn.h>
 
-#include <boost/algorithm/string.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/spawn.hpp>
@@ -89,7 +88,7 @@ EInterfaceIndex getInterfaceIndex(void)
     return interfaceKCS;
 }
 
-sd_bus* bus;
+sd_bus* bus = nullptr;
 sd_event* events = nullptr;
 sd_event* ipmid_get_sd_event_connection(void)
 {
@@ -461,7 +460,7 @@ void nameChangeHandler(sdbusplus::message_t& message)
 
     if (!oldOwner.empty())
     {
-        if (boost::starts_with(oldOwner, ":"))
+        if (oldOwner.starts_with(":"))
         {
             // Connection removed
             auto it = uniqueNameToChannelNumber.find(oldOwner);
@@ -856,11 +855,21 @@ int main(int argc, char* argv[])
     setIoContext(io);
     if (argc > 1 && std::string(argv[1]) == "-session")
     {
-        sd_bus_default_user(&bus);
+        auto rc = sd_bus_default_user(&bus);
+        if (rc < 0)
+        {
+            lg2::error("Failed to connect to user bus: {RC}", "RC", rc);
+            return EXIT_FAILURE;
+        }
     }
     else
     {
-        sd_bus_default_system(&bus);
+        auto rc = sd_bus_default_system(&bus);
+        if (rc < 0)
+        {
+            lg2::error("Failed to connect to system bus: {RC}", "RC", rc);
+            return EXIT_FAILURE;
+        }
     }
 
     std::shared_ptr<sdbusplus::asio::connection> sdbusp;

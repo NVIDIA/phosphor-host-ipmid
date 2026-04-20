@@ -7,6 +7,7 @@
 #include <ipmid/utils.hpp>
 #include <phosphor-logging/elog-errors.hpp>
 #include <xyz/openbmc_project/Common/error.hpp>
+#include <xyz/openbmc_project/ObjectMapper/common.hpp>
 
 #include <charconv>
 #include <chrono>
@@ -17,6 +18,8 @@ extern const ipmi::sensor::InvObjectIDMap invSensors;
 using namespace phosphor::logging;
 using InternalFailure =
     sdbusplus::error::xyz::openbmc_project::common::InternalFailure;
+
+using ObjectMapper = sdbusplus::common::xyz::openbmc_project::ObjectMapper;
 
 namespace ipmi
 {
