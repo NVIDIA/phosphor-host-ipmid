@@ -49,6 +49,7 @@ static constexpr auto logIntf = "xyz.openbmc_project.Collection.DeleteAll";
 static constexpr auto logDeleteAllMethod = "DeleteAll";
 
 static constexpr auto propIntf = "org.freedesktop.DBus.Properties";
+static constexpr auto objMgrIntf = "org.freedesktop.DBus.ObjectManager";
 
 using ObjectPaths = std::vector<std::string>;
 using PropertyName = std::string;
@@ -223,11 +224,30 @@ int convert(const std::string_view& str, int base = 10);
 // uint16
 uint16_t convertSelIdToU16(uint32_t id);
 
+/** @brief Extract Id and Timestamp from a Logging.Entry property map.
+ *
+ *  @param[in]  entryData  Property map containing at least "Id" and
+ * "Timestamp".
+ *  @param[out] recordId   SEL record ID (truncated from uint32 Id).
+ *  @return Timestamp as milliseconds since epoch.
+ *  @throws InternalFailure if "Id" or "Timestamp" is missing.
+ */
+std::chrono::milliseconds getEntryData(const entryDataMap& entryData,
+                                       uint16_t& recordId);
+
 /* Retrive entry data from dbus object such as entry ID,
  * Timestamp and recordID.
  */
 std::chrono::milliseconds getEntryData(
     const std::string& objPath, entryDataMap& entryData, uint16_t& recordId);
+
+/** @brief Bulk-load all Logging.Entry properties via GetManagedObjects on
+ *         @ref logObj. O(1) D-Bus round-trips instead of O(n).
+ *
+ *  @param[out] outByPath  Cleared, then filled with {objPath, entryDataMap}.
+ *  @return true if the operation succeeds, otherwise false.
+ */
+bool readLoggingEntryDataBulk(std::map<std::string, entryDataMap>& outByPath);
 
 /** Construct OEM SEL record according to IPMI spec 32.2, 32.3. */
 void constructOEMSEL(uint8_t recordType, std::chrono::milliseconds timestamp,
