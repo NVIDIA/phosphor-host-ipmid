@@ -1221,8 +1221,10 @@ ipmi::Cc ipmi_fru_get_sdr(ipmi_request_t request, ipmi_response_t response,
         get_sdr::body::set_device_id_strlen(deviceID.length(), &(record.body));
     }
 
-    strncpy(record.body.deviceID, deviceID.c_str(),
-            get_sdr::body::get_device_id_strlen(&(record.body)));
+    strncpy(
+        record.body.deviceID, deviceID.c_str(),
+        std::min<size_t>(get_sdr::body::get_device_id_strlen(&(record.body)),
+                         sizeof(record.body.deviceID)));
 
     if (++fru == frus.end())
     {
@@ -1243,8 +1245,10 @@ ipmi::Cc ipmi_fru_get_sdr(ipmi_request_t request, ipmi_response_t response,
             (FRU_RECORD_ID_START + fru->first), resp);
     }
 
-    // Check for invalid offset size
-    if (req->offset > sizeof(record))
+    // Check for invalid offset size (>= because offset==sizeof would point
+    // one past the end and dataLength would be 0; Coverity flags the
+    // subsequent pointer arithmetic as overrun-local for that edge case)
+    if (req->offset >= sizeof(record))
     {
         return ipmi::ccParmOutOfRange;
     }
@@ -1316,8 +1320,10 @@ ipmi::Cc ipmi_entity_get_sdr(ipmi_request_t request, ipmi_response_t response,
             (ENTITY_RECORD_ID_START + entity->first), resp);
     }
 
-    // Check for invalid offset size
-    if (req->offset > sizeof(record))
+    // Check for invalid offset size (>= because offset==sizeof would point
+    // one past the end and dataLength would be 0; Coverity flags the
+    // subsequent pointer arithmetic as overrun-local for that edge case)
+    if (req->offset >= sizeof(record))
     {
         return ipmi::ccParmOutOfRange;
     }

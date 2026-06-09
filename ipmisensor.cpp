@@ -311,8 +311,10 @@ int updateSensorRecordFromSSRAESC(const void* record)
     // function
     if (stype == 0xC3)
     {
-        shouldReport(stype, 0x00, &index);
-        reportSensorEventAssert(pRec, index);
+        if (shouldReport(stype, 0x00, &index))
+        {
+            reportSensorEventAssert(pRec, index);
+        }
     }
     else
     {

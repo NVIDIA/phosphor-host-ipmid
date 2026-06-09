@@ -386,12 +386,20 @@ void userUpdatedSignalHandler(UserAccess& usrAccess, sdbusplus::message_t& msg)
 
 UserAccess::~UserAccess()
 {
-    if (signalHndlrObject)
+    try
     {
-        userUpdatedSignal.reset();
-        userMgrRenamedSignal.reset();
-        userPropertiesSignal.reset();
-        sigHndlrLock.unlock();
+        if (signalHndlrObject)
+        {
+            userUpdatedSignal.reset();
+            userMgrRenamedSignal.reset();
+            userPropertiesSignal.reset();
+            sigHndlrLock.unlock();
+        }
+    }
+    catch (...)
+    {
+        // Destructors must not throw — sigHndlrLock.unlock() may throw
+        // boost::interprocess_exception under file-lock corruption.
     }
 }
 

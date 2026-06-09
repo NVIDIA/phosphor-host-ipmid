@@ -20,9 +20,16 @@ class SignalHandler
 
     ~SignalHandler()
     {
-        // unregister with asio to unmask the signal
-        signal->cancel();
-        signal->clear();
+        try
+        {
+            // unregister with asio to unmask the signal
+            signal->cancel();
+            signal->clear();
+        }
+        catch (...)
+        {
+            // Destructors must not throw.
+        }
     }
 
     void registerHandler(int prio,
