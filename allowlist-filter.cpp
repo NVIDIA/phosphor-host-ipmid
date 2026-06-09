@@ -131,18 +131,24 @@ static inline int getSystemInterfaceChannel()
  */
 AllowlistFilter::AllowlistFilter()
 {
-    bus = getSdBus();
-
     lg2::info("Loading Allowlist filter");
 
+    // Defer all use of globals defined in other translation units
+    // (getSdBus, getSystemInterfaceChannel) to the asio post callback —
+    // by the time post_work fires, all module-load constructors have run
+    // so the static-init-order hazard is gone. Registering the filter is
+    // safe here because ipmi::registerFilter only mutates a function-local
+    // static container.
     ipmi::registerFilter(ipmi::prioOpenBmcBase,
                          [this](ipmi::message::Request::ptr request) {
         return filterMessage(request);
     });
 
-    channelSMM = getSystemInterfaceChannel();
-    // wait until io->run is going to fetch RestrictionMode
-    post_work([this]() { postInit(); });
+    post_work([this]() {
+        bus = getSdBus();
+        channelSMM = getSystemInterfaceChannel();
+        postInit();
+    });
 }
 
 AllowlistFilter::~AllowlistFilter()
@@ -470,8 +476,24 @@ ipmi::Cc AllowlistFilter::filterMessage(ipmi::message::Request::ptr request)
     return ipmi::ccSuccess;
 }
 
-// instantiate the AllowlistFilter when this shared object is loaded
-AllowlistFilter allowlistFilter;
+// instantiate the AllowlistFilter when this shared object is loaded.
+// Use a function-local static + __attribute__((constructor)) trigger so the
+// AllowlistFilter ctor runs at module-init time but its dependencies on
+// globals defined in other translation units (getSdBus / getIoContext via
+// post_work) only resolve on first call to getAllowlistFilter(), which the
+// constructor attribute schedules with the lowest user priority (65535,
+// i.e. last) — by then every other global has been constructed, closing
+// the static-init-order hazard Coverity flags as GLOBAL_INIT_ORDER.
+AllowlistFilter& getAllowlistFilter()
+{
+    static AllowlistFilter instance;
+    return instance;
+}
+
+__attribute__((constructor(65535))) static void registerAllowlistFilter()
+{
+    (void)getAllowlistFilter();
+}
 
 } // namespace
 

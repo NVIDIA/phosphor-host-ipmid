@@ -3164,13 +3164,9 @@ ipmi::RspType<uint16_t,            // next record ID
         bytesToRead = sdrLength - offset;
     }
 
+    // respStart is hdr+offset where hdr is a non-null local; the null
+    // check Coverity flagged as deadcode was statically unreachable.
     uint8_t* respStart = reinterpret_cast<uint8_t*>(hdr) + offset;
-    if (!respStart)
-    {
-        phosphor::logging::log<phosphor::logging::level::ERR>(
-            "ipmiStorageGetSDR: record is null");
-        return ipmi::responseSuccess(nextRecordId, record);
-    }
 
     std::vector<uint8_t> recordData(respStart, respStart + bytesToRead);
 

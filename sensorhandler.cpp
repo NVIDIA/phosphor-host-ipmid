@@ -1240,7 +1240,8 @@ ipmi::RspType<uint16_t,            // nextRecordId
 
     uint16_t nextRecordId{};
     strncpy(record.body.deviceID, deviceID.c_str(),
-            get_sdr::body::getDeviceIdStrLen(record.body));
+            std::min<size_t>(get_sdr::body::getDeviceIdStrLen(record.body),
+                             sizeof(record.body.deviceID)));
 
     if (++fru == frus.end())
     {
@@ -1259,8 +1260,10 @@ ipmi::RspType<uint16_t,            // nextRecordId
         nextRecordId = FRU_RECORD_ID_START + fru->first;
     }
 
-    // Check for invalid offset size
-    if (offset > sizeof(record))
+    // Check for invalid offset size (>= because offset==sizeof would point
+    // one past the end and dataLength would be 0; Coverity flags the
+    // subsequent pointer arithmetic as overrun-local for that edge case)
+    if (offset >= sizeof(record))
     {
         return ipmi::responseParmOutOfRange();
     }
@@ -1321,8 +1324,10 @@ ipmi::RspType<uint16_t,            // nextRecordId
         nextRecordId = entity->first + ENTITY_RECORD_ID_START;
     }
 
-    // Check for invalid offset size
-    if (offset > sizeof(record))
+    // Check for invalid offset size (>= because offset==sizeof would point
+    // one past the end and dataLength would be 0; Coverity flags the
+    // subsequent pointer arithmetic as overrun-local for that edge case)
+    if (offset >= sizeof(record))
     {
         return ipmi::responseParmOutOfRange();
     }

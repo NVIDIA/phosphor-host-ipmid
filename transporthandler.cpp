@@ -105,10 +105,6 @@ const std::unordered_set<IP::AddressOrigin> originsV4 = {
 const std::unordered_set<IP::AddressOrigin> originsV4Static = {
     IP::AddressOrigin::Static,
 };
-
-const std::unordered_set<IP::AddressOrigin> originsV4DHCP = {
-    IP::AddressOrigin::DHCP,
-};
 static constexpr uint8_t oemCmdStart = 192;
 
 // Checks if the ifname is part of the networkd path
@@ -299,29 +295,18 @@ void createIfAddr(sdbusplus::bus_t& bus, const ChannelParams& params,
     bus.call_noreply(newreq);
 }
 
-/** @brief Gets the IPv4 address to report for IPMI LAN parameters
+/** @brief Trivial helper for getting the IPv4 address from getIfAddrs()
  *
  *  @param[in] bus    - The bus object used for lookups
  *  @param[in] params - The parameters for the channel
- *  @param[in] dhcp   - DHCP4 state for the channel
- *  @return The preferred address, or first valid address if none matches
+ *  @param[in] idx    - The IP Address index
+ *  @return The address and prefix if found
  */
-auto getIfAddr4ForLanConfig(sdbusplus::bus_t& bus, const ChannelParams& params,
-                            bool dhcp)
+
+auto getIfAddr4ByIdx(sdbusplus::bus_t& bus, const ChannelParams& params,
+                     uint8_t idx)
 {
-    ObjectLookupCache ips(bus, params, NetworkIP::interface);
-    const auto& origins = dhcp ? originsV4DHCP : originsV4Static;
-
-    // IPMI reports the address value separately from the address source.
-    // Prefer an origin matching DHCP4, but keep reporting a configured IPv4
-    // address if a permanent DHCP lease is exposed on DBus as Static.
-    auto ifaddr = findIfAddr<AF_INET>(bus, params, 0, origins, ips);
-    if (ifaddr)
-    {
-        return ifaddr;
-    }
-
-    return findIfAddr<AF_INET>(bus, params, 0, originsV4, ips);
+    return getIfAddr<AF_INET>(bus, params, idx, originsV4);
 }
 
 /** @brief Trivial helper for getting the IPv4 address from getIfAddrs()
@@ -1270,6 +1255,8 @@ RspType<message::Payload> getLan(Context::ptr ctx, uint4_t channelBits,
         }
         case LanParam::IP:
         {
+            uint8_t idx = 0;
+            auto ifaddr = channelCall<getIfAddr4ByIdx>(channel, idx);
             stdplus::In4Addr addr{};
             // get the IPv4 dhcp state for the interface
             auto dhcp = channelCall<getEthProp<bool>>(channel, "DHCP4");
@@ -1282,10 +1269,24 @@ RspType<message::Payload> getLan(Context::ptr ctx, uint4_t channelBits,
             //   by the DHCP server found on the channel.
             //   - IPv4 DHCP Disabled: IPMI will select the first static IP
             //   address found on the channel.
-            auto ifaddr = channelCall<getIfAddr4ForLanConfig>(channel, dhcp);
-            if (ifaddr)
+            while (ifaddr)
             {
-                addr = ifaddr->address;
+                // check if the address origin match the dhcp state
+                if ((dhcp && ifaddr->origin == IP::AddressOrigin::DHCP) ||
+                    (dhcp == false &&
+                     ifaddr->origin == IP::AddressOrigin::Static))
+                {
+                    // address found escape while
+                    addr = ifaddr->address;
+                    break;
+                }
+                else
+                {
+                    // move to the next index
+                    idx++;
+                    ifaddr = channelCall<getIfAddr4ByIdx>(channel, idx);
+                    continue;
+                }
             }
             ret.pack(stdplus::raw::asView<char>(addr));
             return responseSuccess(std::move(ret));
@@ -1306,6 +1307,8 @@ RspType<message::Payload> getLan(Context::ptr ctx, uint4_t channelBits,
         }
         case LanParam::SubnetMask:
         {
+            uint8_t idx = 0;
+            auto ifaddr = channelCall<getIfAddr4ByIdx>(channel, idx);
             uint8_t prefix = AddrFamily<AF_INET>::defaultPrefix;
             // get the IPv4 dhcp state for the interface
             auto dhcp = channelCall<getEthProp<bool>>(channel, "DHCP4");
@@ -1318,10 +1321,24 @@ RspType<message::Payload> getLan(Context::ptr ctx, uint4_t channelBits,
             //   by the DHCP server found on the channel.
             //   - IPv4 DHCP Disabled: IPMI will select the first static IP
             //   address found on the channel.
-            auto ifaddr = channelCall<getIfAddr4ForLanConfig>(channel, dhcp);
-            if (ifaddr)
+            while (ifaddr)
             {
-                prefix = ifaddr->prefix;
+                // check if the address origin match the dhcp state
+                if ((dhcp && ifaddr->origin == IP::AddressOrigin::DHCP) ||
+                    (dhcp == false &&
+                     ifaddr->origin == IP::AddressOrigin::Static))
+                {
+                    // assign the prefix
+                    prefix = ifaddr->prefix;
+                    break;
+                }
+                else
+                {
+                    // move to the next interface
+                    idx++;
+                    ifaddr = channelCall<getIfAddr4ByIdx>(channel, idx);
+                    continue;
+                }
             }
             auto netmask = stdplus::pfxToMask<stdplus::In4Addr>(prefix);
             ret.pack(stdplus::raw::asView<char>(netmask));

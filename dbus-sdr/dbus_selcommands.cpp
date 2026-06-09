@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <map>
 constexpr auto DEFALUT_SENSOR_NUMBER = 0xff;
 constexpr auto INVALID_SENSOR_NUMBER = 0xffff;
@@ -567,7 +568,10 @@ ipmi::RspType<uint16_t // deleted record ID
     delRecordID = selEntry.first;
     sdbusplus::bus_t bus{ipmid_get_sd_bus_connection()};
     std::string service;
-    auto objPath = getLoggingObjPath(iter->second.first);
+    // Use the already-extracted selEntry instead of iter->second — iter is
+    // only assigned in the explicit selRecordID branch above, so deref'ing
+    // it for firstEntry/lastEntry would be undefined.
+    auto objPath = getLoggingObjPath(selEntry.first);
     try
     {
         service = ipmi::getService(bus, ipmi::sel::logDeleteIntf, objPath);
@@ -655,7 +659,7 @@ std::time_t to_time_t(TP tp)
     return system_clock::to_time_t(sctp);
 }
 
-static int getFileTimestamp(const std::filesystem::path& file)
+static uint32_t getFileTimestamp(const std::filesystem::path& file)
 {
     std::error_code ec;
     std::filesystem::file_time_type ftime =
@@ -665,7 +669,21 @@ static int getFileTimestamp(const std::filesystem::path& file)
         return ::ipmi::sel::invalidTimeStamp;
     }
 
-    return to_time_t(ftime);
+    // IPMI SEL timestamps are wire-format uint32_t seconds-since-epoch.
+    // The truncation is per-spec, not a bug — clamp before the cast so the
+    // wire field saturates rather than wrapping after 2038.
+    std::time_t tt = to_time_t(ftime);
+    if (tt < 0)
+    {
+        return 0;
+    }
+    uint64_t ttU = static_cast<uint64_t>(tt);
+    if (ttU > std::numeric_limits<uint32_t>::max())
+    {
+        return std::numeric_limits<uint32_t>::max();
+    }
+    // coverity[store_truncates_time_t]
+    return static_cast<uint32_t>(ttU & 0xFFFFFFFFU);
 }
 
 /** @brief implements the get SEL Info command

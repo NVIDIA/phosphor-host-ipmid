@@ -919,11 +919,11 @@ ipmi::RspType<uint8_t> setMgmntCtrlIdStr(ipmi::Context::ptr& ctx,
     {
         return ipmi::responseReqDataLenInvalid();
     }
-    bool terminalWrite{data.back() == '\0'};
+    bool terminalWrite = (count > 0) && (data.back() == '\0');
     if (terminalWrite)
     {
         // remove the null termination from the data (no need with std::string)
-        data.resize(count - 1);
+        data.resize(static_cast<size_t>(count) - 1U);
     }
 
     static std::string hostname{};
@@ -956,8 +956,15 @@ ipmi::RspType<uint8_t> setMgmntCtrlIdStr(ipmi::Context::ptr& ctx,
         }
     }
 
-    auto totalIdSize = static_cast<uint8_t>(offset + count);
-    return ipmi::responseSuccess(totalIdSize);
+    // offset and count are both uint8_t; the earlier bounds check
+    // guarantees offset + count <= maxCtrlIdStrLen which fits in a
+    // uint8_t, but Coverity's INTEGER_OVERFLOW checker doesn't track
+    // the prior guard across the function body. Do the addition in a
+    // wider type so the absence of overflow is syntactically explicit,
+    // then cast the in-range result down.
+    const uint16_t totalIdSizeWide =
+        static_cast<uint16_t>(offset) + static_cast<uint16_t>(count);
+    return ipmi::responseSuccess(static_cast<uint8_t>(totalIdSizeWide));
 }
 
 ipmi::RspType<ipmi::message::Payload> getDCMICapabilities(uint8_t parameter)

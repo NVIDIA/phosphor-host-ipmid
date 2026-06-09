@@ -289,12 +289,20 @@ ChannelConfig& getChannelConfigObject()
 
 ChannelConfig::~ChannelConfig()
 {
-    if (signalHndlrObjectState)
+    try
     {
-        chPropertiesSignal.reset();
-        chInterfaceAddedSignal.reset();
-        chInterfaceRemovedSignal.reset();
-        sigHndlrLock.unlock();
+        if (signalHndlrObjectState)
+        {
+            chPropertiesSignal.reset();
+            chInterfaceAddedSignal.reset();
+            chInterfaceRemovedSignal.reset();
+            sigHndlrLock.unlock();
+        }
+    }
+    catch (...)
+    {
+        // Destructors must not throw — sigHndlrLock.unlock() may throw
+        // boost::interprocess_exception under file-lock corruption.
     }
 }
 
@@ -400,7 +408,10 @@ bool ChannelConfig::isValidAuthType(const uint8_t chNum,
     }
 
     uint8_t authTypeSupported = channelData[chNum].chInfo.authTypeSupported;
-    if (!(authTypeSupported & (1 << static_cast<uint8_t>(authType))))
+    // EAuthType values are already bitmask flags (1, 2, 4, 8, 16, 32) — the
+    // earlier `1 << static_cast<uint8_t>(authType)` was double-shifting and
+    // hit UB when authType==oem (1U << 32).
+    if (!(authTypeSupported & static_cast<uint8_t>(authType)))
     {
         lg2::debug("Authentication type is not supported.");
         return false;

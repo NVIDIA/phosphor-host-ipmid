@@ -849,6 +849,7 @@ extern void setIoContext(std::shared_ptr<boost::asio::io_context>& newIo);
 extern void setSdBus(std::shared_ptr<sdbusplus::asio::connection>& newBus);
 
 int main(int argc, char* argv[])
+try
 {
     // Connect to system bus
     auto io = std::make_shared<boost::asio::io_context>();
@@ -950,4 +951,14 @@ int main(int argc, char* argv[])
     providers.clear();
 
     std::exit(exitCode);
+}
+catch (const std::exception& e)
+{
+    lg2::error("ipmid main: uncaught exception: {MSG}", "MSG", e.what());
+    return EXIT_FAILURE;
+}
+catch (...)
+{
+    lg2::error("ipmid main: unknown uncaught exception");
+    return EXIT_FAILURE;
 }
