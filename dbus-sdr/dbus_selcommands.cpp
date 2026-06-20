@@ -322,7 +322,7 @@ void saveTimeStamp(const std::string& timestamp)
 
 void selAddedCallback(sdbusplus::message::message& m)
 {
-    sdbusplus::message::object_path objPath;
+    sdbusplus::object_path objPath;
     try
     {
         m.read(objPath);
@@ -343,7 +343,7 @@ void selAddedCallback(sdbusplus::message::message& m)
 
 void selRemovedCallback(sdbusplus::message::message& m)
 {
-    sdbusplus::message::object_path objPath;
+    sdbusplus::object_path objPath;
     try
     {
         m.read(objPath);
@@ -401,7 +401,7 @@ void selUpdatedCallback(sdbusplus::message::message& m)
 void registerSelCallbackHandler()
 {
     using namespace sdbusplus::bus::match::rules;
-    sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
+    sdbusplus::bus_t bus{ipmid_get_sd_bus_connection()};
     if (!selAddedMatch)
     {
         selAddedMatch = std::make_unique<sdbusplus::bus::match::match>(
@@ -565,7 +565,7 @@ ipmi::RspType<uint16_t // deleted record ID
         selEntry = iter->second;
     }
     delRecordID = selEntry.first;
-    sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
+    sdbusplus::bus_t bus{ipmid_get_sd_bus_connection()};
     std::string service;
     auto objPath = getLoggingObjPath(iter->second.first);
     try
@@ -627,7 +627,7 @@ ipmi::RspType<uint8_t // erase status
     // Per the IPMI spec, need to cancel any reservation when the SEL is cleared
     cancelSELReservation();
 
-    sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
+    sdbusplus::bus_t bus{ipmid_get_sd_bus_connection()};
     auto service = ipmi::getService(bus, ipmi::sel::logIntf, ipmi::sel::logObj);
     auto method = bus.new_method_call(
         service.c_str(), ipmi::sel::logObj, ipmi::sel::logIntf,
@@ -863,7 +863,7 @@ ipmi::RspType<uint16_t // recordID of the Added SEL entry
         bool assert = (eventDir & 0x80) ? false : true;
         std::string messageID = ipmi::getSelEventMessage(objpath, eventData);
 
-        sdbusplus::bus::bus bus(ipmid_get_sd_bus_connection());
+        sdbusplus::bus_t bus(ipmid_get_sd_bus_connection());
         std::map<std::string, std::string> addData;
         addData["namespace"] = "SEL";
         addData["SENSOR_DATA"] = selDataStr.c_str();
@@ -919,7 +919,7 @@ ipmi::RspType<uint32_t> ipmiStorageGetSELTime()
 ipmi::RspType<uint8_t> ipmiStorageSetErrorInfoCap(size_t capacity)
 {
     cancelSELReservation();
-    sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
+    sdbusplus::bus_t bus{ipmid_get_sd_bus_connection()};
     try
     {
         auto service = ipmi::getService(bus, capacityInterface, logObjPath);
@@ -943,7 +943,7 @@ ipmi::RspType<uint8_t> ipmiStorageSetErrorInfoCap(size_t capacity)
 ipmi::RspType<size_t> ipmiStorageGetErrorInfoCap()
 {
     std::variant<size_t> capacity;
-    sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
+    sdbusplus::bus_t bus{ipmid_get_sd_bus_connection()};
     sdbusplus::message::message response;
     try
     {

@@ -236,7 +236,7 @@ void AllowlistFilter::handleRestrictedModeChange(sdbusplus::message_t& m)
     }
     else if (signal == "InterfacesAdded")
     {
-        sdbusplus::message::object_path path;
+        sdbusplus::object_path path;
         DbusInterfaceMap restModeObj;
         m.read(path, restModeObj);
         auto intfItr = restModeObj.find(restrictionModeIntf);

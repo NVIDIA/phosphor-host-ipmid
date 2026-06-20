@@ -866,7 +866,7 @@ ipmi::RspType<uint8_t,  // SDR version
 ipmi::RspType<uint8_t> ipmiStorageSetErrorInfoCap(size_t capacity)
 {
     cancelSELReservation();
-    sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
+    sdbusplus::bus_t bus{ipmid_get_sd_bus_connection()};
     try
     {
         auto service = ipmi::getService(bus, capacityInterface, logWatchPath);
@@ -890,7 +890,7 @@ ipmi::RspType<uint8_t> ipmiStorageSetErrorInfoCap(size_t capacity)
 ipmi::RspType<size_t> ipmiStorageGetErrorInfoCap()
 {
     std::variant<size_t> capacity;
-    sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
+    sdbusplus::bus_t bus{ipmid_get_sd_bus_connection()};
     sdbusplus::message::message response;
     try
     {

@@ -160,7 +160,7 @@ std::chrono::milliseconds getEntryData(const entryDataMap& entryData,
 std::chrono::milliseconds getEntryData(
     const std::string& objPath, entryDataMap& entryData, uint16_t& recordId)
 {
-    sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
+    sdbusplus::bus_t bus{ipmid_get_sd_bus_connection()};
     auto service = ipmi::getService(bus, logEntryIntf, objPath);
 
     // Read all the log entry properties.
@@ -231,7 +231,7 @@ bool readLoggingEntryDataBulk(std::map<std::string, entryDataMap>& outByPath)
 
 std::chrono::seconds getEntryTimeStamp(const std::string& objPath)
 {
-    sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
+    sdbusplus::bus_t bus{ipmid_get_sd_bus_connection()};
 
     auto service = ipmi::getService(bus, logEntryIntf, objPath);
 
