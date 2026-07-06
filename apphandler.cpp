@@ -176,7 +176,7 @@ std::string getActiveSoftwareVersionInfo(ipmi::Context::ptr ctx)
 
     if (!objectFound)
     {
-        lg2::debug("Could not found an BMC software Object");
+        lg2::debug("Could not find an BMC software Object");
         return {};
     }
 
