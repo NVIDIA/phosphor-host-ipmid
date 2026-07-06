@@ -123,10 +123,10 @@ std::string getActiveSoftwareVersionInfo(ipmi::Context::ptr ctx)
     }
     catch (const sdbusplus::exception_t& e)
     {
-        lg2::error("Failed to fetch redundancy object from dbus, "
+        lg2::debug("Failed to fetch redundancy object from dbus, "
                    "interface: {INTERFACE},  error: {ERROR}",
                    "INTERFACE", redundancyIntf, "ERROR", e);
-        elog<InternalFailure>();
+        return {};
     }
 
     auto objectFound = false;
@@ -176,8 +176,8 @@ std::string getActiveSoftwareVersionInfo(ipmi::Context::ptr ctx)
 
     if (!objectFound)
     {
-        lg2::error("Could not found an BMC software Object");
-        elog<InternalFailure>();
+        lg2::debug("Could not found an BMC software Object");
+        return {};
     }
 
     return revision;
