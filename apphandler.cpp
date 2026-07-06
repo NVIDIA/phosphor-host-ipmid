@@ -115,10 +115,10 @@ std::string getActiveSoftwareVersionInfo(ipmi::Context::ptr ctx)
         ipmi::getAllDbusObjects(ctx, softwareRoot, redundancyIntf, objectTree);
     if (ec)
     {
-        lg2::error("Failed to fetch redundancy object from dbus, "
+        lg2::debug("Failed to fetch redundancy object from dbus, "
                    "interface: {INTERFACE},  error: {ERROR}",
                    "INTERFACE", redundancyIntf, "ERROR", ec.message());
-        elog<InternalFailure>();
+        return {};
     }
 
     auto objectFound = false;
@@ -179,8 +179,8 @@ std::string getActiveSoftwareVersionInfo(ipmi::Context::ptr ctx)
 
     if (!objectFound)
     {
-        lg2::error("Could not find an BMC software Object");
-        elog<InternalFailure>();
+        lg2::debug("Could not find an BMC software Object");
+        return {};
     }
 
     return revision;
