@@ -78,9 +78,6 @@ constexpr uint8_t temperatureSensorType = 0x01;
 constexpr uint8_t maxRecords = 8;
 } // namespace dcmi
 } // namespace ipmi
-constexpr std::array<const char*, 7> suffixes = {
-    "_Output_Voltage", "_Input_Voltage", "_Output_Current", "_Input_Current",
-    "_Output_Power",   "_Input_Power",   "_Temperature"};
 namespace ipmi
 {
 
@@ -148,7 +145,7 @@ const static boost::container::flat_map<const char*, SensorUnits, CmpStr>
 
 void registerSensorFunctions() __attribute__((constructor));
 
-static sdbusplus::bus::match_t sensorAdded(
+static sdbusplus::match sensorAdded(
     *getSdBus(),
     "type='signal',member='InterfacesAdded',arg0path='/xyz/openbmc_project/"
     "sensors/'",
@@ -160,7 +157,7 @@ static sdbusplus::bus::match_t sensorAdded(
                          .count();
     });
 
-static sdbusplus::bus::match_t sensorRemoved(
+static sdbusplus::match sensorRemoved(
     *getSdBus(),
     "type='signal',member='InterfacesRemoved',arg0path='/xyz/openbmc_project/"
     "sensors/'",
@@ -219,7 +216,7 @@ static boost::container::flat_map<
     std::string, boost::container::flat_map<std::string, std::optional<bool>>>
     thresholdDeassertMap;
 
-static sdbusplus::bus::match_t thresholdChanged(
+static sdbusplus::match thresholdChanged(
     *getSdBus(),
     "type='signal',member='PropertiesChanged',interface='org.freedesktop.DBus."
     "Properties',arg0namespace='xyz.openbmc_project.Sensor.Threshold'",
@@ -715,6 +712,10 @@ std::string parseSdrIdFromPath(const std::string& path)
     if (name.size() > FULL_RECORD_ID_STR_MAX_LENGTH)
     {
 #ifdef SHORTNAME_REMOVE_SUFFIX
+        constexpr std::array<const char*, 7> suffixes = {
+            "_Output_Voltage", "_Input_Voltage", "_Output_Current",
+            "_Input_Current",  "_Output_Power",  "_Input_Power",
+            "_Temperature"};
         for (const auto& suffix : suffixes)
         {
             if (name.ends_with(suffix))

@@ -44,7 +44,7 @@ namespace dcmi
 constexpr auto assetTagMaxOffset = 62;
 constexpr auto assetTagMaxSize = 63;
 constexpr auto maxBytes = 16;
-constexpr size_t maxCtrlIdStrLen = 63;
+constexpr size_t maxCtrlIdStrLen = 64;
 
 constexpr uint8_t parameterRevision = 2;
 constexpr uint8_t specMajorVersion = 1;
@@ -419,7 +419,7 @@ bool setPcapSamplPeriod(ipmi::Context::ptr& ctx, uint16_t pcapSamplPeriod)
     }
 
     /*
-     * Dbus is storing Sampling periodic in microseconds unit.
+     * Dbus is storing Sampling period in microseconds unit.
      * Therefore, we have to convert it from seconds to microseconds unit.
      */
     uint64_t pcapSamplPeriodUs =
@@ -925,6 +925,10 @@ ipmi::RspType<uint8_t> setMgmntCtrlIdStr(ipmi::Context::ptr& ctx,
         // remove the null termination from the data (no need with std::string)
         data.resize(static_cast<size_t>(count) - 1U);
     }
+    else if ((offset + count) == dcmi::maxCtrlIdStrLen)
+    {
+        return ipmi::responseParmOutOfRange();
+    }
 
     static std::string hostname{};
     // read in the current value if not starting at offset 0
@@ -1243,9 +1247,10 @@ ipmi::RspType<> setDCMIConfParams(ipmi::Context::ptr& ctx, uint8_t parameter,
         case dcmi::DCMIConfigParameters::DiscoveryConfig:
         {
             bool option12{};
-            uint6_t reserved1{};
+            bool option60{};
+            uint5_t reserved1{};
             bool randBackOff{};
-            if (payload.unpack(option12, reserved1, randBackOff) ||
+            if (payload.unpack(option12, option60, reserved1, randBackOff) ||
                 !payload.fullyUnpacked())
             {
                 return ipmi::responseReqDataLenInvalid();
@@ -1255,10 +1260,14 @@ ipmi::RspType<> setDCMIConfParams(ipmi::Context::ptr& ctx, uint8_t parameter,
             {
                 return ipmi::responseInvalidFieldRequest();
             }
+            if (option60)
+            {
+                return ipmi::responseCommandNotAvailable();
+            }
             dcmi::setDHCPOption(ctx, dcmi::dhcpOpt12Enabled, option12);
             break;
         }
-        // Systemd-networkd doesn't allow to configure DHCP timigs
+        // Systemd-networkd doesn't allow to configure DHCP timings
         case dcmi::DCMIConfigParameters::DHCPTiming1:
         case dcmi::DCMIConfigParameters::DHCPTiming2:
         case dcmi::DCMIConfigParameters::DHCPTiming3:
@@ -1553,7 +1562,7 @@ void registerNetFnDcmiFunctions()
         ipmi::prioOpenBmcBase, ipmi::groupDCMI, ipmi::dcmi::cmdGetPowerReading,
         ipmi::Privilege::User, getPowerReading);
 
-// The Get sensor should get the senor details dynamically when
+// The Get sensor should get the sensor details dynamically when
 // FEATURE_DYNAMIC_SENSORS is enabled.
 #ifndef FEATURE_DYNAMIC_SENSORS
     // <Get Sensor Info>

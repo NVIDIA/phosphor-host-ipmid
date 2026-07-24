@@ -129,6 +129,8 @@ using HostState = sdbusplus::common::xyz::openbmc_project::state::Host;
 using ChassisState = sdbusplus::common::xyz::openbmc_project::state::Chassis;
 using NetworkIP = sdbusplus::common::xyz::openbmc_project::network::IP;
 using MACAddress = sdbusplus::common::xyz::openbmc_project::network::MACAddress;
+using ControlBootFlags =
+    sdbusplus::common::xyz::openbmc_project::control::boot::Flags;
 using ControlBootSource =
     sdbusplus::common::xyz::openbmc_project::control::boot::Source;
 using ControlBootMode =
@@ -1527,10 +1529,10 @@ ipmi::RspType<> ipmiChassisControl(ipmi::Context::ptr& ctx,
             }
 
             /*
-             * As define in the Chapter 28.3 - Chassis Control Command of IPMI
+             * As defined in the Chapter 28.3 - Chassis Control Command of IPMI
              * specification: It is recommended that no action occur if system
              * power is off (S4/S5) when this action is selected, and that a D5
-             * "Request parameter(s) not supported in this presenst state."
+             * "Request parameter(s) not supported in this present state."
              * error completion code be returned.
              */
             if (powerState.value() == false)
@@ -1906,7 +1908,7 @@ static ipmi::Cc getBootType(ipmi::Context::ptr& ctx, Type::Types& type)
 
     // Don't throw error if BootType interface is not present.
     // This interface is not relevant for some Host architectures
-    // (for example POWER). In this case we don't won't IPMI to
+    // (for example POWER). In this case we don't want IPMI to
     // return an error, but simply return bootType as EFI.
     type = Type::Types::EFI;
     if (!ec)
@@ -1950,7 +1952,7 @@ static ipmi::Cc setBootType(ipmi::Context::ptr& ctx, const Type::Types& type)
     }
     // Don't throw error if BootType interface is not present.
     // This interface is not relevant for some Host architectures
-    // (for example POWER). In this case we don't won't IPMI to
+    // (for example POWER). In this case we don't want IPMI to
     // return an error, but want to just skip this function.
     return ipmi::ccSuccess;
 }
@@ -3181,11 +3183,11 @@ ipmi::RspType<> ipmiChassisSetSysBootOptions(ipmi::Context::ptr ctx,
     else if (types::enum_cast<BootOptionParameter>(parameterSelector) ==
              BootOptionParameter::bootInfo)
     {
-        uint8_t writeMak;
+        uint8_t writeMask;
         uint5_t bootInfoAck;
         uint3_t rsvd;
 
-        if (data.unpack(writeMak, bootInfoAck, rsvd) != 0 ||
+        if (data.unpack(writeMask, bootInfoAck, rsvd) != 0 ||
             !data.fullyUnpacked())
         {
             return ipmi::responseReqDataLenInvalid();
@@ -3194,8 +3196,8 @@ ipmi::RspType<> ipmiChassisSetSysBootOptions(ipmi::Context::ptr ctx,
         {
             return ipmi::responseInvalidFieldRequest();
         }
-        bootInitiatorAckData &= ~writeMak;
-        bootInitiatorAckData |= (writeMak & bootInfoAck);
+        bootInitiatorAckData &= ~writeMask;
+        bootInitiatorAckData |= (writeMask & bootInfoAck);
         lg2::info("ipmiChassisSetSysBootOptions: bootInfo parameter set "
                   "successfully");
         data.trailingOk = true;

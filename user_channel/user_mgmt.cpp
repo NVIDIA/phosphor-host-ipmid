@@ -56,11 +56,11 @@ using NoResource =
 using InternalFailure =
     sdbusplus::error::xyz::openbmc_project::common::InternalFailure;
 
-std::unique_ptr<sdbusplus::bus::match_t> userUpdatedSignal
+std::unique_ptr<sdbusplus::match> userUpdatedSignal
     __attribute__((init_priority(101)));
-std::unique_ptr<sdbusplus::bus::match_t> userMgrRenamedSignal
+std::unique_ptr<sdbusplus::match> userMgrRenamedSignal
     __attribute__((init_priority(101)));
-std::unique_ptr<sdbusplus::bus::match_t> userPropertiesSignal
+std::unique_ptr<sdbusplus::match> userPropertiesSignal
     __attribute__((init_priority(101)));
 
 void setDbusProperty(sdbusplus::bus_t& bus, const std::string& service,
@@ -1127,6 +1127,13 @@ void UserAccess::readUserData()
     Json jsonUsersTbl = Json::array();
     jsonUsersTbl = Json::parse(iUsrData, nullptr, false);
 
+    if (jsonUsersTbl.is_discarded())
+    {
+        lg2::error("Corrupted IPMI user data file - invalid JSON");
+        throw std::runtime_error(
+            "Corrupted IPMI user data file - invalid JSON");
+    }
+
     if (jsonUsersTbl.size() != ipmiMaxUsers)
     {
         lg2::error("Error in reading IPMI user data file - User count issues");
@@ -1392,10 +1399,26 @@ void UserAccess::deleteUserIndex(const size_t& usrIdx)
 
 void UserAccess::reloadUserData()
 {
-    std::fill(reinterpret_cast<uint8_t*>(&usersTbl),
-              reinterpret_cast<uint8_t*>(&usersTbl) + sizeof(usersTbl), 0);
-    readUserData();
-
+    try
+    {
+        std::fill(reinterpret_cast<uint8_t*>(&usersTbl),
+                  reinterpret_cast<uint8_t*>(&usersTbl) + sizeof(usersTbl), 0);
+        readUserData();
+    }
+    catch (const std::ios_base::failure& e)
+    {
+        lg2::error("User data file not found or not readable during "
+                   "reload, initializing: {ERROR}",
+                   "ERROR", e);
+        initializeUserDataFile();
+    }
+    catch (const std::runtime_error& e)
+    {
+        lg2::error("User data file corrupted during reload, "
+                   "reinitializing: {ERROR}",
+                   "ERROR", e);
+        initializeUserDataFile();
+    }
     return;
 }
 
@@ -1477,6 +1500,41 @@ int UserAccess::getUserObjProperties(const DbusUserObjValue& userObjs,
     return -EIO;
 }
 
+void UserAccess::initializeUserDataFile()
+{
+    std::fill(reinterpret_cast<uint8_t*>(&usersTbl),
+              reinterpret_cast<uint8_t*>(&usersTbl) + sizeof(usersTbl), 0);
+    // user index 0 is reserved, starts with 1
+    for (size_t userIndex = 1; userIndex <= ipmiMaxUsers; ++userIndex)
+    {
+        for (size_t chIndex = 0; chIndex < ipmiMaxChannels; ++chIndex)
+        {
+            usersTbl.user[userIndex].userPrivAccess[chIndex].privilege =
+                privNoAccess;
+            usersTbl.user[userIndex]
+                .payloadAccess[chIndex]
+                .stdPayloadEnables1[static_cast<uint8_t>(
+                    ipmi::PayloadType::SOL)] = true;
+        }
+    }
+    try
+    {
+        writeUserData();
+    }
+    catch (const std::ios_base::failure& e)
+    {
+        lg2::error("Failed to persist initialized IPMI user data file: "
+                   "{ERROR}",
+                   "ERROR", e);
+    }
+    catch (const std::runtime_error& e)
+    {
+        lg2::error("Failed to finalize initialized IPMI user data file: "
+                   "{ERROR}",
+                   "ERROR", e);
+    }
+}
+
 void UserAccess::cacheUserDataFile()
 {
     boost::interprocess::scoped_lock<boost::interprocess::named_recursive_mutex>
@@ -1486,23 +1544,17 @@ void UserAccess::cacheUserDataFile()
         readUserData();
     }
     catch (const std::ios_base::failure& e)
-    { // File is empty, create it for the first time
-        std::fill(reinterpret_cast<uint8_t*>(&usersTbl),
-                  reinterpret_cast<uint8_t*>(&usersTbl) + sizeof(usersTbl), 0);
-        // user index 0 is reserved, starts with 1
-        for (size_t userIndex = 1; userIndex <= ipmiMaxUsers; ++userIndex)
-        {
-            for (size_t chIndex = 0; chIndex < ipmiMaxChannels; ++chIndex)
-            {
-                usersTbl.user[userIndex].userPrivAccess[chIndex].privilege =
-                    privNoAccess;
-                usersTbl.user[userIndex]
-                    .payloadAccess[chIndex]
-                    .stdPayloadEnables1[static_cast<uint8_t>(
-                        ipmi::PayloadType::SOL)] = true;
-            }
-        }
-        writeUserData();
+    { // File is empty or missing, create it for the first time
+        lg2::error("User data file not found or not readable, "
+                   "initializing: {ERROR}",
+                   "ERROR", e);
+        initializeUserDataFile();
+    }
+    catch (const std::runtime_error& e)
+    { // File is corrupted, reinitialize it
+        lg2::error("User data file corrupted, reinitializing: {ERROR}", "ERROR",
+                   e);
+        initializeUserDataFile();
     }
     // Create lock file if it does not exist
     int fd = open(ipmiUserSignalLockFile, O_CREAT | O_TRUNC | O_SYNC,
@@ -1521,30 +1573,29 @@ void UserAccess::cacheUserDataFile()
     if (userUpdatedSignal == nullptr && sigHndlrLock.try_lock())
     {
         lg2::debug("Registering signal handler");
-        userUpdatedSignal = std::make_unique<sdbusplus::bus::match_t>(
+        userUpdatedSignal = std::make_unique<sdbusplus::match>(
             bus,
-            sdbusplus::bus::match::rules::type::signal() +
-                sdbusplus::bus::match::rules::interface(dBusObjManager) +
-                sdbusplus::bus::match::rules::path(userMgrObjBasePath),
+            sdbusplus::match_rules::type::signal() +
+                sdbusplus::match_rules::interface(dBusObjManager) +
+                sdbusplus::match_rules::path(userMgrObjBasePath),
             [&](sdbusplus::message_t& msg) {
             userUpdatedSignalHandler(*this, msg);
         });
-        userMgrRenamedSignal = std::make_unique<sdbusplus::bus::match_t>(
+        userMgrRenamedSignal = std::make_unique<sdbusplus::match>(
             bus,
-            sdbusplus::bus::match::rules::type::signal() +
-                sdbusplus::bus::match::rules::interface(userMgrInterface) +
-                sdbusplus::bus::match::rules::path(userMgrObjBasePath),
+            sdbusplus::match_rules::type::signal() +
+                sdbusplus::match_rules::interface(userMgrInterface) +
+                sdbusplus::match_rules::path(userMgrObjBasePath),
             [&](sdbusplus::message_t& msg) {
             userUpdatedSignalHandler(*this, msg);
         });
-        userPropertiesSignal = std::make_unique<sdbusplus::bus::match_t>(
+        userPropertiesSignal = std::make_unique<sdbusplus::match>(
             bus,
-            sdbusplus::bus::match::rules::type::signal() +
-                sdbusplus::bus::match::rules::path_namespace(userObjBasePath) +
-                sdbusplus::bus::match::rules::interface(
-                    dBusPropertiesInterface) +
-                sdbusplus::bus::match::rules::member(propertiesChangedSignal) +
-                sdbusplus::bus::match::rules::argN(0, usersInterface),
+            sdbusplus::match_rules::type::signal() +
+                sdbusplus::match_rules::path_namespace(userObjBasePath) +
+                sdbusplus::match_rules::interface(dBusPropertiesInterface) +
+                sdbusplus::match_rules::member(propertiesChangedSignal) +
+                sdbusplus::match_rules::argN(0, usersInterface),
             [&](sdbusplus::message_t& msg) {
             userUpdatedSignalHandler(*this, msg);
         });
