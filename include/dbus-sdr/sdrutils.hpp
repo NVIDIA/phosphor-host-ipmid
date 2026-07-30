@@ -37,6 +37,12 @@
 static constexpr bool debug = false;
 constexpr uint8_t eventDataSize = 3;
 
+// Entity-Manager, the source of the SDR/FRU inventory this repo parses.
+static constexpr const char* entityManagerServiceName =
+    "xyz.openbmc_project.EntityManager";
+static constexpr const char* inventoryRootPath =
+    "/xyz/openbmc_project/inventory";
+
 struct CmpStrVersion
 {
     bool operator()(std::string a, std::string b) const
@@ -419,6 +425,10 @@ std::map<std::string, Value> getEntityManagerProperties(const char* path,
 
 std::optional<std::unordered_set<std::string>>& getIpmiDecoratorPaths(
     const std::optional<ipmi::Context::ptr>& ctx);
+
+// Return the EM "IpmiName" override for a sensor, or "" if none.
+std::string getIpmiNameForSensor(const std::optional<ipmi::Context::ptr>& ctx,
+                                 const std::string& sensorPath);
 
 const std::string* getSensorConfigurationInterface(
     const std::map<std::string, std::vector<std::string>>&
