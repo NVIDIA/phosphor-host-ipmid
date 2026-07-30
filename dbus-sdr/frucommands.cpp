@@ -567,8 +567,8 @@ ipmi_ret_t getFruSdrs([[maybe_unused]] ipmi::Context::ptr ctx, size_t index,
     auto subtree = ctx->bus->yield_method_call<SubTreeType>(
         ctx->yield, ec, "xyz.openbmc_project.ObjectMapper",
         "/xyz/openbmc_project/object_mapper",
-        "xyz.openbmc_project.ObjectMapper", "GetSubTree",
-        "/xyz/openbmc_project/inventory", 0, interfaces);
+        "xyz.openbmc_project.ObjectMapper", "GetSubTree", inventoryRootPath, 0,
+        interfaces);
 
     if (ec)
     {
