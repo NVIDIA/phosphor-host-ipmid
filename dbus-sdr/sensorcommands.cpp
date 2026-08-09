@@ -144,7 +144,9 @@ const static boost::container::flat_map<const char*, SensorUnits, CmpStr>
                  {"fan_tach", SensorUnits::rpm},
                  {"power", SensorUnits::watts},
                  {"fan_pwm", SensorUnits::percent},
-                 {"energy", SensorUnits::joules}}};
+                 {"energy", SensorUnits::joules},
+                 {"utilization", SensorUnits::percent},
+                 {"frequency", SensorUnits::hz}}};
 
 void registerSensorFunctions() __attribute__((constructor));
 
@@ -2126,9 +2128,10 @@ bool constructSensorSdr(
     auto findUnits = sensorUnits.find(typeCstr);
     if (findUnits != sensorUnits.end())
     {
-        if (static_cast<std::string>(findUnits->first) == "fan_pwm")
+        if (static_cast<std::string>(findUnits->first) == "fan_pwm" ||
+            static_cast<std::string>(findUnits->first) == "utilization")
         {
-            // Enable Percentage unit (bit 0) for PWM sensors
+            // Enable Percentage unit (bit 0) for PWM and utilization sensors
             record.body.sensorUnits1 |= 1 << 0;
         }
 

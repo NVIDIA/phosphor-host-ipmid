@@ -112,7 +112,11 @@ boost::container::flat_map<
          {"energy", std::make_pair(SensorTypeCodes::other,
                                    SensorEventTypeCodes::threshold)},
          {"utilization", std::make_pair(SensorTypeCodes::other,
-                                        SensorEventTypeCodes::threshold)}}};
+                                        SensorEventTypeCodes::threshold)},
+         {"frequency", std::make_pair(SensorTypeCodes::other,
+                                      SensorEventTypeCodes::threshold)},
+         {"counter", std::make_pair(SensorTypeCodes::other,
+                                    SensorEventTypeCodes::threshold)}}};
 
 namespace details
 {
