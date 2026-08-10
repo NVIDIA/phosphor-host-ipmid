@@ -70,9 +70,10 @@ using SELLoggingIdMap = std::map<LogID, SELRecordID>;
 SELCacheMap selCacheMap __attribute__((init_priority(101)));
 SELLoggingIdMap selLoggingIdMap __attribute__((init_priority(101)));
 bool selCacheMapInitialized = false;
-// This is used to track the number of all SEL entries that exist in the logging
-// system but might not be added to the SEL cache map due to errors.
-static uint16_t selCachedEntryCount = 0;
+// This tracks the number of restored logging entries identified as SELs. An
+// entry might still fail conversion and not be added to the cache, but it must
+// count toward restoration completion so it does not trigger endless retries.
+static uint16_t selRestoredEntryCount = 0;
 std::unique_ptr<sdbusplus::bus::match::match> selAddedMatch
     __attribute__((init_priority(101)));
 std::unique_ptr<sdbusplus::bus::match::match> selRemovedMatch
@@ -120,6 +121,7 @@ static GetSELEntryResponse createSELEntryFromMaps(
     {
         return ipmi::sel::GetSELEntryResponse{};
     }
+    selRestoredEntryCount++;
     if (recordType != systemEventRecord)
     {
         log<level::ERR>("Record type is not system event record");
@@ -245,7 +247,6 @@ static GetSELEntryResponse createSELEntryFromMaps(
     memcpy(&record.event.eventRecord.eventData1, sensorData.data(),
            std::min(sensorData.size(), static_cast<size_t>(selDataSize)));
 
-    selCachedEntryCount++;
     return record;
 }
 
@@ -432,7 +433,7 @@ void registerSelCallbackHandler()
 bool initSELCache()
 {
     registerSelCallbackHandler();
-    selCachedEntryCount = 0;
+    selRestoredEntryCount = 0;
 
     std::map<std::string, ipmi::sel::internal::entryDataMap> bulkData;
     const bool bulkOk = ipmi::sel::internal::readLoggingEntryDataBulk(bulkData);
@@ -487,7 +488,7 @@ bool initSELCache()
                 std::filesystem::directory_iterator{
                     std::string(selPersistPath)},
                 std::filesystem::directory_iterator{});
-            if (selCachedEntryCount >= selPersistFileNum)
+            if (selRestoredEntryCount >= selPersistFileNum)
             {
                 selCacheMapInitialized = true;
             }
@@ -498,7 +499,7 @@ bool initSELCache()
             }
             log<level::INFO>("initSELCache: Finished loading SEL cache",
                              entry("SELMAPCOUNT=%zu", selCacheMap.size()),
-                             entry("CACHECOUNT=%zu", selCachedEntryCount),
+                             entry("RESTOREDCOUNT=%zu", selRestoredEntryCount),
                              entry("FILECOUNT=%zu", selPersistFileNum));
         }
         return true;
@@ -506,7 +507,7 @@ bool initSELCache()
     selCacheMapInitialized = true;
     log<level::INFO>("initSELCache: Finished loading SEL cache from D-Bus",
                      entry("SELMAPCOUNT=%zu", selCacheMap.size()),
-                     entry("CACHECOUNT=%zu", selCachedEntryCount));
+                     entry("RESTOREDCOUNT=%zu", selRestoredEntryCount));
     return true;
 }
 
