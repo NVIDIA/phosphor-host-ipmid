@@ -46,6 +46,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <regex>
 #include <tuple>
 #include <unordered_map>
 #include <utility>
@@ -391,6 +392,33 @@ std::unordered_map<std::string, uint8_t> uniqueNameToChannelNumber;
 // to match without any trailing '.'
 constexpr const char ipmiDbusChannelMatch[] =
     "xyz.openbmc_project.Ipmi.Channel";
+constexpr const char ssifChannelName[] = "ipmi_ssif";
+
+std::string channelNameFromBusName(const std::string& busName)
+{
+    static const std::string channelPrefix =
+        std::string{ipmiDbusChannelMatch} + ".";
+    static const std::regex ssifChannelPattern{
+        std::string{"^"} + ssifChannelName + R"((_[0-9]+)?$)"};
+
+    if (busName.size() <= channelPrefix.size() ||
+        !busName.starts_with(channelPrefix))
+    {
+        return {};
+    }
+
+    std::string channelName = busName.substr(channelPrefix.size());
+
+    // Multiple SSIF bridge instances share system-interface channel 0xF.
+    // Their hostId option identifies the target host independently.
+    if (std::regex_match(channelName, ssifChannelPattern))
+    {
+        channelName = ssifChannelName;
+    }
+
+    return channelName;
+}
+
 void updateOwners(sdbusplus::asio::connection& conn, const std::string& name)
 {
     conn.async_method_call(
@@ -402,8 +430,7 @@ void updateOwners(sdbusplus::asio::connection& conn, const std::string& name)
                        name);
             return;
         }
-        // start after ipmiDbusChannelPrefix (after the '.')
-        std::string chName = name.substr(std::strlen(ipmiDbusChannelMatch) + 1);
+        std::string chName = channelNameFromBusName(name);
         try
         {
             uint8_t channel = getChannelByName(chName);
@@ -472,8 +499,7 @@ void nameChangeHandler(sdbusplus::message_t& message)
     }
     if (!newOwner.empty())
     {
-        // start after ipmiDbusChannelMatch (and after the '.')
-        std::string chName = name.substr(std::strlen(ipmiDbusChannelMatch) + 1);
+        std::string chName = channelNameFromBusName(name);
         try
         {
             uint8_t channel = getChannelByName(chName);
@@ -585,13 +611,13 @@ auto executionEntry(boost::asio::yield_context yield, sdbusplus::message_t& m,
                     rqSA = std::get<int>(iter->second);
                 }
             }
-            const auto iteration = options.find("hostId");
-            if (iteration != options.end())
+        }
+        const auto iteration = options.find("hostId");
+        if (iteration != options.end())
+        {
+            if (std::holds_alternative<int>(iteration->second))
             {
-                if (std::holds_alternative<int>(iteration->second))
-                {
-                    hostIdx = std::get<int>(iteration->second);
-                }
+                hostIdx = std::get<int>(iteration->second);
             }
         }
     }
