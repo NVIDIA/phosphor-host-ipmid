@@ -62,6 +62,7 @@ enum class SensorUnits : uint8_t
     watts = 0x6,
     joules = 0x7,
     rpm = 0x12,
+    hz = 0x13,
     percent = 0x0,
 };
 
