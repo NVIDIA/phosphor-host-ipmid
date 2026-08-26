@@ -28,6 +28,7 @@
 
 #include <fstream>
 #include <optional>
+#include <unordered_map>
 #include <unordered_set>
 
 using ObjectMapper = sdbusplus::common::xyz::openbmc_project::ObjectMapper;
@@ -1177,8 +1178,8 @@ std::map<std::string, Value> getEntityManagerProperties(const char* path,
     std::shared_ptr<sdbusplus::asio::connection> dbus = getSdBus();
 
     sdbusplus::message_t getProperties = dbus->new_method_call(
-        "xyz.openbmc_project.EntityManager", path,
-        "org.freedesktop.DBus.Properties", "GetAll");
+        entityManagerServiceName, path, "org.freedesktop.DBus.Properties",
+        "GetAll");
     getProperties.append(interface);
 
     try
@@ -1227,12 +1228,157 @@ std::optional<std::unordered_set<std::string>>& getIpmiDecoratorPaths(
     return ipmiDecoratorPaths;
 }
 
+// Map a name value to the D-Bus object-path leaf charset ([^A-Za-z0-9_] ->
+// '_').
+static std::string dbusLeaf(std::string name)
+{
+    for (auto& c : name)
+    {
+        if (!((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') ||
+              (c >= 'a' && c <= 'z') || c == '_'))
+        {
+            c = '_';
+        }
+    }
+    return name;
+}
+
+// Cached sensor-leaf -> EM IpmiName override map. Built lazily, then re-scanned
+// (merge-only, entries never dropped) when a new sensor appears. Keys: regular
+// sensor's path leaf, AuxNames values, and Name<N>.
+static const std::unordered_map<std::string, std::string>& getIpmiNameOverrides(
+    const std::optional<ipmi::Context::ptr>& ctx)
+{
+    static std::unordered_map<std::string, std::string> overrides;
+    static bool built = false;
+
+    // Re-scan when a new sensor appears so an early SDR read against a
+    // partially-populated bus picks up overrides it missed. Merge-only: an
+    // override, once learned, is never dropped, so names never revert.
+    if (auto dbus = getSdBus())
+    {
+        static sdbusplus::bus::match_t sensorAdded(
+            *dbus,
+            "type='signal',member='InterfacesAdded',arg0path='/xyz/"
+            "openbmc_project/sensors/'",
+            [](sdbusplus::message_t&) { built = false; });
+    }
+
+    if (!ctx.has_value() || built)
+    {
+        return overrides;
+    }
+
+    using SubTree =
+        std::map<std::string, std::map<std::string, std::vector<std::string>>>;
+    boost::system::error_code ec;
+    SubTree tree = ipmi::callDbusMethod<SubTree>(
+        *ctx, ec, "xyz.openbmc_project.ObjectMapper",
+        "/xyz/openbmc_project/object_mapper",
+        "xyz.openbmc_project.ObjectMapper", "GetSubTree", inventoryRootPath,
+        int32_t(0), std::vector<std::string>{});
+
+    if (ec)
+    {
+        // Leave built=false so the next SDR read retries once EM is up.
+        return overrides;
+    }
+
+    auto getStr = [](const std::map<std::string, Value>& props,
+                     const std::string& key) -> const std::string* {
+        auto it = props.find(key);
+        return it == props.end() ? nullptr
+                                 : std::get_if<std::string>(&it->second);
+    };
+
+    for (const auto& [path, services] : tree)
+    {
+        auto em = services.find(entityManagerServiceName);
+        if (em == services.end())
+        {
+            continue;
+        }
+        // IpmiName may be on any Configuration.* interface, so check them all.
+        for (const auto& iface : em->second)
+        {
+            if (!iface.starts_with("xyz.openbmc_project.Configuration."))
+            {
+                continue;
+            }
+
+            std::map<std::string, Value> props =
+                getEntityManagerProperties(path.c_str(), iface.c_str());
+
+            if (const std::string* ip = getStr(props, "IpmiName"))
+            {
+                auto ax = props.find("AuxNames");
+                const std::vector<std::string>* aux =
+                    (ax == props.end())
+                        ? nullptr
+                        : std::get_if<std::vector<std::string>>(&ax->second);
+                if (aux)
+                {
+                    // SensorAuxName: sensor leaf is the aux name, not this
+                    // config's path leaf.
+                    for (const auto& a : *aux)
+                    {
+                        overrides[dbusLeaf(a)] = *ip;
+                    }
+                }
+                else
+                {
+                    overrides[std::filesystem::path(path).filename().string()] =
+                        *ip;
+                }
+            }
+
+            // multi-channel: "Name<N>" paired with "IpmiName<N>"
+            for (int n = 1; n <= 8; ++n)
+            {
+                const std::string* nm =
+                    getStr(props, "Name" + std::to_string(n));
+                const std::string* ip =
+                    getStr(props, "IpmiName" + std::to_string(n));
+                if (nm && ip)
+                {
+                    overrides[dbusLeaf(*nm)] = *ip;
+                }
+            }
+        }
+    }
+
+    // An IPMI name should map 1:1 to a sensor; a collision is a config error.
+    std::unordered_map<std::string, std::string> seen;
+    for (const auto& [leaf, ipmiName] : overrides)
+    {
+        auto [it, inserted] = seen.emplace(ipmiName, leaf);
+        if (!inserted)
+        {
+            lg2::error("Duplicate IPMI name '{NAME}' on sensors '{FIRST}' and "
+                       "'{SECOND}'",
+                       "NAME", ipmiName, "FIRST", it->second, "SECOND", leaf);
+        }
+    }
+
+    built = true;
+    return overrides;
+}
+
+std::string getIpmiNameForSensor(const std::optional<ipmi::Context::ptr>& ctx,
+                                 const std::string& sensorPath)
+{
+    const auto& overrides = getIpmiNameOverrides(ctx);
+    auto it =
+        overrides.find(std::filesystem::path(sensorPath).filename().string());
+    return it == overrides.end() ? std::string{} : it->second;
+}
+
 const std::string* getSensorConfigurationInterface(
     const std::map<std::string, std::vector<std::string>>&
         sensorInterfacesResponse)
 {
     auto entityManagerService =
-        sensorInterfacesResponse.find("xyz.openbmc_project.EntityManager");
+        sensorInterfacesResponse.find(entityManagerServiceName);
     if (entityManagerService == sensorInterfacesResponse.end())
     {
         return nullptr;
