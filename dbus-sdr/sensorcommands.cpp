@@ -213,7 +213,7 @@ SensorSubTree& getSensorTree()
 }
 
 // this keeps track of deassertions for sensor event status command. A
-// deasertion can only happen if an assertion was seen first.
+// deassertion can only happen if an assertion was seen first.
 static boost::container::flat_map<
     std::string, boost::container::flat_map<std::string, std::optional<bool>>>
     thresholdDeassertMap;
@@ -1445,7 +1445,7 @@ ipmi::RspType<uint8_t, uint8_t, uint8_t, std::optional<uint8_t>>
  *  @param reserved
  *  @param lowerNonCritical    - lower non-critical threshold
  *  @param lowerCritical       - Lower critical threshold
- *  @param lowerNonRecoverable - Lower non recovarable threshold
+ *  @param lowerNonRecoverable - Lower non-recoverable threshold
  *  @param upperNonCritical    - Upper non-critical threshold
  *  @param upperCritical       - Upper critical
  *  @param upperNonRecoverable - Upper Non-recoverable
@@ -1527,7 +1527,7 @@ ipmi::RspType<> ipmiSenSetSensorThresholds(
     constexpr uint8_t propertyName = 0;
     constexpr uint8_t thresholdValue = 1;
     constexpr uint8_t interface = 2;
-    // verifiy all needed fields are present
+    // verify all needed fields are present
     if (lowerCriticalThreshMask || upperCriticalThreshMask)
     {
         auto findThreshold = sensorMap.find(SensorThresholdCritical::interface);
@@ -2332,7 +2332,7 @@ bool constructSensorSdr(
             static_cast<uint8_t>(IPMISensorReadingByte3::lowerNonCritical);
     }
 
-    // everything that is readable is setable
+    // everything that is readable is settable
     record.body.discreteReadingSettingMask[1] =
         record.body.discreteReadingSettingMask[0];
     return true;
@@ -2741,7 +2741,7 @@ static int getSensorDataRecord(
         return GENERAL_ERROR;
     }
     uint16_t sensorNum = getSensorNumberFromPath(path);
-    // Return an error on LUN 2 assingments, and any sensor number beyond the
+    // Return an error on LUN 2 assignments, and any sensor number beyond the
     // range of LUN 3
     if (((sensorNum > lun1MaxSensorNum) && (sensorNum <= maxIPMISensors)) ||
         (sensorNum > lun3MaxSensorNum))
@@ -3261,7 +3261,7 @@ std::tuple<uint8_t,                // Total of instance sensors
 
         /*
          * Get the Entity ID, Entity Instance information which are configured
-         * in the Entity-Manger.
+         * in the Entity-Manager.
          */
         updateIpmiFromAssociation(
             sensorObjPath,

@@ -38,6 +38,7 @@ owners:
 reviewers:
 - deepak.kodihalli.83@gmail.com
 - ratankgupta31@gmail.com
+- saipavann@ami.com
 
 matchers:
 - partial_regex: oem/example
@@ -54,6 +55,9 @@ openbmc:
 - name: George Liu
   email: liuxiwei@ieisystem.com
   discord: George Liu
+- name: Nagavarapu Sai Pavan
+  email: saipavann@ami.com
+  discord: saipavann
 - name: Ratan Gupta
   email: ratankgupta31@gmail.com
   discord: rgupta
