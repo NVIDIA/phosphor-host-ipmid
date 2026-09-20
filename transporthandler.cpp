@@ -1651,16 +1651,16 @@ RspType<> setSolConfParams(Context::ptr ctx, uint4_t channelBits,
                 return responseUnspecifiedError();
             }
 
-            if (ipmi::setDbusProperty(ctx, solService, solPathWithEthName,
-                                      solInterface, "ForceEncryption",
-                                      forceEncrypt))
+            if (ipmi::setDbusProperty(
+                    ctx, solService, solPathWithEthName, solInterface,
+                    "ForceEncryption", forceEncrypt))
             {
                 return responseUnspecifiedError();
             }
 
-            if (ipmi::setDbusProperty(ctx, solService, solPathWithEthName,
-                                      solInterface, "ForceAuthentication",
-                                      forceAuth))
+            if (ipmi::setDbusProperty(
+                    ctx, solService, solPathWithEthName, solInterface,
+                    "ForceAuthentication", forceAuth))
             {
                 return responseUnspecifiedError();
             }
@@ -1680,9 +1680,9 @@ RspType<> setSolConfParams(Context::ptr ctx, uint4_t channelBits,
                 return responseInvalidFieldRequest();
             }
 
-            if (ipmi::setDbusProperty(ctx, solService, solPathWithEthName,
-                                      solInterface, "AccumulateIntervalMS",
-                                      interval))
+            if (ipmi::setDbusProperty(
+                    ctx, solService, solPathWithEthName, solInterface,
+                    "AccumulateIntervalMS", interval))
             {
                 return responseUnspecifiedError();
             }
@@ -1713,9 +1713,9 @@ RspType<> setSolConfParams(Context::ptr ctx, uint4_t channelBits,
                 return responseUnspecifiedError();
             }
 
-            if (ipmi::setDbusProperty(ctx, solService, solPathWithEthName,
-                                      solInterface, "RetryIntervalMS",
-                                      interval))
+            if (ipmi::setDbusProperty(
+                    ctx, solService, solPathWithEthName, solInterface,
+                    "RetryIntervalMS", interval))
             {
                 return responseUnspecifiedError();
             }
@@ -1812,16 +1812,16 @@ RspType<message::Payload> getSolConfParams(
                 return responseUnspecifiedError();
             }
 
-            if (ipmi::getDbusProperty(ctx, solService, solPathWithEthName,
-                                      solInterface, "ForceAuthentication",
-                                      forceAuth))
+            if (ipmi::getDbusProperty(
+                    ctx, solService, solPathWithEthName, solInterface,
+                    "ForceAuthentication", forceAuth))
             {
                 return responseUnspecifiedError();
             }
 
-            if (ipmi::getDbusProperty(ctx, solService, solPathWithEthName,
-                                      solInterface, "ForceEncryption",
-                                      forceEncrypt))
+            if (ipmi::getDbusProperty(
+                    ctx, solService, solPathWithEthName, solInterface,
+                    "ForceEncryption", forceEncrypt))
             {
                 return responseUnspecifiedError();
             }
@@ -1832,9 +1832,9 @@ RspType<message::Payload> getSolConfParams(
         {
             uint8_t interval{}, threshold{};
 
-            if (ipmi::getDbusProperty(ctx, solService, solPathWithEthName,
-                                      solInterface, "AccumulateIntervalMS",
-                                      interval))
+            if (ipmi::getDbusProperty(
+                    ctx, solService, solPathWithEthName, solInterface,
+                    "AccumulateIntervalMS", interval))
             {
                 return responseUnspecifiedError();
             }
@@ -1859,9 +1859,9 @@ RspType<message::Payload> getSolConfParams(
                 return responseUnspecifiedError();
             }
 
-            if (ipmi::getDbusProperty(ctx, solService, solPathWithEthName,
-                                      solInterface, "RetryIntervalMS",
-                                      interval))
+            if (ipmi::getDbusProperty(
+                    ctx, solService, solPathWithEthName, solInterface,
+                    "RetryIntervalMS", interval))
             {
                 return responseUnspecifiedError();
             }

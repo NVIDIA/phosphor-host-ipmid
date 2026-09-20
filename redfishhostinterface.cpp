@@ -78,8 +78,8 @@ bool checkRHIAllowedMediumType(const uint8_t& mediumType)
 
 std::shared_ptr<X509> loadCert(const std::string& filePath)
 {
-    std::shared_ptr<BIO> certFileBio{BIO_new_file(filePath.c_str(), "rb"),
-                                     BIO_free};
+    std::shared_ptr<BIO> certFileBio{
+        BIO_new_file(filePath.c_str(), "rb"), BIO_free};
     if (certFileBio == nullptr)
     {
         lg2::error("Error occurred during BIO_new_file call, path {PATH}",
@@ -213,6 +213,6 @@ void registerNetfnRedfishHostInterfaceFunctions()
                                ipmi::Privilege::User, getFingerprint);
     ipmi::registerFilter(ipmi::prioOpenBmcBase,
                          [](ipmi::message::Request::ptr request) {
-                             return filterRHICommands(request);
-                         });
+        return filterRHICommands(request);
+    });
 }

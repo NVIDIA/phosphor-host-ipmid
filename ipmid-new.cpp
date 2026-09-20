@@ -844,15 +844,14 @@ void handleLegacyIpmiCommand(sdbusplus::message_t& m)
             ctx, dest, path, DBUS_INTF, "sendMessage", seq, netFn, lun, cmd,
             response->cc, response->payload.raw);
 
-            if (ec)
-            {
-                lg2::error(
-                    "Failed to send response to requester ({NETFN}/{CMD}): {ERROR}",
-                    "ERROR", ec.message(), "SENDER", dest, "NETFN", lg2::hex,
-                    netFn, "CMD", lg2::hex, cmd);
-            }
-        },
-        boost::asio::detached);
+        if (ec)
+        {
+            lg2::error(
+                "Failed to send response to requester ({NETFN}/{CMD}): {ERROR}",
+                "ERROR", ec.message(), "SENDER", dest, "NETFN", lg2::hex, netFn,
+                "CMD", lg2::hex, cmd);
+        }
+    }, boost::asio::detached);
 }
 
 #endif /* ALLOW_DEPRECATED_API */

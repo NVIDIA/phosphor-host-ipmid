@@ -819,8 +819,8 @@ auto ipmiAppGetSelfTestResults(ipmi::Context::ptr ctx)
     if (!ec.value())
     {
         ipmi::PropertyMap selProps;
-        ec = ipmi::getAllDbusProperties(ctx, selService, selObject, selIntf,
-                                        selProps);
+        ec = ipmi::getAllDbusProperties(
+            ctx, selService, selObject, selIntf, selProps);
     }
     if (ec.value())
     {
@@ -852,8 +852,8 @@ auto ipmiAppGetSelfTestResults(ipmi::Context::ptr ctx)
     if (!ec.value())
     {
         ipmi::PropertyMap fruProps;
-        ec = ipmi::getAllDbusProperties(ctx, fruService, fruObject, fruIntf,
-                                        fruProps);
+        ec = ipmi::getAllDbusProperties(
+            ctx, fruService, fruObject, fruIntf, fruProps);
     }
     if (ec.value())
     {
@@ -869,9 +869,9 @@ auto ipmiAppGetSelfTestResults(ipmi::Context::ptr ctx)
             ? gstCorruptedDevices
             : gstNoError;
 
-    return ipmi::responseSuccess(resultCode, fwCorrupt, bootBlockCorrupt,
-                                 fruCorrupt, sdrEmpty, ipmbFail, fruFail,
-                                 sdrRepoFail, selFail);
+    return ipmi::responseSuccess(
+        resultCode, fwCorrupt, bootBlockCorrupt, fruCorrupt, sdrEmpty, ipmbFail,
+        fruFail, sdrRepoFail, selFail);
 }
 
 static constexpr size_t uuidBinaryLength = 16;
