@@ -3009,13 +3009,17 @@ ipmi::RspType<uint8_t,  // sdr version
     uint16_t recordCount =
         getNumberOfSensors() + fruCount + ipmi::storage::type12Count;
 
+    constexpr uint8_t headerAndKeySize =
+        sizeof(get_sdr::SensorDataRecordHeader) +
+        sizeof(get_sdr::SensorDataRecordKey);
+
     uint8_t operationSupport = static_cast<uint8_t>(
         SdrRepositoryInfoOps::overflow); // write not supported
 
     auto& ipmiDecoratorPaths = getIpmiDecoratorPaths(ctx);
     while (!getSensorDataRecord(
         ctx, ipmiDecoratorPaths.value_or(std::unordered_set<std::string>()),
-        record, recordID++))
+        record, recordID++, headerAndKeySize))
     {
         get_sdr::SensorDataRecordHeader* hdr =
             reinterpret_cast<get_sdr::SensorDataRecordHeader*>(record.data());
