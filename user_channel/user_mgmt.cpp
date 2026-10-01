@@ -951,7 +951,7 @@ Cc UserAccess::setUserName(const uint8_t userId, const std::string& userName)
             // ssh (ManagerConsole) is reserved for UID 0; the user manager
             // rejects it for any other account, so leave it out.
             std::vector<std::string> groups = availableGroups;
-            std::erase(groups, sshGrpName);
+            std::erase(groups, "ssh");
             // Nvidia code End here
             // Create new user
             auto method = bus.new_method_call(
