@@ -947,11 +947,17 @@ Cc UserAccess::setUserName(const uint8_t userId, const std::string& userName)
             {
                 return ccUnspecifiedError;
             }
+            // Nvidia code starts here.
+            // ssh (ManagerConsole) is reserved for UID 0; the user manager
+            // rejects it for any other account, so leave it out.
+            std::vector<std::string> groups = availableGroups;
+            std::erase(groups, sshGrpName);
+            // Nvidia code End here
             // Create new user
             auto method = bus.new_method_call(
                 userMgrService, userMgrObjBasePath, userMgrInterface,
                 createUserMethod);
-            method.append(userName.c_str(), availableGroups,
+            method.append(userName.c_str(), groups,
                           ipmiPrivIndex[PRIVILEGE_USER], false);
             auto reply = bus.call(method);
         }

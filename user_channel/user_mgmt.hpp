@@ -51,6 +51,9 @@ static constexpr const char* ipmiUserSignalLockFile =
     "/run/ipmi/ipmi_usr_signal_mutex";
 static constexpr const char* ipmiUserDataFile = "/var/lib/ipmi/ipmi_user.json";
 static constexpr const char* ipmiGrpName = "ipmi";
+// Nvidia code starts here.
+static constexpr const char* sshGrpName = "ssh";
+// Nvidia code End here
 static constexpr size_t privNoAccess = 0xF;
 static constexpr size_t privMask = 0xF;
 
