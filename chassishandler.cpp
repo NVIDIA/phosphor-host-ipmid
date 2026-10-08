@@ -2982,22 +2982,25 @@ ipmi::RspType<> ipmiChassisSetSysBootOptions(ipmi::Context::ptr ctx,
 
         try
         {
-            // Data 1
-            auto typeItr =
-                typeIpmiToDbus.find(static_cast<uint8_t>(biosBootType));
-            if (typeIpmiToDbus.end() != typeItr)
+            // Invalid boot flags clear the override without changing its type.
+            if (validFlag)
             {
-                rc = setBootType(ctx, typeItr->second);
-                if (rc != ipmi::ccSuccess)
+                auto typeItr =
+                    typeIpmiToDbus.find(static_cast<uint8_t>(biosBootType));
+                if (typeIpmiToDbus.end() != typeItr)
                 {
-                    return ipmi::response(rc);
+                    rc = setBootType(ctx, typeItr->second);
+                    if (rc != ipmi::ccSuccess)
+                    {
+                        return ipmi::response(rc);
+                    }
                 }
-            }
-            else
-            {
-                log<level::ERR>(
-                    "ipmiChassisSetSysBootOptions: Boot type not supported");
-                return ipmi::responseInvalidFieldRequest();
+                else
+                {
+                    log<level::ERR>(
+                        "ipmiChassisSetSysBootOptions: Boot type not supported");
+                    return ipmi::responseInvalidFieldRequest();
+                }
             }
 
             // When clearing valid flag, permanent flag must also be cleared.
