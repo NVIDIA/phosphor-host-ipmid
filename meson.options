@@ -182,6 +182,12 @@ option(
     value: 'disabled',
     description: 'Remove SDR if M range exceeds scale is disabled by default; offer a way to enable it',
 )
+option(
+    'dynamic-sensors-hide-energy',
+    type: 'feature',
+    value: 'disabled',
+    description: 'Hide energy sensors from IPMI is disabled by default; offer a way to enable it',
+)
 
 # Sensor Cache
 option(
