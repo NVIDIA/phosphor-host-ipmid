@@ -270,6 +270,21 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
 #endif
 
     filterSensors(*sensorTreePtr);
+#ifdef ENABLE_DYNAMIC_SENSORS_HIDE_ENERGY
+    // Remove energy counters from the IPMI sensor list
+    for (auto it = sensorTreePtr->begin(); it != sensorTreePtr->end();)
+    {
+        if (boost::starts_with(it->first,
+                               "/xyz/openbmc_project/sensors/energy/"))
+        {
+            it = sensorTreePtr->erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
+#endif
     // Error if searching for sensors failed.
     if (!sensorRez)
     {
