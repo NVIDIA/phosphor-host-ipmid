@@ -416,7 +416,7 @@ CommandPrivilege UserAccess::convertToIPMIPrivilege(const std::string& value)
     auto iter = std::find(ipmiPrivIndex.begin(), ipmiPrivIndex.end(), value);
     if (iter == ipmiPrivIndex.end())
     {
-        if (value == "")
+        if (value == "" || value == "priv-noaccess")
         {
             return static_cast<CommandPrivilege>(privNoAccess);
         }
