@@ -309,7 +309,7 @@ void createIfAddr(sdbusplus::bus_t& bus, const ChannelParams& params,
 static auto getIfAddr4ForLanConfig(sdbusplus::bus_t& bus,
                                    const ChannelParams& params, bool dhcp)
 {
-    ObjectLookupCache ips(bus, params, NetworkIP::interface);
+    ObjectLookupCache ips(bus, params, INTF_IP);
     const auto& origins = dhcp ? originsV4DHCP : originsV4Static;
 
     // IPMI reports the address value separately from the address source.
