@@ -306,8 +306,8 @@ void createIfAddr(sdbusplus::bus_t& bus, const ChannelParams& params,
  *  @param[in] dhcp   - DHCP4 state for the channel
  *  @return The preferred address, or first valid address if none matches
  */
-auto getIfAddr4ForLanConfig(sdbusplus::bus_t& bus, const ChannelParams& params,
-                            bool dhcp)
+static auto getIfAddr4ForLanConfig(sdbusplus::bus_t& bus,
+                                   const ChannelParams& params, bool dhcp)
 {
     ObjectLookupCache ips(bus, params, NetworkIP::interface);
     const auto& origins = dhcp ? originsV4DHCP : originsV4Static;
