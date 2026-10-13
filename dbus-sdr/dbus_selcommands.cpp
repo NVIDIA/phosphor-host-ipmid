@@ -893,6 +893,11 @@ ipmi::RspType<uint16_t // recordID of the Added SEL entry
         addData["RECORD_TYPE"] = std::to_string(recordType);
         addData["SENSOR_TYPE"] = getSensorTypeStringPath(objpath).c_str();
         addData["SENSOR_NUMBER"] = std::to_string(sensorNumber);
+        if (!objpath.empty())
+        {
+            addData["DEVICE_NAME"] =
+                std::filesystem::path(objpath).filename().string();
+        }
 
         try
         {
