@@ -304,7 +304,8 @@ void createIfAddr(sdbusplus::bus_t& bus, const ChannelParams& params,
  *  @param[in] bus    - The bus object used for lookups
  *  @param[in] params - The parameters for the channel
  *  @param[in] dhcp   - DHCP4 state for the channel
- *  @return The preferred address, or first valid address if none matches
+ *  @return The preferred DHCP/Static IPv4 address, the first IPv4 address
+ *          with either origin if none matches, or no address if neither exists
  */
 static auto getIfAddr4ForLanConfig(sdbusplus::bus_t& bus,
                                    const ChannelParams& params, bool dhcp)
@@ -312,9 +313,9 @@ static auto getIfAddr4ForLanConfig(sdbusplus::bus_t& bus,
     ObjectLookupCache ips(bus, params, INTF_IP);
     const auto& origins = dhcp ? originsV4DHCP : originsV4Static;
 
-    // IPMI reports the address value separately from the address source.
-    // Prefer an origin matching DHCP4, but keep reporting a configured IPv4
-    // address if a permanent DHCP lease is exposed on DBus as Static.
+    // Prefer DHCP origin when DHCP4 is enabled, otherwise Static origin.
+    // If none matches, fall back to the first DHCP- or Static-origin IPv4
+    // address on the channel. Address-source reporting still follows DHCP4.
     auto ifaddr = findIfAddr<AF_INET>(bus, params, 0, origins, ips);
     if (ifaddr)
     {
@@ -1271,17 +1272,12 @@ RspType<message::Payload> getLan(Context::ptr ctx, uint4_t channelBits,
         case LanParam::IP:
         {
             stdplus::In4Addr addr{};
-            // get the IPv4 dhcp state for the interface
+            // Get the IPv4 DHCP state for the interface.
             auto dhcp = channelCall<getEthProp<bool>>(channel, "DHCP4");
-            // The OpenBMC project has added support for IP aliasing,
-            // which allows multiple IP addresses to be set on a single
-            // interface. However, the IPMI protocol only supports a single IP
-            // address for IPv4. To maintain backward compatibility, the
-            // following policy has been implemented:
-            //   - IPv4 DHCP Enabled: IPMI will select the IP address assigned
-            //   by the DHCP server found on the channel.
-            //   - IPv4 DHCP Disabled: IPMI will select the first static IP
-            //   address found on the channel.
+            // Report one IPv4 address: prefer DHCP origin when DHCP4 is
+            // enabled, otherwise Static. If none matches, use the first
+            // DHCP- or Static-origin IPv4 address on the channel.
+            // If neither exists, keep the default address 0.0.0.0.
             auto ifaddr = channelCall<getIfAddr4ForLanConfig>(channel, dhcp);
             if (ifaddr)
             {
@@ -1307,17 +1303,12 @@ RspType<message::Payload> getLan(Context::ptr ctx, uint4_t channelBits,
         case LanParam::SubnetMask:
         {
             uint8_t prefix = AddrFamily<AF_INET>::defaultPrefix;
-            // get the IPv4 dhcp state for the interface
+            // Get the IPv4 DHCP state for the interface.
             auto dhcp = channelCall<getEthProp<bool>>(channel, "DHCP4");
-            // The OpenBMC project has added support for IP aliasing,
-            // which allows multiple IP addresses to be set on a single
-            // interface. However, the IPMI protocol only supports a single IP
-            // address for IPv4. To maintain backward compatibility, the
-            // following policy has been implemented:
-            //   - IPv4 DHCP Enabled: IPMI will select the IP address assigned
-            //   by the DHCP server found on the channel.
-            //   - IPv4 DHCP Disabled: IPMI will select the first static IP
-            //   address found on the channel.
+            // Use the same IPv4 selection policy as LanParam::IP: prefer
+            // DHCP origin when DHCP4 is enabled, otherwise Static; fall back
+            // to the first DHCP- or Static-origin IPv4 address if none matches.
+            // If neither exists, keep the default /32 mask (255.255.255.255).
             auto ifaddr = channelCall<getIfAddr4ForLanConfig>(channel, dhcp);
             if (ifaddr)
             {
