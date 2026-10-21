@@ -842,7 +842,7 @@ ipmi::RspType<uint16_t, // Next Record ID
         static_cast<uint8_t>(record.event.eventRecord.recordType),
         systemEventType{
             static_cast<uint32_t>(record.event.eventRecord.timeStamp),
-            static_cast<uint8_t>(record.event.eventRecord.generatorID),
+            static_cast<uint16_t>(record.event.eventRecord.generatorID),
             static_cast<uint8_t>(record.event.eventRecord.eventMsgRevision),
             static_cast<uint8_t>(record.event.eventRecord.sensorType),
             static_cast<uint8_t>(record.event.eventRecord.sensorNum), eventType,
@@ -872,7 +872,8 @@ ipmi::RspType<uint16_t // recordID of the Added SEL entry
         std::string objpath("");
         try
         {
-            objpath = getPathFromSensorNumber(sensorNumber);
+            objpath = getPathFromSensorNumber(
+                getSensorNumberWithLun(generatorID, sensorNumber));
         }
         catch (...)
         {

@@ -64,6 +64,22 @@ static constexpr uint16_t lun3Sensor0 = 0x300;
 static constexpr uint16_t invalidSensorNumber = 0xFFFF;
 static constexpr uint8_t reservedSensorNumber = 0xFF;
 
+constexpr uint16_t getSensorNumberWithLun(uint16_t generatorID,
+                                          uint8_t sensorNumber)
+{
+    constexpr uint16_t softwareGeneratorMask = 0x0001;
+    constexpr uint16_t ipmbGeneratorLunMask = 0x0300;
+
+    if ((generatorID & softwareGeneratorMask) == 0)
+    {
+        // For an IPMB generator, the LUN is in bits 9:8.
+        return (generatorID & ipmbGeneratorLunMask) | sensorNumber;
+    }
+
+    // System-software generators do not carry a LUN.
+    return sensorNumber;
+}
+
 static constexpr uint8_t sysEntityInstance = 0x01;
 static constexpr uint8_t eidReserved = 0x00;
 
