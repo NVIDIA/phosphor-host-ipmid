@@ -735,26 +735,6 @@ std::string parseSdrIdFromPath(const std::string& path)
     return name;
 }
 
-// SDR ID string: the IpmiName override (capped to 16) if set, else the
-// default shortened path name.
-std::string sdrIdFor(const std::string& path, const std::string& ipmiName)
-{
-    if (ipmiName.empty())
-    {
-        return parseSdrIdFromPath(path);
-    }
-    std::string name = ipmiName;
-    if (name.size() > FULL_RECORD_ID_STR_MAX_LENGTH)
-    {
-        phosphor::logging::log<phosphor::logging::level::WARNING>(
-            "IpmiName exceeds SDR id length; truncating",
-            phosphor::logging::entry("IPMINAME=%s", ipmiName.c_str()),
-            phosphor::logging::entry("PATH=%s", path.c_str()));
-        name.resize(FULL_RECORD_ID_STR_MAX_LENGTH);
-    }
-    return name;
-}
-
 bool getVrEventStatus(ipmi::Context::ptr ctx, const std::string& connection,
                       const std::string& path,
                       const ipmi::DbusInterfaceMap::mapped_type& object,
@@ -2226,9 +2206,8 @@ bool constructSensorSdr(
     // These seem redundant, but derivable from the above 5 attributes
     // Original comment said "todo fill out rest of units"
 
-    // populate sensor name from path (or Entity-Manager IpmiName override)
-    std::string ipmiName = ipmi::getIpmiNameForSensor(ctx, path);
-    auto name = sensor::sdrIdFor(path, ipmiName);
+    // populate sensor name from path
+    auto name = sensor::parseSdrIdFromPath(path);
     get_sdr::body::set_id_strlen(name.size(), &record.body);
     get_sdr::body::set_id_type(3, &record.body); // "8-bit ASCII + Latin 1"
     std::memcpy(record.body.id_string, name.c_str(),
@@ -2426,15 +2405,12 @@ bool constructDiscreteSdr(ipmi::Context::ptr ctx, uint16_t sensorNum,
     record.body.sensor_type = getSensorTypeFromPath(path);
     record.body.event_reading_type = getSensorEventTypeFromPath(path);
 
-    // populate sensor name from path (or Entity-Manager IpmiName override)
-    std::string ipmiName = ipmi::getIpmiNameForSensor(ctx, path);
-    auto name = sensor::sdrIdFor(path, ipmiName);
-    // there is no entity instance assigned in Dbus. Derive it from the path,
-    // not the IpmiName override, so a custom name can't shift entity instances.
+    // populate sensor name from path
+    auto name = sensor::parseSdrIdFromPath(path);
+    // there is no entity instance assigned in Dbus.
     if (record.body.entity_instance == 0)
     {
-        record.body.entity_instance =
-            getEntityInstanceFromName(sensor::parseSdrIdFromPath(path));
+        record.body.entity_instance = getEntityInstanceFromName(name);
     }
     // determine minimum length of the sensor name string
     // either sizeof name or 16 bytes as per IPMI spec
@@ -2562,9 +2538,8 @@ bool constructVrSdr(ipmi::Context::ptr ctx,
     record.body.sensor_record_sharing_1 = 0x00;
     record.body.sensor_record_sharing_2 = 0x00;
 
-    // populate sensor name from path (or Entity-Manager IpmiName override)
-    std::string ipmiName = ipmi::getIpmiNameForSensor(ctx, path);
-    auto name = sensor::sdrIdFor(path, ipmiName);
+    // populate sensor name from path
+    auto name = sensor::parseSdrIdFromPath(path);
     int nameSize = std::min(name.size(), sizeof(record.body.id_string));
     get_sdr::body::set_id_strlen(nameSize, &record.body);
     get_sdr::body::set_id_type(3, &record.body); // "8-bit ASCII + Latin 1"
