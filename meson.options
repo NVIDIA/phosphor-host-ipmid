@@ -188,6 +188,12 @@ option(
     value: 'disabled',
     description: 'Hide energy sensors from IPMI is disabled by default; offer a way to enable it',
 )
+option(
+    'dynamic-sensors-no-get-sensor-type',
+    type: 'feature',
+    value: 'disabled',
+    description: 'Remove Get Sensor Type handler with dynamic sensors is disabled by default; offer a way to enable it',
+)
 
 # Sensor Cache
 option(

@@ -118,6 +118,7 @@ feature_map = {
     'dynamic-storages-only': '-DFEATURE_DYNAMIC_STORAGES_ONLY',
     'dynamic-sensors-remove-exceeded-scale': '-DENABLE_DYNAMIC_SENSORS_REMOVE_EXCEEDED_SCALE',
     'dynamic-sensors-hide-energy': '-DENABLE_DYNAMIC_SENSORS_HIDE_ENERGY',
+    'dynamic-sensors-no-get-sensor-type': '-DFEATURE_DYNAMIC_SENSORS_NO_GET_SENSOR_TYPE',
     'host-connected': '-DHOST_CONNECTED',
     'arm-sbmr': '-DARM_SBMR_SUPPORT',
 }

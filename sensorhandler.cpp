@@ -1661,17 +1661,20 @@ void registerNetFnSenFunctions()
 
 #endif
 
+#if !(defined(FEATURE_DYNAMIC_SENSORS) &&                                      \
+      defined(FEATURE_DYNAMIC_SENSORS_NO_GET_SENSOR_TYPE))
+    // <Get Sensor Type>
+    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnSensor,
+                          ipmi::sensor_event::cmdGetSensorType,
+                          ipmi::Privilege::User, ipmiGetSensorType);
+#endif
+
     // Common Handers used by both implementation.
 
     // <Platform Event Message>
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnSensor,
                           ipmi::sensor_event::cmdPlatformEvent,
                           ipmi::Privilege::Operator, ipmicmdPlatformEvent);
-
-    // <Get Sensor Type>
-    ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnSensor,
-                          ipmi::sensor_event::cmdGetSensorType,
-                          ipmi::Privilege::User, ipmiGetSensorType);
 
     return;
 }
