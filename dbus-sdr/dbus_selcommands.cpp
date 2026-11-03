@@ -73,7 +73,7 @@ bool selCacheMapInitialized = false;
 // This tracks the number of restored logging entries identified as SELs. An
 // entry might still fail conversion and not be added to the cache, but it must
 // count toward restoration completion so it does not trigger endless retries.
-static uint16_t selRestoredEntryCount = 0;
+static size_t selRestoredEntryCount = 0;
 std::unique_ptr<sdbusplus::bus::match_t> selAddedMatch
     __attribute__((init_priority(101)));
 std::unique_ptr<sdbusplus::bus::match_t> selRemovedMatch
@@ -435,16 +435,18 @@ bool initSELCache()
     registerSelCallbackHandler();
     selRestoredEntryCount = 0;
 
-    std::map<std::string, ipmi::sel::internal::entryDataMap> bulkData;
+    ipmi::sel::internal::EntryDataById bulkData;
     const bool bulkOk = ipmi::sel::internal::readLoggingEntryDataBulk(bulkData);
 
     if (bulkOk)
     {
-        log<level::INFO>("initSELCache: using GetManagedObjects bulk read",
+        log<level::INFO>("initSELCache: using SEL namespace bulk read",
                          entry("COUNT=%zu", bulkData.size()));
 
-        for (const auto& [p, data] : bulkData)
+        // Entry-ID order as in the per-entry path: newest wins on ID reuse.
+        for (const auto& item : bulkData)
         {
+            const auto& [p, data] = item.second;
             auto entry = parseLoggingEntry(p, &data);
             if (entry)
             {

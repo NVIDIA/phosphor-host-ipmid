@@ -179,15 +179,20 @@ std::chrono::milliseconds getEntryData(
     return getEntryData(entryData, recordId);
 }
 
-bool readLoggingEntryDataBulk(std::map<std::string, entryDataMap>& outByPath)
+bool readLoggingEntryDataBulk(EntryDataById& outById)
 {
-    outByPath.clear();
+    outById.clear();
 
     try
     {
         sdbusplus::bus_t bus{ipmid_get_sd_bus_connection()};
-        auto service = ipmi::getService(bus, objMgrIntf, std::string(logObj));
-        auto tree = ipmi::getManagedObjects(bus, service, std::string(logObj));
+        auto service =
+            ipmi::getService(bus, logNamespaceIntf, std::string(logObj));
+        auto method = bus.new_method_call(
+            service.c_str(), logObj, logNamespaceIntf, "GetAll");
+        method.append("SEL", logNamespaceFilterBoth);
+        ipmi::ObjectValueTree tree;
+        bus.call(method).read(tree);
 
         const std::string entryPrefix = std::string(logBasePath) + "/";
         for (const auto& [objPath, ifaces] : tree)
@@ -204,6 +209,18 @@ bool readLoggingEntryDataBulk(std::map<std::string, entryDataMap>& outByPath)
             {
                 continue;
             }
+            // Key by the entry ID, the path name after the prefix.
+            const char* const last = p.data() + p.size();
+            Id id = 0;
+            const auto [ptr, ec] =
+                std::from_chars(p.data() + entryPrefix.size(), last, id);
+            if (ec != std::errc{} || ptr != last)
+            {
+                log<level::ERR>(
+                    "readLoggingEntryDataBulk: skipping non-numeric path",
+                    entry("PATH=%s", p.c_str()));
+                continue;
+            }
             entryDataMap tmpMap;
             // Merge the properties of the Logging.Entry interface into
             // entryDataMap.
@@ -214,7 +231,7 @@ bool readLoggingEntryDataBulk(std::map<std::string, entryDataMap>& outByPath)
             // Only include entries that have Id, Timestamp, and AdditionalData.
             if (tmpMap.size() >= 3)
             {
-                outByPath.emplace(p, std::move(tmpMap));
+                outById.try_emplace(id, p, std::move(tmpMap));
             }
         }
         return true;

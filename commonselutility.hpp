@@ -49,7 +49,10 @@ static constexpr auto logIntf = "xyz.openbmc_project.Collection.DeleteAll";
 static constexpr auto logDeleteAllMethod = "DeleteAll";
 
 static constexpr auto propIntf = "org.freedesktop.DBus.Properties";
-static constexpr auto objMgrIntf = "org.freedesktop.DBus.ObjectManager";
+static constexpr auto logNamespaceIntf =
+    "xyz.openbmc_project.Logging.Namespace";
+static constexpr auto logNamespaceFilterBoth =
+    "xyz.openbmc_project.Logging.Namespace.ResolvedFilterType.Both";
 
 using ObjectPaths = std::vector<std::string>;
 using PropertyName = std::string;
@@ -241,13 +244,17 @@ std::chrono::milliseconds getEntryData(const entryDataMap& entryData,
 std::chrono::milliseconds getEntryData(
     const std::string& objPath, entryDataMap& entryData, uint16_t& recordId);
 
-/** @brief Bulk-load all Logging.Entry properties via GetManagedObjects on
- *         @ref logObj. O(1) D-Bus round-trips instead of O(n).
+// {object path, Logging.Entry properties} keyed by the logging entry ID.
+using EntryDataById = std::map<Id, std::pair<std::string, entryDataMap>>;
+
+/** @brief Bulk-load the SEL namespace Logging.Entry properties via
+ *         Logging.Namespace GetAll on @ref logObj in one D-Bus call.
  *
- *  @param[out] outByPath  Cleared, then filled with {objPath, entryDataMap}.
+ *  @param[out] outById  Cleared, then filled; a path whose name is not a
+ *                       number is logged and skipped.
  *  @return true if the operation succeeds, otherwise false.
  */
-bool readLoggingEntryDataBulk(std::map<std::string, entryDataMap>& outByPath);
+bool readLoggingEntryDataBulk(EntryDataById& outById);
 
 /** Construct OEM SEL record according to IPMI spec 32.2, 32.3. */
 void constructOEMSEL(uint8_t recordType, std::chrono::milliseconds timestamp,
