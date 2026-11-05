@@ -282,8 +282,7 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree)
     // Remove energy counters from the IPMI sensor list
     for (auto it = sensorTreePtr->begin(); it != sensorTreePtr->end();)
     {
-        if (boost::starts_with(it->first,
-                               "/xyz/openbmc_project/sensors/energy/"))
+        if (it->first.starts_with("/xyz/openbmc_project/sensors/energy/"))
         {
             it = sensorTreePtr->erase(it);
         }
