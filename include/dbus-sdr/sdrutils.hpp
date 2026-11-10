@@ -20,6 +20,7 @@
 #include <ipmid/types.hpp>
 #include <phosphor-logging/log.hpp>
 #include <sdbusplus/bus/match.hpp>
+#include <xyz/openbmc_project/Logging/Entry/server.hpp>
 
 #include <cstdio>
 #include <cstring>
@@ -455,6 +456,62 @@ void updateIpmiFromAssociation(
     const DbusInterfaceMap& sensorMap, uint8_t& entityId,
     uint8_t& entityInstance);
 
+constexpr uint8_t thresholdEventReadingType = 0x01;
+
+// Table 42-, Generic Event/Reading Type Codes. A lower threshold going high,
+// and an upper one going low, are returns toward normal, not excursions.
+enum class ThresholdOffset : uint8_t
+{
+    lowerNonCriticalGoingLow = 0x00,
+    lowerNonCriticalGoingHigh = 0x01,
+    lowerCriticalGoingLow = 0x02,
+    lowerCriticalGoingHigh = 0x03,
+    lowerNonRecoverableGoingLow = 0x04,
+    lowerNonRecoverableGoingHigh = 0x05,
+    upperNonCriticalGoingLow = 0x06,
+    upperNonCriticalGoingHigh = 0x07,
+    upperCriticalGoingLow = 0x08,
+    upperCriticalGoingHigh = 0x09,
+    upperNonRecoverableGoingLow = 0x0a,
+    upperNonRecoverableGoingHigh = 0x0b,
+};
+
+inline sdbusplus::xyz::openbmc_project::Logging::server::Entry::Level
+    getSelEventSeverity(uint8_t eventReadingType, uint8_t offset, bool asserted)
+{
+    using Level =
+        sdbusplus::xyz::openbmc_project::Logging::server::Entry::Level;
+
+    if (eventReadingType != thresholdEventReadingType || !asserted)
+    {
+        return Level::Informational;
+    }
+
+    switch (static_cast<ThresholdOffset>(offset))
+    {
+        case ThresholdOffset::lowerNonCriticalGoingLow:
+        case ThresholdOffset::upperNonCriticalGoingHigh:
+            return Level::Warning;
+        case ThresholdOffset::lowerCriticalGoingLow:
+        case ThresholdOffset::upperCriticalGoingHigh:
+            return Level::Critical;
+        case ThresholdOffset::lowerNonRecoverableGoingLow:
+        case ThresholdOffset::upperNonRecoverableGoingHigh:
+            return Level::Alert;
+        case ThresholdOffset::lowerNonCriticalGoingHigh:
+        case ThresholdOffset::lowerCriticalGoingHigh:
+        case ThresholdOffset::lowerNonRecoverableGoingHigh:
+        case ThresholdOffset::upperNonCriticalGoingLow:
+        case ThresholdOffset::upperCriticalGoingLow:
+        case ThresholdOffset::upperNonRecoverableGoingLow:
+            break;
+    }
+
+    // Returns toward normal, and any offset outside the table.
+    return Level::Informational;
+}
+
 std::string getSelEventMessage(const std::string& sensorPath,
-                               std::array<uint8_t, eventDataSize>& eventData);
+                               std::array<uint8_t, eventDataSize>& eventData,
+                               bool asserted);
 } // namespace ipmi

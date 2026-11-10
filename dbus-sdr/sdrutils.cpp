@@ -1127,7 +1127,8 @@ const struct ipmi_event_sensor_types sensor_specific_event_types[] = {
 #define DATA_BYTE2_SPECIFIED_MASK 0xc0 /* event_data[0] bit mask */
 #define ALL_OFFSETS_SPECIFIED 0xff
 std::string getSelEventMessage(const std::string& sensorPath,
-                               std::array<uint8_t, eventDataSize>& eventData)
+                               std::array<uint8_t, eventDataSize>& eventData,
+                               bool asserted)
 {
     const struct ipmi_event_sensor_types* evt;
     int8_t sensorType = getSensorTypeFromPath(sensorPath);
@@ -1154,7 +1155,9 @@ std::string getSelEventMessage(const std::string& sensorPath,
              ((eventData[0] & DATA_BYTE2_SPECIFIED_MASK) &&
               (evt->data == eventData[1]))))
         {
-            return std::string(evt->desc);
+            std::string desc(evt->desc);
+            desc.erase(desc.find_last_not_of(' ') + 1);
+            return desc + (asserted ? " - Asserted" : " - Deasserted");
         }
     }
     return "";

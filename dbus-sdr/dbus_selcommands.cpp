@@ -35,7 +35,6 @@ static constexpr auto capacityInterface =
     "xyz.openbmc_project.Logging.Capacity";
 constexpr auto dbusProperty = "org.freedesktop.DBus.Properties";
 using ErrLvl = sdbusplus::xyz::openbmc_project::Logging::server::Entry::Level;
-auto sevLvl = ErrLvl::Informational;
 using InternalFailure =
     sdbusplus::xyz::openbmc_project::Common::Error::InternalFailure;
 
@@ -43,6 +42,7 @@ namespace
 {
 constexpr auto logWatchPath = "/xyz/openbmc_project/logging";
 constexpr auto logEntryIntf = "xyz.openbmc_project.Logging.Entry";
+
 } // namespace
 
 void registerStorageFunctions() __attribute__((constructor));
@@ -883,7 +883,10 @@ ipmi::RspType<uint16_t // recordID of the Added SEL entry
         }
 
         bool assert = (eventDir & 0x80) ? false : true;
-        std::string messageID = ipmi::getSelEventMessage(objpath, eventData);
+        std::string messageID =
+            ipmi::getSelEventMessage(objpath, eventData, assert);
+        ErrLvl sevLvl = ipmi::getSelEventSeverity(
+            eventDir & 0x7f, eventData[0] & 0x0f, assert);
 
         sdbusplus::bus_t bus(ipmid_get_sd_bus_connection());
         std::map<std::string, std::string> addData;

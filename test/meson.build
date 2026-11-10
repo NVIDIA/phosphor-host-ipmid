@@ -89,6 +89,26 @@ test(
     ),
 )
 
+# Build/add selseverity_unittest to test suite
+test(
+    'dbus-sdr/selseverity',
+    executable(
+        'dbus-sdr_selseverity',
+        'dbus-sdr/selseverity_unittest.cpp',
+        include_directories: root_inc,
+        build_by_default: false,
+        implicit_include_directories: false,
+        dependencies: [
+            ipmid_dep,
+            phosphor_dbus_interfaces_dep,
+            phosphor_logging_dep,
+            sdbusplus_dep,
+            gtest,
+            gmock,
+        ],
+    ),
+)
+
 # Build/add sensorcommands_unittest to test suite
 test(
     'dbus-sdr/sensorcommands',
