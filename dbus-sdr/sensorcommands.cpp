@@ -1580,9 +1580,13 @@ ipmi::RspType<> ipmiSenSetSensorThresholds(
         double valueToSet = ((mValue * std::get<thresholdValue>(property)) +
                              (bValue * std::pow(10.0, bExp))) *
                             std::pow(10.0, rExp);
-        setDbusProperty(
-            *getSdBus(), connection, path, std::get<interface>(property),
+        const auto ec = setDbusProperty(
+            ctx, connection, path, std::get<interface>(property),
             std::get<propertyName>(property), ipmi::Value(valueToSet));
+        if (ec)
+        {
+            return ipmi::responseResponseError();
+        }
     }
     return ipmi::responseSuccess();
 }
