@@ -470,7 +470,6 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree,
     subtree = std::move(newTree);
     sensorUpdatedIndex++;
     sdrStatsTable.wipeTable();
-    sdrWriteTable.wipeTable();
     return sensorUpdatedIndex;
 }
 
