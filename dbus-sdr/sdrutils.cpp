@@ -18,6 +18,7 @@
 
 #include "sdr_metadata.hpp"
 #include "dbus-sdr/sensorutils.hpp"
+#include "stable_ids.hpp"
 
 #include <ipmid/utils.hpp>
 #include <nlohmann/json.hpp>
@@ -461,6 +462,35 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree,
     // Add discrete sensors that returns Event-Only Record
     (void)lbdUpdateSensorTree("/xyz/openbmc_project/sensors/motherboard",
                               discreteInterfacesEventOnly);
+    bool exhausted = false;
+    for (auto sensor = newTree->begin(); sensor != newTree->end();)
+    {
+        if (allocateSensorNumber(sensor->first) == invalidSensorNumber)
+        {
+            exhausted = true;
+            sensor = newTree->erase(sensor);
+        }
+        else
+        {
+            ++sensor;
+        }
+    }
+    if (exhausted && startedAt == invalidation)
+    {
+        // Live commands retain the currently present, already allocated paths.
+        // Cache them so polling does not repeat the failed mapper acquisition.
+        sensorTreePtr = newTree;
+        if (++sensorUpdatedIndex == 0)
+        {
+            ++sensorUpdatedIndex;
+        }
+        if (refresh)
+        {
+            // A builder must not publish this truncated replacement.
+            subtree.reset();
+            return 0;
+        }
+    }
     // A signal while awaiting the mapper must not expose a half-built cache.
     // The caller owns this completed view; cache it only if still current.
     if (startedAt == invalidation)
@@ -468,8 +498,12 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree,
         sensorTreePtr = newTree;
     }
     subtree = std::move(newTree);
-    sensorUpdatedIndex++;
-    sdrStatsTable.wipeTable();
+    if (++sensorUpdatedIndex == 0)
+    {
+        ++sensorUpdatedIndex;
+    }
+    // Stable sensor numbers preserve statistics across discovery refreshes.
+    // Discovery must not clear authorization used by concurrent commands.
     return sensorUpdatedIndex;
 }
 
@@ -494,33 +528,15 @@ bool getSensorNumMap(std::shared_ptr<SensorNumMap>& sensorNumMap)
 
     sensorNumMapPtr = std::make_shared<SensorNumMap>();
 
-    uint16_t sensorNum = 0;
-    uint16_t sensorIndex = 0;
     for (const auto& sensor : *sensorTree)
     {
+        const auto sensorNum = allocateSensorNumber(sensor.first);
+        if (sensorNum == invalidSensorNumber)
+        {
+            continue;
+        }
         sensorNumMapPtr->insert(
             SensorNumMap::value_type(sensorNum, sensor.first));
-        sensorIndex++;
-        if (sensorIndex == maxSensorsPerLUN)
-        {
-            sensorIndex = lun1Sensor0;
-        }
-        else if (sensorIndex == (lun1Sensor0 | maxSensorsPerLUN))
-        {
-            // Skip assigning LUN 0x2 any sensors
-            sensorIndex = lun3Sensor0;
-        }
-        else if (sensorIndex == (lun3Sensor0 | maxSensorsPerLUN))
-        {
-            // this is an error, too many IPMI sensors
-            throw std::out_of_range("Maximum number of IPMI sensors exceeded.");
-        }
-        sensorNum = sensorIndex;
-    }
-    // if no sensors in the sensor tree return false
-    if (sensorIndex == 0)
-    {
-        return sensorNumMapUpated;
     }
     sensorNumMap = sensorNumMapPtr;
     sensorNumMapUpated = true;
@@ -597,6 +613,32 @@ std::string getSensorTypeStringPath(const std::string& path)
         return std::string();
     }
     return sensorTypeString[sensorType];
+}
+
+uint16_t allocateSensorNumber(const std::string& path)
+{
+    static ipmi::sensor::StableIds<std::string, uint16_t> numbers([] {
+        std::vector<uint16_t> pool;
+        constexpr uint16_t primarySensorLun = 0;
+        constexpr uint16_t secondarySensorLun = 1;
+        constexpr uint16_t thirdSensorLun = 3;
+        for (const uint16_t lun :
+             {primarySensorLun, secondarySensorLun, thirdSensorLun})
+        {
+            for (uint16_t number = 0; number < reservedSensorNumber; ++number)
+            {
+                pool.push_back((lun << 8) | number);
+            }
+        }
+        return pool;
+    }());
+    auto number = numbers.allocate(path);
+    if (!number)
+    {
+        lg2::error("IPMI sensor number space exhausted for {PATH}", "PATH",
+                   path);
+    }
+    return number.value_or(invalidSensorNumber);
 }
 
 uint16_t getSensorNumberFromPath(const std::string& path)

@@ -87,7 +87,6 @@ static constexpr uint8_t maxThresholdValueNegativeCase = 127;
 static constexpr uint8_t bmcI2CAddr = 0x20;
 
 static constexpr uint8_t systemSoftwareId = 0x01;
-static constexpr uint8_t noneLunUsed = 0;
 static constexpr uint8_t systemFirmwareEntityId = 0x22;
 static constexpr uint8_t processorEntityId = 0x03;
 static constexpr uint8_t watchdogEntityId = 0x04;
@@ -169,35 +168,30 @@ ipmi::Cc getSensorConnection(ipmi::Context::ptr ctx, uint8_t sensnum,
                              std::string& connection, std::string& path,
                              std::vector<std::string>* interfaces)
 {
-    auto& sensorTree = getSensorTree();
-    if (!getSensorSubtree(sensorTree, ctx) && sensorTree.empty())
+    if (!ctx)
     {
         return ipmi::ccResponseError;
     }
 
-    if (ctx == nullptr)
+    SensorSubTree sensorTree;
+    if (!getSensorSubtree(sensorTree, ctx))
     {
         return ipmi::ccResponseError;
-    }
-
-    path = getPathFromSensorNumber((ctx->lun << 8) | sensnum);
-    if (path.empty())
-    {
-        return ipmi::ccInvalidFieldRequest;
     }
 
     for (const auto& sensor : sensorTree)
     {
-        if (path == sensor.first)
+        if (allocateSensorNumber(sensor.first) == ((ctx->lun << 8) | sensnum))
         {
+            path = sensor.first;
             connection = sensor.second.begin()->first;
             if (interfaces)
                 *interfaces = sensor.second.begin()->second;
-            break;
+            return ipmi::ccSuccess;
         }
     }
 
-    return 0;
+    return ipmi::ccSensorInvalid;
 }
 
 SensorSubTree& getSensorTree()
@@ -2465,7 +2459,7 @@ void constructCommonSensorHeaderKey(uint16_t sensorNum, uint16_t recordID,
     record.header.record_length = sizeof(get_sdr::SensorDataEventRecord) -
                                   sizeof(get_sdr::SensorDataRecordHeader);
     record.key.owner_id = ownerId;
-    record.key.owner_lun = noneLunUsed;
+    record.key.owner_lun = static_cast<uint8_t>((sensorNum >> 8) & 3);
     record.key.sensor_number = static_cast<uint8_t>(sensorNum);
 
     record.body.entity_id = entityId;
@@ -2698,60 +2692,20 @@ static int getSensorDataRecord(
         return 0;
     }
 
-    // Perform a incremental scan of the SDR Record ID's and translate the
-    // first 765 SDR records (i.e. maxIPMISensors) into IPMI Sensor
-    // Numbers. The IPMI sensor numbers are not linear, and have a reserved
-    // gap at 0xff. This code creates 254 sensors per LUN, excepting LUN 2
-    // which has special meaning.
-    std::string connection;
-    std::string path;
-    std::vector<std::string> interfaces;
-    uint16_t sensNumFromRecID{recordID};
-    if ((recordID > lun0MaxSensorNum) && (recordID < lun1MaxSensorNum))
+    SensorSubTree tree;
+    if (!getSensorSubtree(tree, ctx) || recordID >= tree.size())
     {
-        // LUN 0 has one reserved sensor number. Compensate here by adding one
-        // to the record ID
-        sensNumFromRecID = recordID + 1;
-        ctx->lun = lun1;
-    }
-    else if ((recordID >= lun1MaxSensorNum) && (recordID < maxIPMISensors))
-    {
-        // LUN 0, 1 have a reserved sensor number. Compensate here by adding 2
-        // to the record ID. Skip all 256 sensors in LUN 2, as it has special
-        // rules governing its use.
-        sensNumFromRecID = recordID + (maxSensorsPerLUN + 1) + 2;
-        ctx->lun = lun3;
-    }
-
-    auto status = getSensorConnection(
-        ctx, static_cast<uint8_t>(sensNumFromRecID), connection, path,
-        &interfaces);
-    if (status)
-    {
-        phosphor::logging::log<phosphor::logging::level::ERR>(
-            "getSensorDataRecord: getSensorConnection error");
         return GENERAL_ERROR;
     }
-    uint16_t sensorNum = getSensorNumberFromPath(path);
-    // Return an error on LUN 2 assingments, and any sensor number beyond the
-    // range of LUN 3
-    if (((sensorNum > lun1MaxSensorNum) && (sensorNum <= maxIPMISensors)) ||
-        (sensorNum > lun3MaxSensorNum))
-    {
-        phosphor::logging::log<phosphor::logging::level::ERR>(
-            "getSensorDataRecord: invalidSensorNumber");
+    const auto& selected = *(tree.begin() + recordID);
+    if (selected.second.empty())
         return GENERAL_ERROR;
-    }
-    uint8_t sensornumber = static_cast<uint8_t>(sensorNum);
-    uint8_t lun = static_cast<uint8_t>(sensorNum >> 8);
-
-    if ((sensornumber != static_cast<uint8_t>(sensNumFromRecID)) &&
-        (lun != ctx->lun))
-    {
-        phosphor::logging::log<phosphor::logging::level::ERR>(
-            "getSensorDataRecord: sensor record mismatch");
+    const std::string path = selected.first;
+    const std::string connection = selected.second.begin()->first;
+    const std::vector<std::string> interfaces = selected.second.begin()->second;
+    const uint16_t sensorNum = allocateSensorNumber(path);
+    if (sensorNum == invalidSensorNumber)
         return GENERAL_ERROR;
-    }
 
     // Construct full record (SDR type 1) for the threshold sensors
     if (std::find(interfaces.begin(), interfaces.end(),
