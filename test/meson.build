@@ -53,6 +53,16 @@ test(
 )
 
 test(
+    'dbus-sdr/sdr_build',
+    executable(
+        'dbus-sdr_sdr_build',
+        'dbus-sdr/sdr_build_test.cpp',
+        include_directories: root_inc,
+        dependencies: gtest,
+    ),
+)
+
+test(
     'entitymap_json',
     executable(
         'entitymap_json',
@@ -137,16 +147,6 @@ test(
     executable(
         'dbus-sdr_sdr_review',
         'dbus-sdr/sdr_review_test.cpp',
-        include_directories: root_inc,
-        dependencies: gtest,
-    ),
-)
-
-test(
-    'dbus-sdr/sdr_build',
-    executable(
-        'dbus-sdr_sdr_build',
-        'dbus-sdr/sdr_build_test.cpp',
         include_directories: root_inc,
         dependencies: gtest,
     ),
