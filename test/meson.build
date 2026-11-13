@@ -43,6 +43,16 @@ test(
 )
 
 test(
+    'dbus-sdr/fru_discovery',
+    executable(
+        'dbus-sdr_fru_discovery',
+        'dbus-sdr/fru_discovery_test.cpp',
+        include_directories: root_inc,
+        dependencies: gtest,
+    ),
+)
+
+test(
     'entitymap_json',
     executable(
         'entitymap_json',
