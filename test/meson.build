@@ -33,6 +33,16 @@ test(
 )
 
 test(
+    'dbus-sdr/sdr_repository',
+    executable(
+        'dbus-sdr_sdr_repository',
+        'dbus-sdr/sdr_repository_test.cpp',
+        include_directories: root_inc,
+        dependencies: gtest,
+    ),
+)
+
+test(
     'entitymap_json',
     executable(
         'entitymap_json',
@@ -129,5 +139,15 @@ test(
         build_by_default: false,
         implicit_include_directories: false,
         dependencies: [sensorutils_dep, gtest, gmock],
+    ),
+)
+
+test(
+    'dbus-sdr/sdr_review',
+    executable(
+        'dbus-sdr_sdr_review',
+        'dbus-sdr/sdr_review_test.cpp',
+        include_directories: root_inc,
+        dependencies: gtest,
     ),
 )
