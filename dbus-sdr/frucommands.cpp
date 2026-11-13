@@ -1,7 +1,9 @@
-#include "sdr_metadata.hpp"
 #include "dbus-sdr/sdrutils.hpp"
-#include "stable_ids.hpp"
 #include "dbus-sdr/storagecommands.hpp"
+#include "fru_discovery.hpp"
+#include "sdr_metadata.hpp"
+#include "sdr_repository.hpp"
+#include "stable_ids.hpp"
 
 #include <boost/algorithm/string.hpp>
 #include <boost/asio/detached.hpp>
@@ -59,6 +61,7 @@ static std::vector<sdbusplus::bus::match_t> fruMatches;
 
 ManagedObjectType frus;
 static bool fruIdsExhausted = false;
+static FruDiscoveryState fruDiscovery;
 
 // we unfortunately have to build a map of hashes in case there is a
 // collision to verify our dev-id
@@ -165,12 +168,14 @@ void recalculateHashes()
         {
             lg2::error("FRU device ID space exhausted");
             fruIdsExhausted = true;
+            invalidateSdrRepository();
             return;
         }
         nextHashes.emplace(*id, newDev);
     }
     deviceHashes = std::move(nextHashes);
     fruIdsExhausted = false;
+    invalidateSdrRepository();
 }
 
 static void replaceCacheFru(
@@ -178,25 +183,54 @@ static void replaceCacheFru(
     boost::asio::yield_context& yield,
     [[maybe_unused]] const std::optional<std::string>& path = std::nullopt)
 {
-    boost::system::error_code ec;
-
-    auto nextFrus = bus->yield_method_call<ManagedObjectType>(
-        yield, ec, fruDeviceServiceName, "/",
-        "org.freedesktop.DBus.ObjectManager", "GetManagedObjects");
-    if (ec)
+    const auto revision = fruDiscovery.beginRefresh();
+    if (!revision)
     {
-        lg2::error("GetMangagedObjects for replaceCacheFru failed: {ERROR}",
-                   "ERROR", ec.message());
-
         return;
     }
-    frus = std::move(nextFrus);
-    recalculateHashes();
+    try
+    {
+        boost::system::error_code ec;
+        auto nextFrus = bus->yield_method_call<ManagedObjectType>(
+            yield, ec, fruDeviceServiceName, "/",
+            "org.freedesktop.DBus.ObjectManager", "GetManagedObjects");
+        if (!fruDiscovery.finishRefresh(*revision, !ec))
+        {
+            if (ec)
+            {
+                lg2::error("FRU directory acquisition failed: {ERROR}", "ERROR",
+                           ec.message());
+            }
+            return;
+        }
+        frus = std::move(nextFrus);
+        recalculateHashes();
+        lastDevId = 0xFF;
+    }
+    catch (...)
+    {
+        fruDiscovery.finishRefresh(*revision, false);
+        fruDiscovery.invalidate();
+        throw;
+    }
+}
+
+static bool ensureFruDiscovery(const ipmi::Context::ptr& ctx)
+{
+    if (!fruDiscovery.ready() && ctx)
+    {
+        replaceCacheFru(ctx->bus, ctx->yield);
+    }
+    return fruDiscovery.ready();
 }
 
 std::pair<ipmi::Cc, std::vector<uint8_t>> getFru(ipmi::Context::ptr ctx,
                                                  uint8_t devId)
 {
+    if (!ensureFruDiscovery(ctx))
+    {
+        return {ipmi::ccBusy, {}};
+    }
     if (lastDevId == devId && devId != 0xFF)
     {
         return {ipmi::ccSuccess, fruCache};
@@ -209,6 +243,7 @@ std::pair<ipmi::Cc, std::vector<uint8_t>> getFru(ipmi::Context::ptr ctx,
     }
 
     const auto [bus, address] = deviceFind->second;
+    const auto revision = fruDiscovery.revision();
 
     boost::system::error_code ec;
 
@@ -222,6 +257,10 @@ std::pair<ipmi::Cc, std::vector<uint8_t>> getFru(ipmi::Context::ptr ctx,
         lg2::error("Couldn't get raw fru: {ERROR}", "ERROR", ec.message());
 
         return {ipmi::ccResponseError, {}};
+    }
+    if (revision != fruDiscovery.revision())
+    {
+        return {ipmi::ccBusy, {}};
     }
 
     cacheBus = bus;
@@ -249,7 +288,7 @@ void startMatch(void)
         return;
     }
 
-    fruMatches.reserve(2);
+    fruMatches.reserve(3);
 
     auto bus = getSdBus();
     fruMatches.emplace_back(*bus,
@@ -272,6 +311,7 @@ void startMatch(void)
             return;
         }
         writeFruIfRunning();
+        fruDiscovery.changed();
         frus[path] = object;
         recalculateHashes();
         lastDevId = 0xFF;
@@ -297,9 +337,53 @@ void startMatch(void)
             return;
         }
         writeFruIfRunning();
+        fruDiscovery.changed();
         frus.erase(path);
         recalculateHashes();
         lastDevId = 0xFF;
+    });
+
+    fruMatches.emplace_back(
+        *bus,
+        "type='signal',sender='org.freedesktop.DBus',"
+        "interface='org.freedesktop.DBus',member='NameOwnerChanged',"
+        "arg0='xyz.openbmc_project.FruDevice'",
+        [](sdbusplus::message_t& message) {
+        std::string name, previous, current;
+        try
+        {
+            message.read(name, previous, current);
+        }
+        catch (const sdbusplus::exception_t& error)
+        {
+            lg2::warning("Ignoring malformed FRU provider signal: {ERROR}",
+                         "ERROR", error.what());
+            return;
+        }
+        if (previous == current)
+        {
+            return;
+        }
+        // Provider loss need not emit InterfacesRemoved. Do not reuse its
+        // directory, raw bytes, pending writes or in-flight refresh reply.
+        fruDiscovery.invalidate();
+        if (writeTimer && writeTimer->isRunning())
+        {
+            writeTimer->stop();
+            lg2::error("FRU provider changed with an uncommitted write");
+        }
+        writeBus = invalidBus;
+        writeAddr = invalidAddr;
+        lastDevId = 0xFF;
+        cacheBus = invalidBus;
+        cacheAddr = invalidAddr;
+        fruCache.clear();
+        frus.clear();
+        deviceHashes.clear();
+        fruIdsExhausted = false;
+        // The builder owns the retry budget; the refresh helper only rejects
+        // stale replies.
+        invalidateSdrRepository();
     });
 
     // call once to populate
@@ -494,8 +578,12 @@ ipmi::RspType<uint16_t, // inventorySize
     return ipmi::responseSuccess(fru.size(), accessType);
 }
 
-std::vector<uint8_t> getFruSdrIds()
+std::vector<uint8_t> getFruSdrIds(ipmi::Context::ptr ctx)
 {
+    if (!ensureFruDiscovery(ctx))
+    {
+        throw sensor::SdrBuildError("FRU directory is not ready");
+    }
     if (fruIdsExhausted)
     {
         throw sensor::SdrBuildError(
@@ -512,6 +600,14 @@ std::vector<uint8_t> getFruSdrIds()
 ipmi::Cc getFruSdrById(ipmi::Context::ptr ctx, uint8_t id,
                        get_sdr::SensorDataFruRecord& resp)
 {
+    if (!ensureFruDiscovery(ctx))
+    {
+        return ipmi::ccBusy;
+    }
+    if (fruIdsExhausted)
+    {
+        return ipmi::ccResponseError;
+    }
     auto device = deviceHashes.find(id);
     if (device == deviceHashes.end())
     {
@@ -520,26 +616,33 @@ ipmi::Cc getFruSdrById(ipmi::Context::ptr ctx, uint8_t id,
     return getFruSdrs(ctx, device - deviceHashes.begin(), resp);
 }
 
-ipmi_ret_t getFruSdrCount(ipmi::Context::ptr, size_t& count)
+ipmi_ret_t getFruSdrCount(ipmi::Context::ptr ctx, size_t& count)
 {
+    if (!ensureFruDiscovery(ctx))
+    {
+        count = 0;
+        return ipmi::ccBusy;
+    }
     if (fruIdsExhausted)
     {
         count = 0;
         return ipmi::ccResponseError;
     }
-
     count = deviceHashes.size();
     return IPMI_CC_OK;
 }
 
-ipmi_ret_t getFruSdrs([[maybe_unused]] ipmi::Context::ptr ctx, size_t index,
+ipmi_ret_t getFruSdrs(ipmi::Context::ptr ctx, size_t index,
                       get_sdr::SensorDataFruRecord& resp)
 {
+    if (!ensureFruDiscovery(ctx))
+    {
+        return ipmi::ccBusy;
+    }
     if (fruIdsExhausted)
     {
         return ipmi::ccResponseError;
     }
-
     if (deviceHashes.size() <= index)
     {
         return IPMI_CC_INVALID_FIELD_REQUEST;
@@ -796,7 +899,8 @@ std::vector<uint8_t> getType8SDRs(
     data.body.entityId4 = entity->second.containedEntities[3].first;
     data.body.entityInstance4 = entity->second.containedEntities[3].second;
 
-    resp.insert(resp.end(), (uint8_t*)&data, ((uint8_t*)&data) + sizeof(data));
+    const auto* bytes = reinterpret_cast<const uint8_t*>(&data);
+    resp.insert(resp.end(), bytes, bytes + 5 + bytes[4]);
 
     return resp;
 }
@@ -809,14 +913,14 @@ std::vector<uint8_t> getType12SDRs(uint16_t index, uint16_t recordId)
         std::string bmcName = "Basbrd Mgmt Ctlr";
         Type12Record bmc(recordId, 0x20, 0, 0, 0xbf, 0x2e, 1, 0, bmcName);
         uint8_t* bmcPtr = reinterpret_cast<uint8_t*>(&bmc);
-        resp.insert(resp.end(), bmcPtr, bmcPtr + sizeof(Type12Record));
+        resp.insert(resp.end(), bmcPtr, bmcPtr + 5 + bmcPtr[4]);
     }
     else if (index == 1)
     {
         std::string meName = "Mgmt Engine";
         Type12Record me(recordId, 0x2c, 6, 0x24, 0x21, 0x2e, 2, 0, meName);
         uint8_t* mePtr = reinterpret_cast<uint8_t*>(&me);
-        resp.insert(resp.end(), mePtr, mePtr + sizeof(Type12Record));
+        resp.insert(resp.end(), mePtr, mePtr + 5 + mePtr[4]);
     }
     else
     {

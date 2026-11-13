@@ -127,7 +127,7 @@ namespace storage
 constexpr const size_t type12Count = 2;
 ipmi::Cc getFruSdrs(ipmi::Context::ptr ctx, size_t index,
                     get_sdr::SensorDataFruRecord& resp);
-std::vector<uint8_t> getFruSdrIds();
+std::vector<uint8_t> getFruSdrIds(ipmi::Context::ptr ctx);
 ipmi::Cc getFruSdrById(ipmi::Context::ptr ctx, uint8_t id,
                        get_sdr::SensorDataFruRecord& resp);
 
