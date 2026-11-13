@@ -495,7 +495,7 @@ ipmi_ret_t getFruSdrCount(ipmi::Context::ptr, size_t& count)
 ipmi_ret_t getFruSdrs([[maybe_unused]] ipmi::Context::ptr ctx, size_t index,
                       get_sdr::SensorDataFruRecord& resp)
 {
-    if (deviceHashes.size() < index)
+    if (deviceHashes.size() <= index)
     {
         return IPMI_CC_INVALID_FIELD_REQUEST;
     }
