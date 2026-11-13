@@ -101,3 +101,13 @@ test(
         dependencies: [sensorutils_dep, gtest, gmock],
     ),
 )
+
+test(
+    'dbus-sdr/stable_ids',
+    executable(
+        'dbus-sdr_stable_ids',
+        'dbus-sdr/stable_ids_test.cpp',
+        include_directories: root_inc,
+        dependencies: gtest,
+    ),
+)
