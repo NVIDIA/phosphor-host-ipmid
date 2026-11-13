@@ -163,14 +163,14 @@ void recalculateHashes()
     }
 }
 
-void replaceCacheFru(
+static void replaceCacheFru(
     const std::shared_ptr<sdbusplus::asio::connection>& bus,
     boost::asio::yield_context& yield,
     [[maybe_unused]] const std::optional<std::string>& path = std::nullopt)
 {
     boost::system::error_code ec;
 
-    frus = bus->yield_method_call<ManagedObjectType>(
+    auto nextFrus = bus->yield_method_call<ManagedObjectType>(
         yield, ec, fruDeviceServiceName, "/",
         "org.freedesktop.DBus.ObjectManager", "GetManagedObjects");
     if (ec)
@@ -180,6 +180,7 @@ void replaceCacheFru(
 
         return;
     }
+    frus = std::move(nextFrus);
     recalculateHashes();
 }
 
@@ -197,8 +198,7 @@ std::pair<ipmi::Cc, std::vector<uint8_t>> getFru(ipmi::Context::ptr ctx,
         return {IPMI_CC_SENSOR_INVALID, {}};
     }
 
-    cacheBus = deviceFind->second.first;
-    cacheAddr = deviceFind->second.second;
+    const auto [bus, address] = deviceFind->second;
 
     boost::system::error_code ec;
 
@@ -206,18 +206,16 @@ std::pair<ipmi::Cc, std::vector<uint8_t>> getFru(ipmi::Context::ptr ctx,
         ctx->bus->yield_method_call<std::vector<uint8_t>>(
             ctx->yield, ec, fruDeviceServiceName,
             "/xyz/openbmc_project/FruDevice",
-            "xyz.openbmc_project.FruDeviceManager", "GetRawFru", cacheBus,
-            cacheAddr);
+            "xyz.openbmc_project.FruDeviceManager", "GetRawFru", bus, address);
     if (ec)
     {
         lg2::error("Couldn't get raw fru: {ERROR}", "ERROR", ec.message());
 
-        cacheBus = invalidBus;
-        cacheAddr = invalidAddr;
         return {ipmi::ccResponseError, {}};
     }
 
-    fruCache.clear();
+    cacheBus = bus;
+    cacheAddr = address;
     lastDevId = devId;
     fruCache = fru;
 
