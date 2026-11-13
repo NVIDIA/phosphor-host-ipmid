@@ -143,6 +143,15 @@ reduces LUN compatibility changes, but does not make an old cached mapping valid
 across resets. Automatic reclamation without a client lifetime contract would
 reintroduce misdirected live reads.
 
+## SEL identity lookup readiness
+
+SEL path-to-number and number-to-path lookups use only the completed sensor
+subtree cache. A cold or invalidated cache returns an unavailable mapping until
+the background builder completes discovery; a live SEL command does not query
+the mapper synchronously to fill it. A completed empty subtree remains distinct
+from an unavailable cache. This bounds mapper-related event-loop stalls, not
+all work performed by the SEL handlers.
+
 ## Validation boundary
 
 The reservation policy follows IPMI v2.0 sections 33.11.2 and 33.12/Table 33-6:
