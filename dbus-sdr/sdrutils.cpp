@@ -16,8 +16,8 @@
 
 #include "dbus-sdr/sdrutils.hpp"
 
-#include "sdr_metadata.hpp"
 #include "dbus-sdr/sensorutils.hpp"
+#include "sdr_metadata.hpp"
 #include "stable_ids.hpp"
 
 #include <ipmid/utils.hpp>
@@ -124,6 +124,14 @@ boost::container::flat_map<
 
 namespace details
 {
+static std::shared_ptr<SensorSubTree> sensorTreePtr;
+static size_t invalidation = 0;
+
+static void invalidateSensorSubtree()
+{
+    sensorTreePtr.reset();
+    ++invalidation;
+}
 
 // IPMI supports a smaller number of sensors than are available via Redfish.
 // Trim the list of sensors, via a configuration file.
@@ -165,9 +173,7 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree,
                           const std::optional<ipmi::Context::ptr>& ctx,
                           bool refresh)
 {
-    static std::shared_ptr<SensorSubTree> sensorTreePtr;
     static uint16_t sensorUpdatedIndex = 0;
-    static size_t invalidation = 0;
     std::shared_ptr<sdbusplus::asio::connection> dbus = getSdBus();
     if (!dbus)
     {
@@ -179,24 +185,6 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree,
         setSdBus(sdbusp);
         dbus = getSdBus();
     }
-
-    static sdbusplus::match sensorAdded(
-        *dbus,
-        "type='signal',member='InterfacesAdded',arg0path='/xyz/openbmc_project/"
-        "sensors/'",
-        [](sdbusplus::message_t&) {
-        sensorTreePtr.reset();
-        ++invalidation;
-    });
-
-    static sdbusplus::match sensorRemoved(
-        *dbus,
-        "type='signal',member='InterfacesRemoved',arg0path='/xyz/"
-        "openbmc_project/sensors/'",
-        [](sdbusplus::message_t&) {
-        sensorTreePtr.reset();
-        ++invalidation;
-    });
 
     if (sensorTreePtr && !refresh)
     {
@@ -1261,31 +1249,12 @@ std::string getSelEventMessage(const std::string& sensorPath,
 static std::shared_ptr<const ObjectValueTree> entityManagerInventory;
 static size_t inventoryInvalidation = 0;
 
-static void inventoryMetadataChanged(sdbusplus::message_t& message)
+void invalidateSdrMetadata()
 {
-    if (std::string_view(message.get_member()) == "PropertiesChanged")
-    {
-        std::string interface;
-        try
-        {
-            message.read(interface);
-        }
-        catch (const sdbusplus::exception_t& error)
-        {
-            lg2::warning(
-                "Ignoring malformed inventory metadata signal: {ERROR}",
-                "ERROR", error.what());
-            return;
-        }
-        if (!interface.starts_with("xyz.openbmc_project.Configuration.") &&
-            interface != "xyz.openbmc_project.Inventory.Decorator.Ipmi" &&
-            interface != "xyz.openbmc_project.Association.Definitions")
-        {
-            return;
-        }
-    }
     entityManagerInventory.reset();
     ++inventoryInvalidation;
+    details::invalidateSensorSubtree();
+    invalidateIpmiDecoratorPaths();
 }
 
 // A successful bulk reply distinguishes an absent configuration object from a
@@ -1293,33 +1262,6 @@ static void inventoryMetadataChanged(sdbusplus::message_t& message)
 static std::shared_ptr<const ObjectValueTree> getEntityManagerInventory(
     const ipmi::Context::ptr& ctx)
 {
-    static std::vector<sdbusplus::bus::match_t> matches;
-    if (matches.empty())
-    {
-        matches.emplace_back(
-            *ctx->bus,
-            "type='signal',sender='org.freedesktop.DBus',"
-            "interface='org.freedesktop.DBus',member='NameOwnerChanged',"
-            "arg0='xyz.openbmc_project.EntityManager'",
-            [](sdbusplus::message_t&) {
-            entityManagerInventory.reset();
-            ++inventoryInvalidation;
-        });
-        for (const auto* member :
-             {"InterfacesAdded", "InterfacesRemoved", "PropertiesChanged"})
-        {
-            const auto filter = std::string(member) == "PropertiesChanged"
-                                    ? "path_namespace"
-                                    : "arg0path";
-            matches.emplace_back(
-                *ctx->bus,
-                std::string("type='signal',member='") + member + "'," + filter +
-                    "='/xyz/openbmc_project/inventory" +
-                    (std::string(member) == "PropertiesChanged" ? "" : "/") +
-                    "'",
-                inventoryMetadataChanged);
-        }
-    }
     if (entityManagerInventory)
     {
         return entityManagerInventory;
@@ -1442,6 +1384,7 @@ std::optional<std::unordered_set<std::string>>& getIpmiDecoratorPaths(
 
     using Paths = std::vector<std::string>;
     boost::system::error_code ec;
+    const auto revision = inventoryInvalidation;
     Paths paths = ipmi::callDbusMethod<Paths>(
         *ctx, ec, ObjectMapper::default_service, ObjectMapper::instance_path,
         ObjectMapper::interface, ObjectMapper::method_names::get_sub_tree_paths,
@@ -1455,6 +1398,11 @@ std::optional<std::unordered_set<std::string>>& getIpmiDecoratorPaths(
             "IPMI decorator discovery failed: " + ec.message());
     }
 
+    if (revision != inventoryInvalidation)
+    {
+        throw sensor::SdrBuildError(
+            "IPMI decorator inputs changed during discovery");
+    }
     ipmiDecoratorPaths =
         std::unordered_set<std::string>(paths.begin(), paths.end());
     return ipmiDecoratorPaths;
@@ -1482,69 +1430,16 @@ static const std::unordered_map<std::string, std::string>& getIpmiNameOverrides(
     const std::optional<ipmi::Context::ptr>& ctx)
 {
     static std::unordered_map<std::string, std::string> overrides;
-    static bool built = false;
-    static size_t invalidation = 0;
+    static std::optional<size_t> builtRevision;
 
-    // Re-scan when a new sensor appears so an early SDR read against a
-    // partially-populated bus picks up overrides it missed. Merge-only: an
-    // override, once learned, is never dropped, so names never revert.
-    if (auto dbus = getSdBus())
-    {
-        static sdbusplus::bus::match_t sensorAdded(
-            *dbus,
-            "type='signal',member='InterfacesAdded',arg0path='/xyz/"
-            "openbmc_project/sensors/'",
-            [](sdbusplus::message_t&) {
-            built = false;
-            ++invalidation;
-        });
-        static sdbusplus::bus::match_t inventoryAdded(
-            *dbus,
-            "type='signal',member='InterfacesAdded',"
-            "arg0path='/xyz/openbmc_project/inventory/'",
-            [](sdbusplus::message_t&) {
-            built = false;
-            ++invalidation;
-        });
-        static sdbusplus::bus::match_t inventoryOwnerChanged(
-            *dbus,
-            "type='signal',sender='org.freedesktop.DBus',"
-            "interface='org.freedesktop.DBus',member='NameOwnerChanged',"
-            "arg0='xyz.openbmc_project.EntityManager'",
-            [](sdbusplus::message_t&) {
-            built = false;
-            ++invalidation;
-        });
-        static sdbusplus::bus::match_t inventoryChanged(
-            *dbus,
-            "type='signal',member='PropertiesChanged',"
-            "path_namespace='/xyz/openbmc_project/inventory'",
-            [](sdbusplus::message_t& message) {
-            std::string interface;
-            try
-            {
-                message.read(interface);
-            }
-            catch (const sdbusplus::exception_t& error)
-            {
-                lg2::warning("Ignoring malformed custom-name signal: {ERROR}",
-                             "ERROR", error.what());
-                return;
-            }
-            if (interface.starts_with("xyz.openbmc_project.Configuration."))
-            {
-                built = false;
-                ++invalidation;
-            }
-        });
-    }
-
-    if (!ctx.has_value() || built)
+    // All descriptor caches share the repository invalidation path. An older
+    // yielding acquisition must not restore a cache invalidated by discovery.
+    if (!ctx.has_value() || builtRevision == inventoryInvalidation)
     {
         return overrides;
     }
 
-    const auto startedAt = invalidation;
+    const auto startedAt = inventoryInvalidation;
     // Entity Manager owns an ObjectManager at the inventory root. One yielding
     // bulk read replaces the serial GetAll call for every Configuration iface.
     const auto inventory = getEntityManagerInventory(*ctx);
@@ -1618,7 +1513,10 @@ static const std::unordered_map<std::string, std::string>& getIpmiNameOverrides(
         }
     }
 
-    built = startedAt == invalidation;
+    if (startedAt == inventoryInvalidation)
+    {
+        builtRevision = startedAt;
+    }
     return overrides;
 }
 

@@ -149,7 +149,7 @@ void invalidateSdrRepository(bool addition, bool removal)
     }
     ++sdrRevision;
     SensorCache.clear();
-    invalidateIpmiDecoratorPaths();
+    invalidateSdrMetadata();
     sdrBuildRecovery.reset();
     scheduleSdrBuild(sdrCoalesceDelay);
 }

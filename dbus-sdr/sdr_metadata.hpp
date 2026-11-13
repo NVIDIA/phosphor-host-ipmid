@@ -39,3 +39,9 @@ inline bool isSdrDescriptorProperty(std::string_view interface,
             property == "Available");
 }
 } // namespace ipmi::sensor
+
+namespace ipmi
+{
+// Clear descriptor acquisitions after a relevant repository input change.
+void invalidateSdrMetadata();
+} // namespace ipmi
