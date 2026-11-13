@@ -141,3 +141,13 @@ test(
         dependencies: gtest,
     ),
 )
+
+test(
+    'dbus-sdr/sdr_build',
+    executable(
+        'dbus-sdr_sdr_build',
+        'dbus-sdr/sdr_build_test.cpp',
+        include_directories: root_inc,
+        dependencies: gtest,
+    ),
+)
