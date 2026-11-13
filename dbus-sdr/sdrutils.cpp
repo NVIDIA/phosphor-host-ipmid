@@ -16,6 +16,7 @@
 
 #include "dbus-sdr/sdrutils.hpp"
 
+#include "sdr_metadata.hpp"
 #include "dbus-sdr/sensorutils.hpp"
 
 #include <ipmid/utils.hpp>
@@ -1205,6 +1206,90 @@ std::string getSelEventMessage(const std::string& sensorPath,
     return "";
 }
 
+static std::shared_ptr<const ObjectValueTree> entityManagerInventory;
+static size_t inventoryInvalidation = 0;
+
+static void inventoryMetadataChanged(sdbusplus::message_t& message)
+{
+    if (std::string_view(message.get_member()) == "PropertiesChanged")
+    {
+        std::string interface;
+        try
+        {
+            message.read(interface);
+        }
+        catch (const sdbusplus::exception_t& error)
+        {
+            lg2::warning(
+                "Ignoring malformed inventory metadata signal: {ERROR}",
+                "ERROR", error.what());
+            return;
+        }
+        if (!interface.starts_with("xyz.openbmc_project.Configuration.") &&
+            interface != "xyz.openbmc_project.Inventory.Decorator.Ipmi" &&
+            interface != "xyz.openbmc_project.Association.Definitions")
+        {
+            return;
+        }
+    }
+    entityManagerInventory.reset();
+    ++inventoryInvalidation;
+}
+
+// A successful bulk reply distinguishes an absent configuration object from a
+// transient acquisition failure. Never cache a failed read as empty metadata.
+static std::shared_ptr<const ObjectValueTree> getEntityManagerInventory(
+    const ipmi::Context::ptr& ctx)
+{
+    static std::vector<sdbusplus::bus::match_t> matches;
+    if (matches.empty())
+    {
+        matches.emplace_back(
+            *ctx->bus,
+            "type='signal',sender='org.freedesktop.DBus',"
+            "interface='org.freedesktop.DBus',member='NameOwnerChanged',"
+            "arg0='xyz.openbmc_project.EntityManager'",
+            [](sdbusplus::message_t&) {
+            entityManagerInventory.reset();
+            ++inventoryInvalidation;
+        });
+        for (const auto* member :
+             {"InterfacesAdded", "InterfacesRemoved", "PropertiesChanged"})
+        {
+            const auto filter = std::string(member) == "PropertiesChanged"
+                                    ? "path_namespace"
+                                    : "arg0path";
+            matches.emplace_back(
+                *ctx->bus,
+                std::string("type='signal',member='") + member + "'," + filter +
+                    "='/xyz/openbmc_project/inventory" +
+                    (std::string(member) == "PropertiesChanged" ? "" : "/") +
+                    "'",
+                inventoryMetadataChanged);
+        }
+    }
+    if (entityManagerInventory)
+    {
+        return entityManagerInventory;
+    }
+    const auto revision = inventoryInvalidation;
+    boost::system::error_code ec;
+    auto tree = std::make_shared<const ObjectValueTree>(
+        ipmi::callDbusMethod<ObjectValueTree>(
+            ctx, ec, entityManagerServiceName, inventoryRootPath,
+            "org.freedesktop.DBus.ObjectManager", "GetManagedObjects"));
+    if (ec)
+    {
+        throw sensor::SdrBuildError(
+            "inventory metadata refresh failed: " + ec.message());
+    }
+    if (revision == inventoryInvalidation)
+    {
+        entityManagerInventory = tree;
+    }
+    return tree;
+}
+
 std::optional<std::map<std::string, std::vector<std::string>>>
     getObjectInterfaces(const char* path,
                         const std::optional<ipmi::Context::ptr>& ctx)
@@ -1213,13 +1298,16 @@ std::optional<std::map<std::string, std::vector<std::string>>>
     std::vector<std::string> interfaces;
     if (ctx)
     {
-        boost::system::error_code ec;
-        interfacesResponse = ipmi::callDbusMethod<decltype(interfacesResponse)>(
-            *ctx, ec, "xyz.openbmc_project.ObjectMapper",
-            "/xyz/openbmc_project/object_mapper",
-            "xyz.openbmc_project.ObjectMapper", "GetObject", path, interfaces);
-        if (ec)
-            return std::nullopt;
+        const auto inventory = getEntityManagerInventory(*ctx);
+        auto object = inventory->find(sdbusplus::message::object_path(path));
+        if (object != inventory->end())
+        {
+            for (const auto& [interface, properties] : object->second)
+            {
+                interfacesResponse[entityManagerServiceName].push_back(
+                    interface);
+            }
+        }
         return interfacesResponse;
     }
     std::shared_ptr<sdbusplus::asio::connection> dbus = getSdBus();
@@ -1250,13 +1338,17 @@ std::map<std::string, Value> getEntityManagerProperties(
     std::map<std::string, Value> properties;
     if (ctx)
     {
-        boost::system::error_code ec;
-        properties = ipmi::callDbusMethod<decltype(properties)>(
-            *ctx, ec, entityManagerServiceName, path,
-            "org.freedesktop.DBus.Properties", "GetAll", interface);
-        if (ec)
-            return {};
-        return properties;
+        const auto inventory = getEntityManagerInventory(*ctx);
+        auto object = inventory->find(sdbusplus::message::object_path(path));
+        if (object != inventory->end())
+        {
+            auto found = object->second.find(interface);
+            if (found != object->second.end())
+            {
+                return found->second;
+            }
+        }
+        return {};
     }
     std::shared_ptr<sdbusplus::asio::connection> dbus = getSdBus();
 
@@ -1282,11 +1374,16 @@ std::map<std::string, Value> getEntityManagerProperties(
 
 // Fetch the ipmiDecoratorPaths to get the list of dbus objects that
 // have ipmi decorator to prevent unnessary dbus call to fetch the info
+static std::optional<std::unordered_set<std::string>> ipmiDecoratorPaths;
+
+void invalidateIpmiDecoratorPaths()
+{
+    ipmiDecoratorPaths.reset();
+}
+
 std::optional<std::unordered_set<std::string>>& getIpmiDecoratorPaths(
     const std::optional<ipmi::Context::ptr>& ctx)
 {
-    static std::optional<std::unordered_set<std::string>> ipmiDecoratorPaths;
-
     if (!ctx.has_value() || ipmiDecoratorPaths != std::nullopt)
     {
         return ipmiDecoratorPaths;
@@ -1303,7 +1400,8 @@ std::optional<std::unordered_set<std::string>>& getIpmiDecoratorPaths(
 
     if (ec)
     {
-        return ipmiDecoratorPaths;
+        throw sensor::SdrBuildError(
+            "IPMI decorator discovery failed: " + ec.message());
     }
 
     ipmiDecoratorPaths =
@@ -1334,6 +1432,7 @@ static const std::unordered_map<std::string, std::string>& getIpmiNameOverrides(
 {
     static std::unordered_map<std::string, std::string> overrides;
     static bool built = false;
+    static size_t invalidation = 0;
 
     // Re-scan when a new sensor appears so an early SDR read against a
     // partially-populated bus picks up overrides it missed. Merge-only: an
@@ -1344,7 +1443,49 @@ static const std::unordered_map<std::string, std::string>& getIpmiNameOverrides(
             *dbus,
             "type='signal',member='InterfacesAdded',arg0path='/xyz/"
             "openbmc_project/sensors/'",
-            [](sdbusplus::message_t&) { built = false; });
+            [](sdbusplus::message_t&) {
+            built = false;
+            ++invalidation;
+        });
+        static sdbusplus::bus::match_t inventoryAdded(
+            *dbus,
+            "type='signal',member='InterfacesAdded',"
+            "arg0path='/xyz/openbmc_project/inventory/'",
+            [](sdbusplus::message_t&) {
+            built = false;
+            ++invalidation;
+        });
+        static sdbusplus::bus::match_t inventoryOwnerChanged(
+            *dbus,
+            "type='signal',sender='org.freedesktop.DBus',"
+            "interface='org.freedesktop.DBus',member='NameOwnerChanged',"
+            "arg0='xyz.openbmc_project.EntityManager'",
+            [](sdbusplus::message_t&) {
+            built = false;
+            ++invalidation;
+        });
+        static sdbusplus::bus::match_t inventoryChanged(
+            *dbus,
+            "type='signal',member='PropertiesChanged',"
+            "path_namespace='/xyz/openbmc_project/inventory'",
+            [](sdbusplus::message_t& message) {
+            std::string interface;
+            try
+            {
+                message.read(interface);
+            }
+            catch (const sdbusplus::exception_t& error)
+            {
+                lg2::warning("Ignoring malformed custom-name signal: {ERROR}",
+                             "ERROR", error.what());
+                return;
+            }
+            if (interface.starts_with("xyz.openbmc_project.Configuration."))
+            {
+                built = false;
+                ++invalidation;
+            }
+        });
     }
 
     if (!ctx.has_value() || built)
@@ -1352,20 +1493,10 @@ static const std::unordered_map<std::string, std::string>& getIpmiNameOverrides(
         return overrides;
     }
 
-    using SubTree =
-        std::map<std::string, std::map<std::string, std::vector<std::string>>>;
-    boost::system::error_code ec;
-    SubTree tree = ipmi::callDbusMethod<SubTree>(
-        *ctx, ec, "xyz.openbmc_project.ObjectMapper",
-        "/xyz/openbmc_project/object_mapper",
-        "xyz.openbmc_project.ObjectMapper", "GetSubTree", inventoryRootPath,
-        int32_t(0), std::vector<std::string>{});
-
-    if (ec)
-    {
-        // Leave built=false so the next SDR read retries once EM is up.
-        return overrides;
-    }
+    const auto startedAt = invalidation;
+    // Entity Manager owns an ObjectManager at the inventory root. One yielding
+    // bulk read replaces the serial GetAll call for every Configuration iface.
+    const auto inventory = getEntityManagerInventory(*ctx);
 
     auto getStr = [](const std::map<std::string, Value>& props,
                      const std::string& key) -> const std::string* {
@@ -1374,23 +1505,16 @@ static const std::unordered_map<std::string, std::string>& getIpmiNameOverrides(
                                  : std::get_if<std::string>(&it->second);
     };
 
-    for (const auto& [path, services] : tree)
+    for (const auto& [objectPath, interfaces] : *inventory)
     {
-        auto em = services.find(entityManagerServiceName);
-        if (em == services.end())
-        {
-            continue;
-        }
+        const auto& path = objectPath.str;
         // IpmiName may be on any Configuration.* interface, so check them all.
-        for (const auto& iface : em->second)
+        for (const auto& [iface, props] : interfaces)
         {
             if (!iface.starts_with("xyz.openbmc_project.Configuration."))
             {
                 continue;
             }
-
-            std::map<std::string, Value> props =
-                getEntityManagerProperties(path.c_str(), iface.c_str());
 
             if (const std::string* ip = getStr(props, "IpmiName"))
             {
@@ -1443,7 +1567,7 @@ static const std::unordered_map<std::string, std::string>& getIpmiNameOverrides(
         }
     }
 
-    built = true;
+    built = startedAt == invalidation;
     return overrides;
 }
 

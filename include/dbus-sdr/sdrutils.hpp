@@ -432,6 +432,8 @@ std::map<std::string, Value> getEntityManagerProperties(
     const char* path, const char* interface,
     const std::optional<ipmi::Context::ptr>& ctx = std::nullopt);
 
+void invalidateIpmiDecoratorPaths();
+
 std::optional<std::unordered_set<std::string>>& getIpmiDecoratorPaths(
     const std::optional<ipmi::Context::ptr>& ctx);
 
