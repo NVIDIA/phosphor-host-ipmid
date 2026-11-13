@@ -388,9 +388,18 @@ boost::system::error_code setDbusProperty(
     const Value& value)
 {
     boost::system::error_code ec;
-    ctx->bus->yield_method_call(
-        ctx->yield, ec, service.c_str(), objPath.c_str(), PROP_INTF, METHOD_SET,
-        interface, property, value);
+    try
+    {
+        auto request = ctx->bus->new_method_call(
+            service.c_str(), objPath.c_str(), PROP_INTF, METHOD_SET);
+        request.append(interface, property, value);
+        ctx->bus->async_send_yield(
+            request, ctx->yield[ec], IPMI_DBUS_TIMEOUT.count());
+    }
+    catch (const sdbusplus::exception::SdBusError& error)
+    {
+        ec = {error.get_errno(), boost::system::generic_category()};
+    }
     return ec;
 }
 
