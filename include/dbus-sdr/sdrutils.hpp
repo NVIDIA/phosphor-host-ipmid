@@ -354,12 +354,18 @@ inline IPMIWriteTable sdrWriteTable;
  * paths updated successfully, previous amount if all failed. The "vr"
  * sensor path is optional, and does not participate in the return value.
  */
-uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree);
+uint16_t getSensorSubtree(
+    std::shared_ptr<SensorSubTree>& subtree,
+    const std::optional<ipmi::Context::ptr>& ctx = std::nullopt,
+    bool refresh = false);
 
 bool getSensorNumMap(std::shared_ptr<SensorNumMap>& sensorNumMap);
 } // namespace details
 
-bool getSensorSubtree(SensorSubTree& subtree);
+bool getSensorSubtree(
+    SensorSubTree& subtree,
+    const std::optional<ipmi::Context::ptr>& ctx = std::nullopt,
+    bool refresh = false);
 
 #ifdef FEATURE_HYBRID_SENSORS
 ipmi::sensor::IdInfoMap::const_iterator findStaticSensor(
@@ -434,10 +440,13 @@ uint8_t getEntityInstanceFromName(const std::string& path);
 namespace ipmi
 {
 std::optional<std::map<std::string, std::vector<std::string>>>
-    getObjectInterfaces(const char* path);
+    getObjectInterfaces(
+        const char* path,
+        const std::optional<ipmi::Context::ptr>& ctx = std::nullopt);
 
-std::map<std::string, Value> getEntityManagerProperties(const char* path,
-                                                        const char* interface);
+std::map<std::string, Value> getEntityManagerProperties(
+    const char* path, const char* interface,
+    const std::optional<ipmi::Context::ptr>& ctx = std::nullopt);
 
 std::optional<std::unordered_set<std::string>>& getIpmiDecoratorPaths(
     const std::optional<ipmi::Context::ptr>& ctx);
@@ -454,7 +463,8 @@ void updateIpmiFromAssociation(
     const std::string& path,
     const std::unordered_set<std::string>& ipmiDecoratorPaths,
     const DbusInterfaceMap& sensorMap, uint8_t& entityId,
-    uint8_t& entityInstance);
+    uint8_t& entityInstance,
+    const std::optional<ipmi::Context::ptr>& ctx = std::nullopt);
 
 constexpr uint8_t thresholdEventReadingType = 0x01;
 

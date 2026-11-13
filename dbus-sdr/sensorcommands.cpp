@@ -176,7 +176,7 @@ ipmi::Cc getSensorConnection(ipmi::Context::ptr ctx, uint8_t sensnum,
                              std::vector<std::string>* interfaces)
 {
     auto& sensorTree = getSensorTree();
-    if (!getSensorSubtree(sensorTree) && sensorTree.empty())
+    if (!getSensorSubtree(sensorTree, ctx) && sensorTree.empty())
     {
         return ipmi::ccResponseError;
     }
