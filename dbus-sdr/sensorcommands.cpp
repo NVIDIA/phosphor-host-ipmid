@@ -18,11 +18,17 @@
 
 #include "dbus-sdr/sensorcommands.hpp"
 
+#include "sdr_build.hpp"
+#include "sdr_metadata.hpp"
+#include "sdr_repository.hpp"
 #include "dbus-sdr/sdrutils.hpp"
 #include "dbus-sdr/sensorutils.hpp"
 #include "dbus-sdr/storagecommands.hpp"
 
 #include <boost/algorithm/string.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/asio/spawn.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <boost/container/flat_map.hpp>
 #include <ipmid/api.hpp>
 #include <ipmid/entity_map_json.hpp>
@@ -40,12 +46,15 @@
 #include <chrono>
 #include <cmath>
 #include <cstring>
+#include <exception>
 #include <format>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 #include <utility>
 #include <variant>
 
@@ -107,6 +116,40 @@ static uint32_t sdrLastAdd = noTimestamp;
 static uint32_t sdrLastRemove = noTimestamp;
 static constexpr size_t lastRecordIndex = 0xFFFF;
 
+static sensor::SdrRepository sdrRepository;
+static size_t sdrRevision = 1;
+static bool sdrBuilderRunning = false;
+static bool sdrBuildScheduled = false;
+static bool sdrBuildNeedsRetry = false;
+static sensor::SdrBuildRecovery sdrBuildRecovery;
+static std::unordered_set<std::string> sdrProviders{
+    "xyz.openbmc_project.ObjectMapper", "xyz.openbmc_project.EntityManager",
+    "xyz.openbmc_project.FruDevice"};
+static constexpr auto sdrCoalesceDelay = std::chrono::milliseconds(50);
+static std::unique_ptr<boost::asio::steady_timer> sdrBuildTimer;
+static std::unique_ptr<boost::asio::steady_timer> sdrLeaseTimer;
+static void scheduleSdrBuild(std::chrono::milliseconds delay);
+static size_t sdrBuildTimerRevision = 0;
+
+void invalidateSdrRepository(bool addition, bool removal)
+{
+    const auto timestamp =
+        std::chrono::duration_cast<std::chrono::seconds>(
+            std::chrono::system_clock::now().time_since_epoch())
+            .count();
+    if (addition)
+    {
+        sdrLastAdd = timestamp;
+    }
+    if (removal)
+    {
+        sdrLastRemove = timestamp;
+    }
+    ++sdrRevision;
+    sdrBuildRecovery.reset();
+    scheduleSdrBuild(sdrCoalesceDelay);
+}
+
 // The IPMI spec defines four Logical Units (LUN), each capable of supporting
 // 255 sensors. The 256 values assigned to LUN 2 are special and are not used
 // for general purpose sensors. Each LUN reserves location 0xFF. The maximum
@@ -152,10 +195,11 @@ static sdbusplus::match sensorAdded(
     "sensors/'",
     [](sdbusplus::message_t&) {
         getSensorTree().clear();
-        getIpmiDecoratorPaths(/*ctx=*/std::nullopt).reset();
+        invalidateIpmiDecoratorPaths();
         sdrLastAdd = std::chrono::duration_cast<std::chrono::seconds>(
                          std::chrono::system_clock::now().time_since_epoch())
                          .count();
+        invalidateSdrRepository(true, false);
     });
 
 static sdbusplus::match sensorRemoved(
@@ -164,10 +208,11 @@ static sdbusplus::match sensorRemoved(
     "sensors/'",
     [](sdbusplus::message_t&) {
         getSensorTree().clear();
-        getIpmiDecoratorPaths(/*ctx=*/std::nullopt).reset();
+        invalidateIpmiDecoratorPaths();
         sdrLastRemove = std::chrono::duration_cast<std::chrono::seconds>(
                             std::chrono::system_clock::now().time_since_epoch())
                             .count();
+        invalidateSdrRepository(false, true);
     });
 
 ipmi::Cc getSensorConnection(ipmi::Context::ptr ctx, uint8_t sensnum,
@@ -1009,8 +1054,8 @@ int getOtherSensorsDataRecord(ipmi::Context::ptr ctx, uint16_t recordID,
             return GENERAL_ERROR;
         }
         data.header.recordId = recordID;
-        recordData.insert(recordData.end(), reinterpret_cast<uint8_t*>(&data),
-                          reinterpret_cast<uint8_t*>(&data) + sizeof(data));
+        const auto* bytes = reinterpret_cast<const uint8_t*>(&data);
+        recordData.insert(recordData.end(), bytes, bytes + 5 + bytes[4]);
     }
 
     return 0;
@@ -2855,6 +2900,435 @@ static int getSensorDataRecord(
     return 0;
 }
 
+static int constructSnapshotSensorSdr(
+    ipmi::Context::ptr ctx,
+    const std::unordered_set<std::string>& ipmiDecoratorPaths,
+    const SensorSubTree& tree, std::vector<uint8_t>& recordData,
+    uint16_t recordID)
+{
+    constexpr uint8_t readBytes = std::numeric_limits<uint8_t>::max();
+    recordData.clear();
+    // An SDR record ID is an enumeration position, not a sensor number.
+    // Copy the selected object's identity before a builder can yield.
+    if (recordID >= tree.size())
+    {
+        return GENERAL_ERROR;
+    }
+    const auto& selected = *(tree.begin() + recordID);
+    const std::string path = selected.first;
+    if (selected.second.empty())
+    {
+        return GENERAL_ERROR;
+    }
+    const std::string connection = selected.second.begin()->first;
+    const std::vector<std::string> interfaces = selected.second.begin()->second;
+    const uint16_t sensorNum = allocateSensorNumber(path);
+    if (sensorNum == invalidSensorNumber)
+    {
+        return GENERAL_ERROR;
+    }
+
+    // Construct full record (SDR type 1) for the threshold sensors
+    if (std::find(interfaces.begin(), interfaces.end(),
+                  SensorValue::interface) != interfaces.end())
+    {
+        get_sdr::SensorDataFullRecord record = {};
+
+        // If the request doesn't read SDR body, construct only header and key
+        // part to avoid additional DBus transaction.
+        if (readBytes <= sizeof(record.header) + sizeof(record.key))
+        {
+            constructSensorSdrHeaderKey(sensorNum, recordID, record);
+        }
+        else if (!constructSensorSdr(ctx, ipmiDecoratorPaths, sensorNum,
+                                     recordID, connection, path, record))
+        {
+            return GENERAL_ERROR;
+        }
+
+        recordData.insert(recordData.end(), reinterpret_cast<uint8_t*>(&record),
+                          reinterpret_cast<uint8_t*>(&record) + sizeof(record));
+
+        return 0;
+    }
+
+#ifdef FEATURE_HYBRID_SENSORS
+    if (auto sensor = findStaticSensor(path);
+        sensor != ipmi::sensor::sensors.end() &&
+        getSensorEventTypeFromPath(path) !=
+            static_cast<uint8_t>(SensorEventTypeCodes::threshold))
+    {
+        get_sdr::SensorDataFullRecord record = {};
+
+        // If the request doesn't read SDR body, construct only header and key
+        // part to avoid additional DBus transaction.
+        if (readBytes <= sizeof(record.header) + sizeof(record.key))
+        {
+            constructSensorSdrHeaderKey(sensorNum, recordID, record);
+        }
+        else
+        {
+            constructStaticSensorSdr(ctx, sensorNum, recordID, sensor, record);
+        }
+
+        recordData.insert(recordData.end(), reinterpret_cast<uint8_t*>(&record),
+                          reinterpret_cast<uint8_t*>(&record) + sizeof(record));
+
+        return 0;
+    }
+#endif
+
+    // Construct SDR type 3 record for VR sensor (daemon)
+    if (std::find(interfaces.begin(), interfaces.end(), sensor::vrInterface) !=
+        interfaces.end())
+    {
+        get_sdr::SensorDataEventRecord record = {};
+
+        // If the request doesn't read SDR body, construct only header and key
+        // part to avoid additional DBus transaction.
+        if (readBytes <= sizeof(record.header) + sizeof(record.key))
+        {
+            constructEventSdrHeaderKey(sensorNum, recordID, record);
+        }
+        else if (!constructVrSdr(ctx, ipmiDecoratorPaths, sensorNum, recordID,
+                                 connection, path, record))
+        {
+            return GENERAL_ERROR;
+        }
+        recordData.insert(recordData.end(), reinterpret_cast<uint8_t*>(&record),
+                          reinterpret_cast<uint8_t*>(&record) + sizeof(record));
+    }
+
+    for (auto& it : sensor::discreteInterfaceMap)
+    {
+        if (std::find(interfaces.begin(), interfaces.end(), it.first) !=
+            interfaces.end())
+        {
+            get_sdr::SensorDataCompactRecord record = {};
+
+            // If the request doesn't read SDR body, construct only header and
+            // key part to avoid additional DBus transaction.
+            if (readBytes <= sizeof(record.header) + sizeof(record.key))
+            {
+                constructCompactSdrHeaderKey(sensorNum, recordID, record);
+            }
+            else if (!constructDiscreteSdr(ctx, sensorNum, recordID, connection,
+                                           path, record))
+            {
+                return GENERAL_ERROR;
+            }
+            recordData.insert(recordData.end(), (uint8_t*)&record,
+                              ((uint8_t*)&record) + sizeof(record));
+            break;
+        }
+    }
+    constructDiscreteEventSdr(
+        interfaces, sensor::bootProgressInterface, getSensorTypeFromPath(path),
+        sensorNum, recordID, systemFirmwareEntityId, readBytes,
+        systemSoftwareId, path, recordData);
+    constructDiscreteEventSdr(
+        interfaces, sensor::cpuInterface,
+        static_cast<uint8_t>(SensorTypeCodes::processor), sensorNum, recordID,
+        processorEntityId, readBytes, bmcI2CAddr, path, recordData);
+    constructDiscreteEventSdr(
+        interfaces, sensor::watchdogEventInterface,
+        static_cast<uint8_t>(SensorTypeCodes::watchdog2), sensorNum, recordID,
+        watchdogEntityId, readBytes, systemSoftwareId, path, recordData);
+
+    for (auto& it : sensor::discreteInterfaceEventOnly)
+    {
+        if (std::find(interfaces.begin(), interfaces.end(), it) !=
+            interfaces.end())
+        {
+            get_sdr::SensorDataEventRecord record = {};
+
+            // If the request doesn't read SDR body, construct only header and
+            // key part to avoid additional DBus transaction.
+            if (readBytes <= sizeof(record.header) + sizeof(record.key))
+            {
+                constructCommonSensorHeaderKey(
+                    sensorNum, recordID, record, eidReserved, bmcI2CAddr);
+            }
+            else
+            {
+                uint8_t sensor_type = getSensorTypeFromPath(path);
+                constructCommonSensorSdr(sensorNum, recordID, path, record,
+                                         sensor_type, eidReserved, bmcI2CAddr);
+            }
+            recordData.insert(recordData.end(), (uint8_t*)&record,
+                              ((uint8_t*)&record) + sizeof(record));
+            break;
+        }
+    }
+
+    return 0;
+}
+
+static void appendSdr(sensor::SdrSnapshot& snapshot,
+                      std::vector<uint8_t> record)
+{
+    if (!snapshot.appendRecords(record))
+    {
+        throw std::runtime_error("incomplete serialized SDR records");
+    }
+}
+
+static bool buildSdrSnapshot(ipmi::Context::ptr ctx, size_t revision)
+{
+    sensor::SdrSnapshot snapshot;
+    snapshot.revision = revision;
+    snapshot.lastAddition = sdrLastAdd;
+    snapshot.lastRemoval = sdrLastRemove;
+    SensorSubTree tree;
+    if (!getSensorSubtree(tree, ctx, true))
+    {
+        throw sensor::SdrBuildError("sensor mapper refresh failed");
+    }
+    for (const auto& [path, services] : tree)
+    {
+        for (const auto& [service, interfaces] : services)
+        {
+            if (!service.empty())
+            {
+                sdrProviders.insert(service);
+            }
+        }
+    }
+#if !FEATURE_SENSORS_OEM
+    const auto fruIds = storage::getFruSdrIds(ctx);
+    const auto entities =
+        sensor::EntityInfoMapContainer::getContainer()->getIpmiEntityRecords();
+#endif
+    const auto decorators =
+        getIpmiDecoratorPaths(ctx).value_or(std::unordered_set<std::string>{});
+    // A provider is fetched once per build, with yielding GetManagedObjects.
+    SensorCache.clear();
+    bool retry = false;
+    static std::map<std::string, std::vector<uint8_t>> lastSensorRecords;
+    std::erase_if(lastSensorRecords, [&tree](const auto& entry) {
+        return !tree.contains(entry.first);
+    });
+    for (size_t index = 0; index < tree.size(); ++index)
+    {
+        const auto& path = (tree.begin() + index)->first;
+        snapshot.sensorPaths.emplace(allocateSensorNumber(path), path);
+        std::vector<uint8_t> record;
+        const auto result =
+            constructSnapshotSensorSdr(ctx, decorators, tree, record, index);
+        if (result == 0 && record.empty())
+        {
+            // This interface has no SDR representation; retrying cannot add it.
+            continue;
+        }
+        if (result != 0)
+        {
+            // A temporarily unavailable provider must not discard the last
+            // valid repository or replace an existing sensor with a stub.
+            retry = true;
+            auto old = lastSensorRecords.find(path);
+            if (old == lastSensorRecords.end())
+            {
+                lg2::warning("SDR metadata unavailable for {PATH}; retrying",
+                             "PATH", path);
+                continue;
+            }
+            record = old->second;
+        }
+        else
+        {
+            lastSensorRecords.insert_or_assign(path, record);
+        }
+        appendSdr(snapshot, std::move(record));
+    }
+#if FEATURE_SENSORS_OEM
+    // Preserve the legacy extension ABI. A legacy provider may consult live
+    // discovery state: discard its output if that state changes while yielding.
+    getSensorTree() = tree;
+    const auto otherCount = sensor::getOtherSensorsCount(ctx);
+    if (otherCount > 0xffff - tree.size())
+    {
+        throw sensor::SdrBuildError("OEM SDR count unavailable or too large");
+    }
+    for (size_t index = 0; index < otherCount; ++index)
+    {
+        std::vector<uint8_t> record;
+        if (sensor::getOtherSensorsDataRecord(ctx, tree.size() + index, record))
+        {
+            throw sensor::SdrBuildError("OEM SDR acquisition failed");
+        }
+        appendSdr(snapshot, std::move(record));
+    }
+#else
+    for (const auto id : fruIds)
+    {
+        get_sdr::SensorDataFruRecord record{};
+        if (storage::getFruSdrById(ctx, id, record) != ipmi::ccSuccess)
+        {
+            throw sensor::SdrBuildError("FRU changed while building SDRs");
+        }
+        const auto* bytes = reinterpret_cast<const uint8_t*>(&record);
+        appendSdr(snapshot, {bytes, bytes + 5 + bytes[4]});
+    }
+    for (size_t index = 0; index < storage::type12Count; ++index)
+    {
+        appendSdr(snapshot, storage::getType12SDRs(index, 0));
+    }
+    for (auto entity = entities.begin(); entity != entities.end(); ++entity)
+    {
+        appendSdr(snapshot, storage::getType8SDRs(entity, 0));
+    }
+#endif
+    // Owned output bytes are immutable, but the inputs used to construct them
+    // may have changed across a yield. Retain the published view and rebuild.
+    if (revision != sdrRevision)
+    {
+        return false;
+    }
+    if (!sdrRepository.stage(std::move(snapshot),
+                             sensor::SdrRepository::Clock::now()))
+    {
+        throw std::runtime_error("invalid SDR generation");
+    }
+    return retry;
+}
+
+static void runSdrBuild(size_t revision, boost::asio::yield_context yield)
+{
+    // This Context and yield token belong to the background coroutine.
+    auto ctx = std::make_shared<ipmi::Context>(
+        getSdBus(), ipmi::netFnStorage, 0, ipmi::storage::cmdGetSdr, 0, 0, 0,
+        ipmi::Privilege::User, 0, 0, yield);
+    sdrBuildNeedsRetry = buildSdrSnapshot(ctx, revision);
+}
+
+static void finishSdrBuild(size_t revision, std::exception_ptr error)
+{
+    // All coroutine outcomes restore scheduling state, including unexpected
+    // exceptions. Never rethrow a builder exception into the IPMI event loop.
+    sdrBuilderRunning = false;
+    bool failed = sdrBuildNeedsRetry;
+    bool retryable = true;
+    try
+    {
+        if (error)
+        {
+            std::rethrow_exception(error);
+        }
+    }
+    catch (const sensor::SdrBuildError& error)
+    {
+        if (revision == sdrRevision)
+        {
+            lg2::error("SDR generation acquisition failed: {ERROR}", "ERROR",
+                       error.what());
+        }
+        else
+        {
+            lg2::debug("Discarding changed SDR inputs: {ERROR}", "ERROR",
+                       error.what());
+        }
+        failed = true;
+    }
+    catch (const sdbusplus::exception_t& error)
+    {
+        if (revision == sdrRevision)
+        {
+            lg2::error("SDR generation D-Bus call failed: {ERROR}", "ERROR",
+                       error.what());
+        }
+        else
+        {
+            lg2::debug("Discarding changed SDR provider: {ERROR}", "ERROR",
+                       error.what());
+        }
+        failed = true;
+    }
+    catch (const std::exception& error)
+    {
+        lg2::error("SDR generation rejected: {ERROR}", "ERROR", error.what());
+        failed = true;
+        retryable = false;
+    }
+    catch (...)
+    {
+        lg2::error("SDR generation failed with an unknown exception");
+        failed = true;
+        retryable = false;
+    }
+    if (sdrRevision != revision)
+    {
+        sdrBuildRecovery.reset();
+        scheduleSdrBuild(sdrCoalesceDelay);
+    }
+    else if (failed)
+    {
+        if (const auto delay = sdrBuildRecovery.failed(retryable))
+        {
+            scheduleSdrBuild(*delay);
+        }
+        else
+        {
+            lg2::error(
+                "SDR build degraded; retaining published generation until inputs change");
+        }
+    }
+    else
+    {
+        sdrBuildRecovery.reset();
+    }
+}
+
+static void startSdrBuild(const boost::system::error_code& ec)
+{
+    sdrBuildScheduled = false;
+    if (ec)
+    {
+        return;
+    }
+    sdrBuilderRunning = true;
+    sdrBuildNeedsRetry = false;
+    const auto revision = sdrRevision;
+    try
+    {
+        boost::asio::spawn(*getIoContext(),
+                           std::bind_front(runSdrBuild, revision),
+                           std::bind_front(finishSdrBuild, revision));
+    }
+    catch (...)
+    {
+        finishSdrBuild(revision, std::current_exception());
+    }
+}
+
+static void scheduleSdrBuild(std::chrono::milliseconds delay)
+{
+    if (sdrBuilderRunning)
+    {
+        return;
+    }
+    const auto deadline = sensor::SdrRepository::Clock::now() + delay;
+    if (sdrBuildScheduled && sdrBuildTimer->expiry() <= deadline)
+    {
+        return;
+    }
+    if (!sdrBuildTimer)
+    {
+        sdrBuildTimer =
+            std::make_unique<boost::asio::steady_timer>(*getIoContext());
+    }
+    sdrBuildScheduled = true;
+    const auto revision = ++sdrBuildTimerRevision;
+    sdrBuildTimer->expires_at(deadline);
+    sdrBuildTimer->async_wait([revision](const boost::system::error_code& ec) {
+        // Re-arming cancels the older wait. Its callback must not clear the
+        // scheduling state of the replacement timer.
+        if (revision == sdrBuildTimerRevision)
+        {
+            startSdrBuild(ec);
+        }
+    });
+}
+
 /** @brief implements the get SDR Info command
  *  @param count - Operation
  *
@@ -3463,8 +3937,148 @@ ipmi::RspType<uint8_t,                // No of instances for requested id
 
 /* end storage commands */
 
+static void sensorDescriptorChanged(sdbusplus::message_t& message)
+{
+    std::string interface;
+    try
+    {
+        message.read(interface);
+    }
+    catch (const sdbusplus::exception_t& error)
+    {
+        lg2::warning("Ignoring malformed descriptor signal: {ERROR}", "ERROR",
+                     error.what());
+        return;
+    }
+    // Only property names affect the directory. Skip variant values instead
+    // of constructing a complete property map for every telemetry sample.
+    auto* raw = message.get();
+    if (sd_bus_message_enter_container(raw, 'a', "{sv}") <= 0)
+    {
+        return;
+    }
+    bool changed = false;
+    int result;
+    while ((result = sd_bus_message_enter_container(raw, 'e', "sv")) > 0)
+    {
+        const char* property = nullptr;
+        if (sd_bus_message_read_basic(raw, 's', &property) <= 0 || !property ||
+            sd_bus_message_skip(raw, "v") < 0 ||
+            sd_bus_message_exit_container(raw) < 0)
+        {
+            return;
+        }
+        changed = changed ||
+                  sensor::isSdrDescriptorProperty(interface, property);
+    }
+    if (result < 0 || sd_bus_message_exit_container(raw) < 0)
+    {
+        return;
+    }
+    std::vector<std::string> invalidated;
+    try
+    {
+        message.read(invalidated);
+    }
+    catch (const sdbusplus::exception_t&)
+    {
+        return;
+    }
+    changed = changed || std::ranges::any_of(
+                             invalidated, [&interface](const auto& property) {
+        return sensor::isSdrDescriptorProperty(interface, property);
+    });
+    if (changed)
+    {
+        invalidateSdrRepository(false, false);
+    }
+}
+
+static void sdrProviderChanged(sdbusplus::message_t& message)
+{
+    std::string name, previous, current;
+    try
+    {
+        message.read(name, previous, current);
+    }
+    catch (const sdbusplus::exception_t& error)
+    {
+        lg2::warning("Ignoring malformed provider signal: {ERROR}", "ERROR",
+                     error.what());
+        return;
+    }
+    if (previous != current && sdrProviders.contains(name))
+    {
+        SensorCache.clear();
+        invalidateIpmiDecoratorPaths();
+        invalidateSdrRepository();
+    }
+}
+
 void registerSensorFunctions()
 {
+    // Build before host requests arrive; all D-Bus waits are in the coroutine.
+    scheduleSdrBuild(std::chrono::milliseconds(0));
+    // Inventory metadata and non-threshold sensors also contribute SDRs.
+    // These signals only schedule a builder; they never mutate published bytes.
+    static std::vector<sdbusplus::bus::match_t> repositoryMatches;
+    repositoryMatches.emplace_back(
+        *getSdBus(),
+        "type='signal',sender='org.freedesktop.DBus',"
+        "interface='org.freedesktop.DBus',member='NameOwnerChanged',"
+        "arg0namespace='xyz.openbmc_project'",
+        sdrProviderChanged);
+    for (const auto* root :
+         {"/xyz/openbmc_project/sensors", "/xyz/openbmc_project/vr"})
+    {
+        repositoryMatches.emplace_back(
+            *getSdBus(),
+            std::string(
+                "type='signal',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',path_namespace='") +
+                root + "'",
+            sensorDescriptorChanged);
+    }
+    for (const auto* root :
+         {"/xyz/openbmc_project/inventory/", "/xyz/openbmc_project/state/",
+          "/xyz/openbmc_project/vr/"})
+    {
+        for (const auto* member : {"InterfacesAdded", "InterfacesRemoved"})
+        {
+            repositoryMatches.emplace_back(
+                *getSdBus(),
+                std::string(
+                    "type='signal',interface='org.freedesktop.DBus.ObjectManager',member='") +
+                    member + "',arg0path='" + root + "'",
+                [](sdbusplus::message_t&) { invalidateSdrRepository(); });
+        }
+    }
+    repositoryMatches.emplace_back(
+        *getSdBus(),
+        "type='signal',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',"
+        "path_namespace='/xyz/openbmc_project/inventory'",
+        [](sdbusplus::message_t& message) {
+        std::string interface;
+        try
+        {
+            message.read(interface);
+        }
+        catch (const sdbusplus::exception_t& error)
+        {
+            lg2::warning(
+                "Ignoring malformed repository metadata signal: {ERROR}",
+                "ERROR", error.what());
+            return;
+        }
+        // Telemetry and inventory health updates must not trigger a full
+        // repository build. Only descriptor inputs can change an SDR.
+        if (interface.starts_with("xyz.openbmc_project.Configuration.") ||
+            interface == "xyz.openbmc_project.Inventory.Decorator.Ipmi" ||
+            interface == "xyz.openbmc_project.Inventory.Decorator.I2CDevice" ||
+            interface == "xyz.openbmc_project.Association.Definitions")
+        {
+            invalidateSdrRepository(false, false);
+        }
+    });
     // <Platform Event>
     ipmi::registerHandler(ipmi::prioOpenBmcBase, ipmi::netFnSensor,
                           ipmi::sensor_event::cmdPlatformEvent,
