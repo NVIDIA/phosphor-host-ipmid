@@ -1,3 +1,5 @@
+#include "config.h"
+
 #include "dbus-sdr/sdrutils.hpp"
 #include "dbus-sdr/storagecommands.hpp"
 #include "fru_discovery.hpp"
@@ -582,7 +584,11 @@ std::vector<uint8_t> getFruSdrIds(ipmi::Context::ptr ctx)
 {
     if (!ensureFruDiscovery(ctx))
     {
+#if !defined(SDR_REQUIRE_FRU) || SDR_REQUIRE_FRU
         throw sensor::SdrBuildError("FRU directory is not ready");
+#else
+        return {};
+#endif
     }
     if (fruIdsExhausted)
     {
@@ -621,7 +627,11 @@ ipmi_ret_t getFruSdrCount(ipmi::Context::ptr ctx, size_t& count)
     if (!ensureFruDiscovery(ctx))
     {
         count = 0;
+#if !defined(SDR_REQUIRE_FRU) || SDR_REQUIRE_FRU
         return ipmi::ccBusy;
+#else
+        return ipmi::ccSuccess;
+#endif
     }
     if (fruIdsExhausted)
     {

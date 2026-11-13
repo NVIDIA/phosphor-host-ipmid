@@ -361,3 +361,10 @@ option(
     value: ['all'],
     description: 'Build selected OEM IPMI provider libraries',
 )
+
+option(
+    'sdr-require-fru',
+    type: 'boolean',
+    value: true,
+    description: 'Require successful FRU discovery before publishing SDRs; disable only where FRUs are optional',
+)

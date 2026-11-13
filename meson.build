@@ -80,6 +80,7 @@ conf_data.set('SYSTEM_INTERFACE_ID', get_option('system-interface-id'))
 conf_data.set_quoted('PAM_SERVICE_NAME', get_option('pam-service-name'))
 
 conf_data.set10('FEATURE_SENSORS_OEM', get_option('sensors-oem').allowed())
+conf_data.set10('SDR_REQUIRE_FRU', get_option('sdr-require-fru'))
 conf_h = configure_file(output: 'config.h', configuration: conf_data)
 
 root = meson.current_source_dir()
