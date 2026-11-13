@@ -1,4 +1,6 @@
+#include "sdr_metadata.hpp"
 #include "dbus-sdr/sdrutils.hpp"
+#include "stable_ids.hpp"
 #include "dbus-sdr/storagecommands.hpp"
 
 #include <boost/algorithm/string.hpp>
@@ -11,6 +13,7 @@
 #include <sdbusplus/message/types.hpp>
 #include <sdbusplus/timer.hpp>
 
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -55,6 +58,7 @@ std::unique_ptr<sdbusplus::Timer> writeTimer = nullptr;
 static std::vector<sdbusplus::bus::match_t> fruMatches;
 
 ManagedObjectType frus;
+static bool fruIdsExhausted = false;
 
 // we unfortunately have to build a map of hashes in case there is a
 // collision to verify our dev-id
@@ -100,10 +104,17 @@ void createTimers()
 
 void recalculateHashes()
 {
-    deviceHashes.clear();
-    // hash the object paths to create unique device id's. increment on
-    // collision
-    std::hash<std::string> hasher;
+    using Location = std::pair<uint16_t, uint8_t>;
+    static sensor::StableIds<Location, uint8_t> ids([] {
+        std::vector<uint8_t> pool;
+        for (uint16_t id = 1; id < 0xff; ++id)
+        {
+            pool.push_back(static_cast<uint8_t>(id));
+        }
+        return pool;
+    }());
+    static std::optional<Location> baseboard;
+    decltype(deviceHashes) nextHashes;
     for (const auto& fru : frus)
     {
         auto fruIface = fru.second.find("xyz.openbmc_project.FruDevice");
@@ -131,36 +142,35 @@ void recalculateHashes()
             chassisType = std::get<std::string>(chassisFind->second);
         }
 
-        uint8_t fruHash = 0;
-        if (chassisType.compare(chassisTypeRackMount) != 0 &&
-            chassisType.compare(chassisTypeMainServer) != 0)
-        {
-            fruHash = hasher(fru.first.str);
-            // can't be 0xFF based on spec, and 0 is reserved for baseboard
-            if (fruHash == 0 || fruHash == 0xFF)
-            {
-                fruHash = 1;
-            }
-        }
         std::pair<uint16_t, uint8_t> newDev(fruBus, fruAddr);
 
-        bool emplacePassed = false;
-        while (!emplacePassed)
+        const bool isBaseboard = chassisType == chassisTypeRackMount ||
+                                 chassisType == chassisTypeMainServer;
+        if (isBaseboard && (!baseboard || *baseboard == newDev))
         {
-            auto resp = deviceHashes.emplace(fruHash, newDev);
-            emplacePassed = resp.second;
-            if (!emplacePassed)
-            {
-                fruHash++;
-                // can't be 0xFF based on spec, and 0 is reserved for
-                // baseboard
-                if (fruHash == 0XFF)
-                {
-                    fruHash = 0x1;
-                }
-            }
+            baseboard = newDev;
+            nextHashes.emplace(0, newDev);
+            continue;
         }
+        // Keep the legacy preferred ID on first discovery, then bind it to
+        // the physical location so later label changes cannot redirect it.
+        auto preferred =
+            static_cast<uint8_t>(std::hash<std::string>{}(fru.first.str));
+        if (preferred == 0 || preferred == 0xff)
+        {
+            preferred = 1;
+        }
+        auto id = ids.allocate(newDev, preferred);
+        if (!id)
+        {
+            lg2::error("FRU device ID space exhausted");
+            fruIdsExhausted = true;
+            return;
+        }
+        nextHashes.emplace(*id, newDev);
     }
+    deviceHashes = std::move(nextHashes);
+    fruIdsExhausted = false;
 }
 
 static void replaceCacheFru(
@@ -484,8 +494,40 @@ ipmi::RspType<uint16_t, // inventorySize
     return ipmi::responseSuccess(fru.size(), accessType);
 }
 
+std::vector<uint8_t> getFruSdrIds()
+{
+    if (fruIdsExhausted)
+    {
+        throw sensor::SdrBuildError(
+            "FRU ID pool exhausted; directory retained");
+    }
+    std::vector<uint8_t> result;
+    for (const auto& [id, location] : deviceHashes)
+    {
+        result.push_back(id);
+    }
+    return result;
+}
+
+ipmi::Cc getFruSdrById(ipmi::Context::ptr ctx, uint8_t id,
+                       get_sdr::SensorDataFruRecord& resp)
+{
+    auto device = deviceHashes.find(id);
+    if (device == deviceHashes.end())
+    {
+        return ipmi::ccSensorInvalid;
+    }
+    return getFruSdrs(ctx, device - deviceHashes.begin(), resp);
+}
+
 ipmi_ret_t getFruSdrCount(ipmi::Context::ptr, size_t& count)
 {
+    if (fruIdsExhausted)
+    {
+        count = 0;
+        return ipmi::ccResponseError;
+    }
+
     count = deviceHashes.size();
     return IPMI_CC_OK;
 }
@@ -493,13 +535,18 @@ ipmi_ret_t getFruSdrCount(ipmi::Context::ptr, size_t& count)
 ipmi_ret_t getFruSdrs([[maybe_unused]] ipmi::Context::ptr ctx, size_t index,
                       get_sdr::SensorDataFruRecord& resp)
 {
+    if (fruIdsExhausted)
+    {
+        return ipmi::ccResponseError;
+    }
+
     if (deviceHashes.size() <= index)
     {
         return IPMI_CC_INVALID_FIELD_REQUEST;
     }
     auto device = deviceHashes.begin() + index;
-    uint16_t& bus = device->second.first;
-    uint8_t& address = device->second.second;
+    const auto deviceId = device->first;
+    const auto [bus, address] = device->second;
     std::string propertyName;
 
     boost::container::flat_map<std::string, Value>* fruData = nullptr;
@@ -553,7 +600,7 @@ ipmi_ret_t getFruSdrs([[maybe_unused]] ipmi::Context::ptr ctx, size_t index,
 
 #ifdef USING_ENTITY_MANAGER_DECORATORS
 
-    boost::container::flat_map<std::string, Value>* entityData = nullptr;
+    std::optional<PropertyMap> entityData;
 
     using SubTreeType =
         std::map<std::string, std::map<std::string, std::vector<std::string>>>;
@@ -620,9 +667,6 @@ ipmi_ret_t getFruSdrs([[maybe_unused]] ipmi::Context::ptr ctx, size_t index,
                 }
 
                 // Get IPMI properties if available
-                static boost::container::flat_map<std::string, Value>
-                    storedProps;
-
                 auto ipmiProps = ctx->bus->yield_method_call<PropertyMap>(
                     ctx->yield, ec, service, path,
                     "org.freedesktop.DBus.Properties", "GetAll",
@@ -630,10 +674,7 @@ ipmi_ret_t getFruSdrs([[maybe_unused]] ipmi::Context::ptr ctx, size_t index,
 
                 if (!ec)
                 {
-                    // Convert std::map to boost::container::flat_map
-                    storedProps.clear();
-                    storedProps.insert(ipmiProps.begin(), ipmiProps.end());
-                    entityData = &storedProps;
+                    entityData = std::move(ipmiProps);
                 }
                 if constexpr (DEBUG)
                 {
@@ -687,7 +728,7 @@ ipmi_ret_t getFruSdrs([[maybe_unused]] ipmi::Context::ptr ctx, size_t index,
     resp.header.recordType = get_sdr::SENSOR_DATA_FRU_RECORD;
     resp.header.recordLength = sizeof(resp.body) + sizeof(resp.key) - sizeDiff;
     resp.key.deviceAddress = 0x20;
-    resp.key.fruID = device->first;
+    resp.key.fruID = deviceId;
     resp.key.accessLun = 0x80; // logical / physical fru device
     resp.key.channelNumber = 0x0;
     resp.body.reserved = 0x0;

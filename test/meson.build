@@ -23,6 +23,16 @@ if not gtest.found() or not gmock.found()
 endif
 
 test(
+    'dbus-sdr/stable_ids',
+    executable(
+        'dbus-sdr_stable_ids',
+        'dbus-sdr/stable_ids_test.cpp',
+        include_directories: root_inc,
+        dependencies: gtest,
+    ),
+)
+
+test(
     'entitymap_json',
     executable(
         'entitymap_json',
@@ -119,15 +129,5 @@ test(
         build_by_default: false,
         implicit_include_directories: false,
         dependencies: [sensorutils_dep, gtest, gmock],
-    ),
-)
-
-test(
-    'dbus-sdr/stable_ids',
-    executable(
-        'dbus-sdr_stable_ids',
-        'dbus-sdr/stable_ids_test.cpp',
-        include_directories: root_inc,
-        dependencies: gtest,
     ),
 )

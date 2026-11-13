@@ -377,6 +377,8 @@ uint8_t getSensorTypeFromPath(const std::string& path);
 
 std::string getSensorTypeStringPath(const std::string& path);
 
+// Allocate once per object identity; allocations survive disappearance.
+uint16_t allocateSensorNumber(const std::string& path);
 uint16_t getSensorNumberFromPath(const std::string& path);
 
 uint8_t getSensorEventTypeFromPath(const std::string& path);
