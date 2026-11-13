@@ -130,6 +130,9 @@ static std::unique_ptr<boost::asio::steady_timer> sdrBuildTimer;
 static std::unique_ptr<boost::asio::steady_timer> sdrLeaseTimer;
 static void scheduleSdrBuild(std::chrono::milliseconds delay);
 static size_t sdrBuildTimerRevision = 0;
+static void scheduleSdrLeaseCheck();
+static size_t sdrLeaseTimerRevision = 0;
+static bool sdrLeaseCheckScheduled = false;
 
 void invalidateSdrRepository(bool addition, bool removal)
 {
@@ -3189,6 +3192,7 @@ static bool buildSdrSnapshot(ipmi::Context::ptr ctx, size_t revision)
     {
         throw std::runtime_error("invalid SDR generation");
     }
+    scheduleSdrLeaseCheck();
     return retry;
 }
 
@@ -3326,6 +3330,47 @@ static void scheduleSdrBuild(std::chrono::milliseconds delay)
         {
             startSdrBuild(ec);
         }
+    });
+}
+
+static void scheduleSdrLeaseCheck()
+{
+    const auto deadline = sdrRepository.nextDeadline();
+    if (sdrLeaseCheckScheduled && sdrLeaseTimer && deadline &&
+        sdrLeaseTimer->expiry() == *deadline)
+    {
+        return;
+    }
+    const auto revision = ++sdrLeaseTimerRevision;
+    if (!deadline)
+    {
+        sdrLeaseCheckScheduled = false;
+        if (sdrLeaseTimer)
+        {
+            sdrLeaseTimer->cancel();
+        }
+        return;
+    }
+    if (!sdrLeaseTimer)
+    {
+        sdrLeaseTimer =
+            std::make_unique<boost::asio::steady_timer>(*getIoContext());
+    }
+    sdrLeaseCheckScheduled = true;
+    sdrLeaseTimer->expires_at(*deadline);
+    sdrLeaseTimer->async_wait([revision](const boost::system::error_code& ec) {
+        if (revision != sdrLeaseTimerRevision)
+        {
+            return;
+        }
+        sdrLeaseCheckScheduled = false;
+        if (ec)
+        {
+            lg2::warning("SDR lease timer interrupted: {ERROR}", "ERROR",
+                         ec.message());
+        }
+        sdrRepository.tick(sensor::SdrRepository::Clock::now());
+        scheduleSdrLeaseCheck();
     });
 }
 
@@ -4019,6 +4064,7 @@ void registerSensorFunctions()
 {
     // Build before host requests arrive; all D-Bus waits are in the coroutine.
     scheduleSdrBuild(std::chrono::milliseconds(0));
+    scheduleSdrLeaseCheck();
     // Inventory metadata and non-threshold sensors also contribute SDRs.
     // These signals only schedule a builder; they never mutate published bytes.
     static std::vector<sdbusplus::bus::match_t> repositoryMatches;
