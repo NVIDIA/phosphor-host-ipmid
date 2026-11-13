@@ -498,38 +498,36 @@ uint16_t getSensorSubtree(std::shared_ptr<SensorSubTree>& subtree,
 bool getSensorNumMap(std::shared_ptr<SensorNumMap>& sensorNumMap)
 {
     static std::shared_ptr<SensorNumMap> sensorNumMapPtr;
-    bool sensorNumMapUpated = false;
-    static uint16_t prevSensorUpdatedIndex = 0;
-    std::shared_ptr<SensorSubTree> sensorTree;
-    uint16_t curSensorUpdatedIndex = details::getSensorSubtree(sensorTree);
+    static std::weak_ptr<SensorSubTree> mappedTree;
+    // SEL handlers must never start a synchronous mapper acquisition. The
+    // background builder publishes this cache only after discovery completes.
+    const auto sensorTree = sensorTreePtr;
     if (!sensorTree)
     {
-        return sensorNumMapUpated;
+        sensorNumMap.reset();
+        return false;
     }
-
-    if ((curSensorUpdatedIndex == prevSensorUpdatedIndex) && sensorNumMapPtr)
+    if (sensorNumMapPtr && mappedTree.lock() == sensorTree)
     {
         sensorNumMap = sensorNumMapPtr;
-        return sensorNumMapUpated;
+        return false;
     }
-    prevSensorUpdatedIndex = curSensorUpdatedIndex;
 
-    sensorNumMapPtr = std::make_shared<SensorNumMap>();
-
+    auto nextMap = std::make_shared<SensorNumMap>();
     for (const auto& sensor : *sensorTree)
     {
         const auto sensorNum = allocateSensorNumber(sensor.first);
-        if (sensorNum == invalidSensorNumber)
+        if (sensorNum != invalidSensorNumber)
         {
-            continue;
+            nextMap->insert(SensorNumMap::value_type(sensorNum, sensor.first));
         }
-        sensorNumMapPtr->insert(
-            SensorNumMap::value_type(sensorNum, sensor.first));
     }
+    sensorNumMapPtr = std::move(nextMap);
+    mappedTree = sensorTree;
     sensorNumMap = sensorNumMapPtr;
-    sensorNumMapUpated = true;
-    return sensorNumMapUpated;
+    return true;
 }
+
 } // namespace details
 
 bool getSensorSubtree(SensorSubTree& subtree,

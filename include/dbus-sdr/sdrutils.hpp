@@ -291,6 +291,9 @@ uint16_t getSensorSubtree(
     const std::optional<ipmi::Context::ptr>& ctx = std::nullopt,
     bool refresh = false);
 
+// Convert only the completed discovery cache. A missing cache clears the
+// output; callers must handle an unavailable mapping without doing D-Bus I/O.
+// The return value indicates a rebuilt number map, not lookup availability.
 bool getSensorNumMap(std::shared_ptr<SensorNumMap>& sensorNumMap);
 } // namespace details
 
