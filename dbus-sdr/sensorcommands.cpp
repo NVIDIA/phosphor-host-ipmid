@@ -1120,9 +1120,12 @@ ipmi::RspType<> ipmiSetSensorReading(
             return ipmi::responseResponseError();
         }
 
-        // Only allow external SetSensor if write permission granted
-        if (!details::sdrWriteTable.getWritePermission(
-                (ctx->lun << 8) | sensorNumber))
+        // Authorization follows the fetched sensor metadata, independently of
+        // background SDR serialization and its fallback records.
+        const auto mutability =
+            sensorMap.find("xyz.openbmc_project.Sensor.ValueMutability");
+        if (mutability == sensorMap.end() ||
+            !mappedVariant<bool>(mutability->second, "Mutable", false))
         {
             return ipmi::responseResponseError();
         }
@@ -2271,9 +2274,6 @@ bool constructSensorSdr(
             mappedVariant<bool>(mutability->second, "Mutable", false);
     }
     get_sdr::body::initSettableState(sensorSettable, record.body);
-
-    // Grant write permission to sensors deemed externally settable
-    details::sdrWriteTable.setWritePermission(sensorNum, sensorSettable);
 
     IPMIThresholds thresholdData;
     try
