@@ -2,6 +2,8 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES.
 #pragma once
 
+#include "fru_names.hpp"
+
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -34,6 +36,88 @@ struct SdrSnapshot
     uint32_t lastRemoval = 0xffffffff;
     std::vector<std::vector<uint8_t>> records;
     std::map<uint16_t, std::string> sensorPaths;
+    FruDirectory fruDirectory;
+    std::map<uint8_t, std::string> resolvedFruNames;
+
+    // Work only on owned bytes. Empty metadata is an explicit fallback result;
+    // missing metadata is unknown and may retain a completed, bound alias.
+    std::optional<size_t> refreshFruNames(
+        const FruDirectory& current,
+        const std::map<FruLocation, std::string>& names,
+        const SdrSnapshot* previous = nullptr)
+    {
+        if (fruDirectory.epoch != current.epoch)
+        {
+            return std::nullopt;
+        }
+        for (const auto& [id, location] : fruDirectory.bindings)
+        {
+            auto found = current.bindings.find(id);
+            if (found == current.bindings.end() || found->second != location)
+            {
+                return std::nullopt;
+            }
+        }
+        size_t updated = 0;
+        for (auto& record : records)
+        {
+            if (record.size() < 16 || record[3] != 0x11)
+            {
+                continue;
+            }
+            const uint8_t id = record[6];
+            auto binding = fruDirectory.bindings.find(id);
+            if (binding == fruDirectory.bindings.end())
+            {
+                return std::nullopt;
+            }
+            auto name = names.find(binding->second);
+            std::string selected;
+            if (name != names.end())
+            {
+                selected = name->second;
+                // Clearing or moving an alias needs a fresh fallback record,
+                // rather than a name-only patch over completed canonical bytes.
+                if (selected.empty() && resolvedFruNames.contains(id))
+                {
+                    return std::nullopt;
+                }
+            }
+            else if (previous &&
+                     previous->fruDirectory.epoch == fruDirectory.epoch)
+            {
+                auto oldBinding = previous->fruDirectory.bindings.find(id);
+                auto oldName = previous->resolvedFruNames.find(id);
+                if (oldBinding != previous->fruDirectory.bindings.end() &&
+                    oldBinding->second == binding->second &&
+                    oldName != previous->resolvedFruNames.end())
+                {
+                    selected = oldName->second;
+                }
+            }
+            if (selected.empty())
+            {
+                continue;
+            }
+            selected.resize(std::min(selected.size(), size_t(16)));
+            resolvedFruNames.insert_or_assign(id, selected);
+            const auto length = size_t(record[15] & 0x1f);
+            if (record.size() == 16 + length && length == selected.size() &&
+                std::equal(selected.begin(), selected.end(),
+                           record.begin() + 16, [](char left, uint8_t right) {
+                return static_cast<uint8_t>(left) == right;
+            }))
+            {
+                continue;
+            }
+            record.resize(16 + selected.size());
+            record[4] = record.size() - 5;
+            record[15] = (record[15] & 0xe0) | selected.size();
+            std::copy(selected.begin(), selected.end(), record.begin() + 16);
+            ++updated;
+        }
+        return updated;
+    }
 
     struct TemperatureSensor
     {
@@ -180,6 +264,11 @@ class SdrRepository
     {
         tick(now);
         return published;
+    }
+
+    std::shared_ptr<const SdrSnapshot> latestCompleted() const
+    {
+        return pending ? pending : published;
     }
 
     std::optional<uint16_t> reserve(const SdrRequester& owner, Time now)
@@ -333,4 +422,5 @@ namespace ipmi
 {
 // Called by provider change handlers on the IPMI io_context.
 void invalidateSdrRepository(bool addition = true, bool removal = true);
+void notifyFruNamesChanged();
 } // namespace ipmi

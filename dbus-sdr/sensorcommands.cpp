@@ -126,6 +126,68 @@ static void scheduleSdrLeaseCheck();
 static size_t sdrBuildTimerRevision = 0;
 static size_t sdrLeaseTimerRevision = 0;
 static bool sdrLeaseCheckScheduled = false;
+static std::unique_ptr<boost::asio::steady_timer> fruNamePublishTimer;
+static bool fruNamePublishScheduled = false;
+
+void notifyFruNamesChanged()
+{
+    // This acquisition changed an SDR input, but does not invalidate completed
+    // sensor records or wait for the long-running sensor builder to finish.
+    ++sdrRevision;
+    sdrBuildRecovery.reset();
+    scheduleSdrBuild(sdrCoalesceDelay);
+    if (fruNamePublishScheduled)
+    {
+        return;
+    }
+    fruNamePublishScheduled = true;
+    if (!fruNamePublishTimer)
+    {
+        fruNamePublishTimer =
+            std::make_unique<boost::asio::steady_timer>(*getIoContext());
+    }
+    fruNamePublishTimer->expires_after(sdrCoalesceDelay);
+    fruNamePublishTimer->async_wait([](const boost::system::error_code& error) {
+        fruNamePublishScheduled = false;
+        if (error)
+        {
+            return;
+        }
+        try
+        {
+            const auto base = sdrRepository.latestCompleted();
+            const auto directory = storage::cachedFruDirectory();
+            if (!base || !directory)
+            {
+                return;
+            }
+            auto updated = *base;
+            const auto changed = updated.refreshFruNames(
+                *directory, storage::cachedFruNames(), base.get());
+            if (!changed || *changed == 0)
+            {
+                return;
+            }
+            updated.revision = sdrRevision;
+            if (sdrRepository.stage(std::move(updated),
+                                    sensor::SdrRepository::Clock::now()))
+            {
+                const auto current =
+                    sdrRepository.current(sensor::SdrRepository::Clock::now());
+                lg2::info(
+                    "Staged resolved FRU names: count={COUNT} revision={REVISION} published={PUBLISHED}",
+                    "COUNT", *changed, "REVISION", sdrRevision, "PUBLISHED",
+                    current && current->revision == sdrRevision);
+                scheduleSdrLeaseCheck();
+            }
+        }
+        catch (const std::exception& exception)
+        {
+            lg2::warning("FRU name publication failed: {ERROR}", "ERROR",
+                         exception.what());
+        }
+    });
+}
 
 void invalidateSdrRepository(bool addition, bool removal)
 {
@@ -2834,6 +2896,11 @@ static bool buildSdrSnapshot(ipmi::Context::ptr ctx, size_t revision)
     }
 #if !FEATURE_SENSORS_OEM
     const auto fruIds = storage::getFruSdrIds(ctx);
+    const auto directory = storage::cachedFruDirectory();
+    if (directory)
+    {
+        snapshot.fruDirectory = *directory;
+    }
     const auto entities =
         sensor::EntityInfoMapContainer::getContainer()->getIpmiEntityRecords();
 #endif
@@ -2922,6 +2989,21 @@ static bool buildSdrSnapshot(ipmi::Context::ptr ctx, size_t revision)
     {
         return false;
     }
+    // A completed sensor rebuild must not restore an older fallback alias.
+    // Capture current metadata without yielding; the latest completed view can
+    // retain a bound name through a transient metadata-provider outage.
+#if !FEATURE_SENSORS_OEM
+    if (const auto directory = storage::cachedFruDirectory())
+    {
+        auto previous = sdrRepository.latestCompleted();
+        if (!snapshot.refreshFruNames(
+                *directory, storage::cachedFruNames(), previous.get()))
+        {
+            throw sensor::SdrBuildError(
+                "FRU identity changed before publication");
+        }
+    }
+#endif
     if (!sdrRepository.stage(std::move(snapshot),
                              sensor::SdrRepository::Clock::now()))
     {

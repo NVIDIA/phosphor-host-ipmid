@@ -3,6 +3,7 @@
 #include "dbus-sdr/sdrutils.hpp"
 #include "dbus-sdr/storagecommands.hpp"
 #include "fru_discovery.hpp"
+#include "sdr_build.hpp"
 #include "sdr_metadata.hpp"
 #include "sdr_repository.hpp"
 #include "stable_ids.hpp"
@@ -64,10 +65,36 @@ static std::vector<sdbusplus::bus::match_t> fruMatches;
 ManagedObjectType frus;
 static bool fruIdsExhausted = false;
 static FruDiscoveryState fruDiscovery;
-
-// we unfortunately have to build a map of hashes in case there is a
-// collision to verify our dev-id
+static uint64_t fruProviderEpoch = 0;
+static sensor::FruNames fruNames;
+#ifdef USING_ENTITY_MANAGER_DECORATORS
+static std::unique_ptr<boost::asio::steady_timer> fruNamesTimer;
+static bool fruNamesRunning = false;
+static bool fruNamesScheduled = false;
+static bool fruNamesDirty = false;
+static sensor::SdrBuildRecovery fruNamesRecovery;
+static constexpr const char* i2cDecorator =
+    "xyz.openbmc_project.Inventory.Decorator.I2CDevice";
+#endif
+// IDs remain bound to physical locations throughout the daemon lifetime.
 boost::container::flat_map<uint8_t, std::pair<uint16_t, uint8_t>> deviceHashes;
+
+std::optional<sensor::FruDirectory> cachedFruDirectory()
+{
+    if (!fruDiscovery.ready() || fruIdsExhausted)
+    {
+        return std::nullopt;
+    }
+    sensor::FruDirectory result{fruProviderEpoch, {}};
+    result.bindings.insert(deviceHashes.begin(), deviceHashes.end());
+    return result;
+}
+
+std::map<sensor::FruLocation, std::string> cachedFruNames()
+{
+    return fruNames.resolved();
+}
+
 void registerStorageFRUFunctions() __attribute__((constructor));
 
 bool writeFru(const std::vector<uint8_t>& fru)
@@ -283,6 +310,210 @@ void writeFruIfRunning()
     writeFruCache();
 }
 
+#ifdef USING_ENTITY_MANAGER_DECORATORS
+static void scheduleFruNames(std::chrono::steady_clock::duration delay,
+                             bool reset = true);
+
+static void refreshFruNames(boost::asio::yield_context yield)
+{
+    using Tree =
+        std::map<std::string, std::map<std::string, std::vector<std::string>>>;
+    auto bus = getSdBus();
+    boost::system::error_code ec;
+    auto tree = bus->yield_method_call<Tree>(
+        yield, ec, "xyz.openbmc_project.ObjectMapper",
+        "/xyz/openbmc_project/object_mapper",
+        "xyz.openbmc_project.ObjectMapper", "GetSubTree", inventoryRootPath, 0,
+        std::vector<std::string>{i2cDecorator});
+    if (ec)
+    {
+        throw sensor::SdrBuildError("FRU name inventory acquisition failed");
+    }
+    bool failed = false;
+    for (const auto& [path, providers] : tree)
+    {
+        for (const auto& [provider, interfaces] : providers)
+        {
+            auto token = fruNames.begin({provider, path});
+            auto props = bus->yield_method_call<PropertyMap>(
+                yield, ec, provider, path, "org.freedesktop.DBus.Properties",
+                "GetAll", i2cDecorator);
+            if (ec)
+            {
+                failed = true;
+                continue;
+            }
+            auto busProp = props.find("Bus");
+            auto addressProp = props.find("Address");
+            auto nameProp = props.find("Name");
+            const auto* busValue =
+                busProp == props.end()
+                    ? nullptr
+                    : std::get_if<uint64_t>(&busProp->second);
+            const auto* address =
+                addressProp == props.end()
+                    ? nullptr
+                    : std::get_if<uint64_t>(&addressProp->second);
+            const auto* name =
+                nameProp == props.end()
+                    ? nullptr
+                    : std::get_if<std::string>(&nameProp->second);
+            if (!busValue || !address || *busValue > UINT16_MAX ||
+                *address > UINT8_MAX || (nameProp != props.end() && !name))
+            {
+                failed = true;
+                continue;
+            }
+            auto committed = fruNames.commit(
+                token,
+                {static_cast<uint16_t>(*busValue),
+                 static_cast<uint8_t>(*address)},
+                name ? *name : "");
+            if (!committed)
+            {
+                failed = true;
+            }
+            else if (*committed)
+            {
+                lg2::info(
+                    "FRU locator name resolved: bus={BUS} address={ADDRESS} name={FRU_NAME}",
+                    "BUS", *busValue, "ADDRESS", *address, "FRU_NAME",
+                    name ? name->substr(0, maxFruSdrNameSize) : "");
+                notifyFruNamesChanged();
+            }
+        }
+    }
+    if (failed)
+    {
+        throw sensor::SdrBuildError("FRU name acquisition incomplete");
+    }
+}
+
+static void scheduleFruNames(std::chrono::steady_clock::duration delay,
+                             bool reset)
+{
+    if (reset)
+    {
+        fruNamesRecovery.reset();
+    }
+    if (fruNamesRunning)
+    {
+        fruNamesDirty = true;
+        return;
+    }
+    if (fruNamesScheduled)
+    {
+        return;
+    }
+    fruNamesScheduled = true;
+    if (!fruNamesTimer)
+    {
+        fruNamesTimer =
+            std::make_unique<boost::asio::steady_timer>(*getIoContext());
+    }
+    fruNamesTimer->expires_after(delay);
+    fruNamesTimer->async_wait([](const boost::system::error_code& error) {
+        fruNamesScheduled = false;
+        if (error)
+        {
+            return;
+        }
+        fruNamesRunning = true;
+        fruNamesDirty = false;
+        try
+        {
+            boost::asio::spawn(*getIoContext(), refreshFruNames,
+                               [](std::exception_ptr error) {
+                fruNamesRunning = false;
+                if (fruNamesDirty)
+                {
+                    scheduleFruNames(std::chrono::milliseconds(50));
+                }
+                else if (error)
+                {
+                    bool retryable = false;
+                    try
+                    {
+                        std::rethrow_exception(error);
+                    }
+                    catch (const sensor::SdrBuildError&)
+                    {
+                        retryable = true;
+                    }
+                    catch (const sdbusplus::exception_t&)
+                    {
+                        retryable = true;
+                    }
+                    catch (...)
+                    {}
+                    if (auto delay = fruNamesRecovery.failed(retryable))
+                    {
+                        scheduleFruNames(*delay, false);
+                    }
+                    else
+                    {
+                        lg2::warning(
+                            "FRU name refresh degraded; retaining completed metadata");
+                    }
+                }
+                else
+                {
+                    fruNamesRecovery.reset();
+                }
+            });
+        }
+        catch (const std::exception& exception)
+        {
+            fruNamesRunning = false;
+            fruNamesRecovery.failed(false);
+            lg2::warning("FRU name coroutine setup failed: {ERROR}", "ERROR",
+                         exception.what());
+        }
+    });
+}
+
+// Inspect interface names without decoding arbitrary inventory property types.
+static bool hasI2cDecorator(sdbusplus::message_t& message, std::string& path,
+                            bool added)
+{
+    auto* raw = message.get();
+    const char* object = nullptr;
+    if (sd_bus_message_read_basic(raw, 'o', &object) <= 0 || !object)
+    {
+        return false;
+    }
+    path = object;
+    if (!added)
+    {
+        std::vector<std::string> interfaces;
+        message.read(interfaces);
+        return std::ranges::find(interfaces, i2cDecorator) != interfaces.end();
+    }
+    if (sd_bus_message_enter_container(raw, 'a', "{sa{sv}}") <= 0)
+    {
+        return false;
+    }
+    while (sd_bus_message_enter_container(raw, 'e', "sa{sv}") > 0)
+    {
+        const char* interface = nullptr;
+        if (sd_bus_message_read_basic(raw, 's', &interface) <= 0 || !interface)
+        {
+            return false;
+        }
+        if (std::string_view(interface) == i2cDecorator)
+        {
+            return true;
+        }
+        if (sd_bus_message_skip(raw, "a{sv}") < 0 ||
+            sd_bus_message_exit_container(raw) < 0)
+        {
+            return false;
+        }
+    }
+    return false;
+}
+#endif
+
 void startMatch(void)
 {
     if (fruMatches.size())
@@ -290,7 +521,7 @@ void startMatch(void)
         return;
     }
 
-    fruMatches.reserve(3);
+    fruMatches.reserve(7);
 
     auto bus = getSdBus();
     fruMatches.emplace_back(*bus,
@@ -366,6 +597,7 @@ void startMatch(void)
         {
             return;
         }
+        ++fruProviderEpoch;
         // Provider loss need not emit InterfacesRemoved. Do not reuse its
         // directory, raw bytes, pending writes or in-flight refresh reply.
         fruDiscovery.invalidate();
@@ -387,6 +619,82 @@ void startMatch(void)
         // stale replies.
         invalidateSdrRepository();
     });
+
+#ifdef USING_ENTITY_MANAGER_DECORATORS
+    for (bool added : {true, false})
+    {
+        fruMatches.emplace_back(
+            *bus,
+            std::string(
+                "type='signal',interface='org.freedesktop.DBus.ObjectManager',member='") +
+                (added ? "InterfacesAdded" : "InterfacesRemoved") +
+                "',arg0path='/xyz/openbmc_project/inventory/'",
+            [added](sdbusplus::message_t& message) {
+            std::string path;
+            try
+            {
+                const bool relevant = hasI2cDecorator(message, path, added);
+                sd_bus_message_rewind(message.get(), true);
+                if (!relevant)
+                {
+                    return;
+                }
+            }
+            catch (const sdbusplus::exception_t&)
+            {
+                sd_bus_message_rewind(message.get(), true);
+                return;
+            }
+            if (added)
+            {
+                fruNames.changed(path);
+            }
+            else
+            {
+                fruNames.removed(path);
+                notifyFruNamesChanged();
+            }
+            scheduleFruNames(std::chrono::milliseconds(50));
+        });
+    }
+    fruMatches.emplace_back(
+        *bus,
+        "type='signal',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',arg0='xyz.openbmc_project.Inventory.Decorator.I2CDevice',path_namespace='/xyz/openbmc_project/inventory'",
+        [](sdbusplus::message_t& message) {
+        fruNames.changed(message.get_path());
+        scheduleFruNames(std::chrono::milliseconds(50));
+    });
+    fruMatches.emplace_back(
+        *bus,
+        "type='signal',sender='org.freedesktop.DBus',interface='org.freedesktop.DBus',member='NameOwnerChanged'",
+        [](sdbusplus::message_t& message) {
+        std::string name, previous, current;
+        try
+        {
+            message.read(name, previous, current);
+        }
+        catch (const sdbusplus::exception_t&)
+        {
+            sd_bus_message_rewind(message.get(), true);
+            return;
+        }
+        sd_bus_message_rewind(message.get(), true);
+        if (previous == current)
+        {
+            return;
+        }
+        const bool changed = fruNames.providerChanged(name);
+        if (changed)
+        {
+            notifyFruNamesChanged();
+        }
+        if (changed || name == "xyz.openbmc_project.ObjectMapper")
+        {
+            scheduleFruNames(std::chrono::milliseconds(50));
+        }
+    });
+    scheduleFruNames(std::chrono::milliseconds(0));
+#endif
 
     // call once to populate
     boost::asio::spawn(*getIoContext(), [](boost::asio::yield_context yield) {
