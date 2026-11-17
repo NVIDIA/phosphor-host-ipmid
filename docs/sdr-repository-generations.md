@@ -152,6 +152,32 @@ the mapper synchronously to fill it. A completed empty subtree remains distinct
 from an unavailable cache. This bounds mapper-related event-loop stalls, not
 all work performed by the SEL handlers.
 
+## Resolved FRU names during discovery
+
+FRU metadata acquisition has a separate background cache, versioned by provider
+and object. Successful I2C location/name replies are committed independently of
+unrelated sensor additions. Failed acquisition retains completed names; stale
+replies from changed objects or restarted providers are rejected. Retries are
+bounded, and relevant metadata or mapper signals restart acquisition.
+
+Newly resolved names can update an owned copy of the latest completed generation,
+including a newer generation waiting for an active reader. This path verifies
+the FRU provider epoch and every copied physical binding before changing locator
+bytes and lengths. It does not wait for the sensor builder. Existing readers
+finish their unchanged generation, and the normal publication policy releases
+the updated generation. It neither changes reservation semantics nor bypasses
+physical FRU validation.
+
+A later full build applies the completed names again, so it cannot replace a
+resolved alias with a transient fallback for the same physical binding. Explicit
+name removal or relocation requires fresh full-build fallback records. A provider
+epoch change prevents carrying aliases across an unverified FRU directory.
+
+This adds no required FRU list, platform name or unconditional metadata-provider
+readiness barrier. If no naming metadata is available, legacy fallback remains
+available. Metadata that arrives after a reader has started applies to its next
+walk; the change cannot repair already generated host SMBIOS.
+
 ## Validation boundary
 
 The reservation policy follows IPMI v2.0 sections 33.11.2 and 33.12/Table 33-6:

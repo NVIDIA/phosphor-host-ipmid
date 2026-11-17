@@ -163,6 +163,16 @@ test(
 )
 
 test(
+    'dbus-sdr/fru_names',
+    executable(
+        'dbus-sdr_fru_names',
+        'dbus-sdr/fru_names_test.cpp',
+        include_directories: root_inc,
+        dependencies: gtest,
+    ),
+)
+
+test(
     'dbus-sdr/sdr_review',
     executable(
         'dbus-sdr_sdr_review',

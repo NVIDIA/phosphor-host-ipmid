@@ -15,6 +15,7 @@
 */
 
 #pragma once
+#include "dbus-sdr/fru_names.hpp"
 #include "sensorhandler.hpp"
 
 #include <cstdint>
@@ -125,6 +126,8 @@ namespace storage
 {
 
 constexpr const size_t type12Count = 2;
+std::optional<sensor::FruDirectory> cachedFruDirectory();
+std::map<sensor::FruLocation, std::string> cachedFruNames();
 ipmi::Cc getFruSdrs(ipmi::Context::ptr ctx, size_t index,
                     get_sdr::SensorDataFruRecord& resp);
 std::vector<uint8_t> getFruSdrIds(ipmi::Context::ptr ctx);
