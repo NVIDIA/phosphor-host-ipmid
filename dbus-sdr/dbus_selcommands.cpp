@@ -17,7 +17,6 @@
 #include <limits>
 #include <map>
 constexpr auto DEFALUT_SENSOR_NUMBER = 0xff;
-constexpr auto INVALID_SENSOR_NUMBER = 0xffff;
 constexpr auto MAX_ALLOWED_SEL_ENTRIES = 4000;
 // The SELs are limited by IPMITOOL to 64KB. Each SEL entry
 // is 16 bytes, meaning a maximum of 4000 SELs is allowed.
@@ -59,8 +58,12 @@ using SELRecordID = uint16_t;
 /// For example this xyz/openbmc_project/logging/entry/60267 will be stored as
 /// 60267
 using LogID = uint32_t;
-// <phosphor-log ID, SEL record information entry>
-using SELEntry = std::pair<LogID, ipmi::sel::SELEventRecordFormat>;
+struct SELEntry
+{
+    LogID loggingId;
+    ipmi::sel::SELEventRecordFormat record;
+    std::string sensorPath;
+};
 using SELCacheMap = std::map<SELRecordID, SELEntry>;
 // This is used to store the SEL record ID and the corresponding
 // phosphor-logging path ID
@@ -99,7 +102,8 @@ namespace internal
 
 static GetSELEntryResponse createSELEntryFromMaps(
     const std::string& objPath, const entryDataMap& entryData,
-    std::chrono::milliseconds chronoTimeStamp, uint16_t dbusRecordId)
+    std::chrono::milliseconds chronoTimeStamp, uint16_t dbusRecordId,
+    std::string& sensorPath)
 {
     ipmi::sel::GetSELEntryResponse record{};
     uint32_t loggingId;
@@ -131,8 +135,6 @@ static GetSELEntryResponse createSELEntryFromMaps(
     record.event.eventRecord.sensorType = 0;
     record.event.eventRecord.sensorNum = DEFALUT_SENSOR_NUMBER;
     record.event.eventRecord.eventType = 0;
-    uint16_t sensorNumTmp = INVALID_SENSOR_NUMBER;
-    std::string sensorPath("");
     iter = m.find(strSensorPath);
     if (iter != m.end())
     {
@@ -182,37 +184,9 @@ static GetSELEntryResponse createSELEntryFromMaps(
 
     if (!sensorPath.empty())
     {
-        try
-        {
-            // Get a new number if the SEL is a valid sensor with a sensor
-            // number different from 0xff
-            if (record.event.eventRecord.sensorNum != DEFALUT_SENSOR_NUMBER)
-            {
-                sensorNumTmp = getSensorNumberFromPath(sensorPath);
-                // if the sensor dbus tree is not loaded the BMC can’t restore
-                // the
-                //  SELs
-                if (sensorNumTmp == INVALID_SENSOR_NUMBER)
-                {
-                    log<level::ERR>(
-                        "Sensor D-bus tree is not yet loaded please try again later");
-                    elog<InternalFailure>();
-                }
-                else
-                {
-                    record.event.eventRecord.sensorNum = sensorNumTmp;
-                }
-            }
-            record.event.eventRecord.eventType =
-                getSensorEventTypeFromPath(sensorPath);
-            record.event.eventRecord.sensorType =
-                getSensorTypeFromPath(sensorPath);
-        }
-        catch (...)
-        {
-            log<level::ERR>("Failed to get dynamic sensor properties");
-            elog<InternalFailure>();
-        }
+        record.event.eventRecord.eventType =
+            getSensorEventTypeFromPath(sensorPath);
+        record.event.eventRecord.sensorType = getSensorTypeFromPath(sensorPath);
     }
 
     record.event.eventRecord.eventMsgRevision = eventMsgRevision;
@@ -250,24 +224,26 @@ static GetSELEntryResponse createSELEntryFromMaps(
     return record;
 }
 
-GetSELEntryResponse createSELEntry(const std::string& objPath)
+GetSELEntryResponse createSELEntry(const std::string& objPath,
+                                   std::string& sensorPath)
 {
     entryDataMap entryData;
     uint16_t recordId;
     std::chrono::milliseconds chronoTimeStamp =
         getEntryData(objPath, entryData, recordId);
     return createSELEntryFromMaps(
-        objPath, entryData, chronoTimeStamp, recordId);
+        objPath, entryData, chronoTimeStamp, recordId, sensorPath);
 }
 
 GetSELEntryResponse createSELEntry(const std::string& objPath,
-                                   const entryDataMap& entryData)
+                                   const entryDataMap& entryData,
+                                   std::string& sensorPath)
 {
     uint16_t recordId;
     std::chrono::milliseconds chronoTimeStamp =
         getEntryData(entryData, recordId);
     return createSELEntryFromMaps(
-        objPath, entryData, chronoTimeStamp, recordId);
+        objPath, entryData, chronoTimeStamp, recordId, sensorPath);
 }
 
 } // namespace internal
@@ -282,10 +258,12 @@ std::optional<std::pair<uint16_t, SELEntry>> parseLoggingEntry(
     {
         auto id = getLoggingId(p);
         ipmi::sel::GetSELEntryResponse record{};
+        std::string sensorPath;
         if (entryData)
-            record = ipmi::sel::internal::createSELEntry(p, *entryData);
+            record =
+                ipmi::sel::internal::createSELEntry(p, *entryData, sensorPath);
         else
-            record = ipmi::sel::internal::createSELEntry(p);
+            record = ipmi::sel::internal::createSELEntry(p, sensorPath);
 
         if (record.event.eventRecord.recordID == 0)
         {
@@ -293,8 +271,8 @@ std::optional<std::pair<uint16_t, SELEntry>> parseLoggingEntry(
             return std::nullopt;
         }
         uint16_t selRecordID = record.event.eventRecord.recordID;
-        return std::make_pair(selRecordID,
-                              std::make_pair(id, std::move(record.event)));
+        return std::make_pair(selRecordID, SELEntry{id, std::move(record.event),
+                                                    std::move(sensorPath)});
     }
     catch (const std::exception& e)
     {
@@ -303,6 +281,25 @@ std::optional<std::pair<uint16_t, SELEntry>> parseLoggingEntry(
                          entry("ERROR=%s", e.what()));
     }
     return std::nullopt;
+}
+
+static uint8_t getSelSensorNumber(const SELEntry& selEntry)
+{
+    uint8_t loggedNumber = selEntry.record.eventRecord.sensorNum;
+    if (selEntry.sensorPath.empty() || loggedNumber == DEFALUT_SENSOR_NUMBER)
+    {
+        return loggedNumber;
+    }
+    try
+    {
+        // A sensor that is not in the tree gives 0xffff, reported as 0xff.
+        return static_cast<uint8_t>(
+            getSensorNumberFromPath(selEntry.sensorPath));
+    }
+    catch (const std::exception&)
+    {
+        return DEFALUT_SENSOR_NUMBER;
+    }
 }
 
 std::string getLoggingObjPath(uint32_t id)
@@ -369,7 +366,7 @@ void selRemovedCallback(sdbusplus::message::message& m)
             auto iter = selCacheMap.find(selRecordId);
             if (iter != selCacheMap.end())
             {
-                uint32_t cachedLoggingId = iter->second.first;
+                uint32_t cachedLoggingId = iter->second.loggingId;
                 if (cachedLoggingId != loggingId)
                 {
                     log<level::INFO>(
@@ -568,13 +565,13 @@ ipmi::RspType<uint16_t // deleted record ID
         }
         selEntry = iter->second;
     }
-    delRecordID = selEntry.first;
+    delRecordID = selEntry.loggingId;
     sdbusplus::bus_t bus{ipmid_get_sd_bus_connection()};
     std::string service;
     // Use the already-extracted selEntry instead of iter->second — iter is
     // only assigned in the explicit selRecordID branch above, so deref'ing
     // it for firstEntry/lastEntry would be undefined.
-    auto objPath = getLoggingObjPath(selEntry.first);
+    auto objPath = getLoggingObjPath(selEntry.loggingId);
     try
     {
         service = ipmi::getService(bus, ipmi::sel::logDeleteIntf, objPath);
@@ -818,7 +815,8 @@ ipmi::RspType<uint16_t, // Next Record ID
         }
     }
 
-    ipmi::sel::GetSELEntryResponse record{0, iter->second.second};
+    ipmi::sel::GetSELEntryResponse record{0, iter->second.record};
+    record.event.eventRecord.sensorNum = getSelSensorNumber(iter->second);
 
     // Identify the next SEL record ID
     ++iter;
